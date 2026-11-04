@@ -4,9 +4,11 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node scripts/verify-dataset.js && node scripts/qa-frontend-audit.js && node scripts/browser-test.js",
+    "test": "node scripts/verify-dataset.js && node scripts/qa-frontend-audit.js && node scripts/missing-stock-audit.js && node scripts/test-new-listing-discovery.js && node scripts/browser-test.js",
     "test:verify": "node scripts/verify-dataset.js",
     "test:qa": "node scripts/qa-frontend-audit.js",
+    "test:audit": "node scripts/missing-stock-audit.js",
+    "test:discovery": "node scripts/test-new-listing-discovery.js",
     "test:browser": "node scripts/browser-test.js",
     "sync": "node scripts/sync-stock-universe.js"
   },

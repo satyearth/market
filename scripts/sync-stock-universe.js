@@ -151,6 +151,7 @@ function cleanCompanyName(name) {
     .replace(/\bNse\b/gi, 'NSE')
     .replace(/\bBse\b/gi, 'BSE')
     .replace(/\s+/g, ' ')
+    .replace(/\.+$/, '')
     .trim();
 }
 
@@ -165,6 +166,22 @@ async function syncUniverse() {
 
   if (!fs.existsSync(DOWNLOADS_DIR)) {
     fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+  }
+
+  // Load previous universe for diff and new listing discovery
+  const previousUniverseByIsin = new Map();
+  if (fs.existsSync(TARGET_PATH)) {
+    try {
+      const prevContent = fs.readFileSync(TARGET_PATH, 'utf-8');
+      const prevMatch = prevContent.match(/const STOCKS_DATA = (\[[\s\S]*?\]);\s*$/);
+      if (prevMatch) {
+        const prevStocks = eval('(' + prevMatch[1] + ')');
+        prevStocks.forEach(s => previousUniverseByIsin.set(s.isin, s));
+        console.log(`  ✓ Loaded ${previousUniverseByIsin.size} existing stocks from previous universe for change detection.`);
+      }
+    } catch (e) {
+      console.warn('  ! Notice loading previous universe for change detection:', e.message);
+    }
   }
 
   // Ensure backup of previous dataset
@@ -429,6 +446,9 @@ async function syncUniverse() {
     if (NSE_MAINBOARD_SERIES.has(series)) nseMainboardCount++;
     if (NSE_SME_SERIES.has(series)) nseSmeCount++;
 
+    const openPrice = parseFloat(r.OpnPric) || null;
+    const highPrice = parseFloat(r.HghPric) || null;
+    const lowPrice = parseFloat(r.LwPric) || null;
     const closePrice = parseFloat(r.ClsPric) || parseFloat(r.LastPric) || null;
     const prevClose = parseFloat(r.PrvsClsgPric) || null;
     let changePct = null;
@@ -442,6 +462,10 @@ async function syncUniverse() {
       company_name: cleanCompanyName(name),
       series,
       segment: NSE_SME_SERIES.has(series) ? 'SME' : 'Mainboard',
+      open_price: openPrice,
+      high_price: highPrice,
+      low_price: lowPrice,
+      close_price: closePrice,
       current_price: closePrice,
       prev_close: prevClose,
       change_percent: changePct,
@@ -484,6 +508,9 @@ async function syncUniverse() {
     if (BSE_MAINBOARD_GROUPS.has(group)) bseMainboardCount++;
     if (BSE_SME_GROUPS.has(group)) bseSmeCount++;
 
+    const openPrice = parseFloat(r.OpnPric) || null;
+    const highPrice = parseFloat(r.HghPric) || null;
+    const lowPrice = parseFloat(r.LwPric) || null;
     const closePrice = parseFloat(r.ClsPric) || parseFloat(r.LastPric) || null;
     const prevClose = parseFloat(r.PrvsClsgPric) || null;
     let changePct = null;
@@ -498,6 +525,10 @@ async function syncUniverse() {
       company_name: cleanCompanyName(name),
       group,
       segment: BSE_SME_GROUPS.has(group) ? 'SME' : 'Mainboard',
+      open_price: openPrice,
+      high_price: highPrice,
+      low_price: lowPrice,
+      close_price: closePrice,
       current_price: closePrice,
       prev_close: prevClose,
       change_percent: changePct,
@@ -529,6 +560,9 @@ async function syncUniverse() {
     let segment = 'Mainboard';
     let series = null;
     let companyName = '';
+    let openPrice = null;
+    let highPrice = null;
+    let lowPrice = null;
     let currentPrice = null;
     let prevClose = null;
     let changePercent = null;
@@ -540,9 +574,18 @@ async function syncUniverse() {
       symbol = nse.nse_symbol;
       nseSymbol = nse.nse_symbol;
       bseScripCode = bse.bse_scrip_code;
-      companyName = nse.company_name || bse.company_name;
+      companyName = (bse.company_name && bse.company_name.length > (nse.company_name || '').length)
+        ? bse.company_name
+        : (nse.company_name || bse.company_name);
       segment = (nse.segment === 'SME' || bse.segment === 'SME') ? 'SME' : 'Mainboard';
       series = nse.series;
+      openPrice = nse.open_price != null ? nse.open_price : bse.open_price;
+      highPrice = (nse.high_price != null && bse.high_price != null)
+        ? Math.max(nse.high_price, bse.high_price)
+        : (nse.high_price != null ? nse.high_price : bse.high_price);
+      lowPrice = (nse.low_price != null && bse.low_price != null)
+        ? Math.min(nse.low_price, bse.low_price)
+        : (nse.low_price != null ? nse.low_price : bse.low_price);
       currentPrice = nse.current_price != null ? nse.current_price : bse.current_price;
       prevClose = nse.prev_close != null ? nse.prev_close : bse.prev_close;
       changePercent = nse.change_percent != null ? nse.change_percent : bse.change_percent;
@@ -556,6 +599,9 @@ async function syncUniverse() {
       companyName = nse.company_name;
       segment = nse.segment;
       series = nse.series;
+      openPrice = nse.open_price;
+      highPrice = nse.high_price;
+      lowPrice = nse.low_price;
       currentPrice = nse.current_price;
       prevClose = nse.prev_close;
       changePercent = nse.change_percent;
@@ -569,6 +615,9 @@ async function syncUniverse() {
       companyName = bse.company_name;
       segment = bse.segment;
       series = bse.group;
+      openPrice = bse.open_price;
+      highPrice = bse.high_price;
+      lowPrice = bse.low_price;
       currentPrice = bse.current_price;
       prevClose = bse.prev_close;
       changePercent = bse.change_percent;
@@ -639,6 +688,21 @@ async function syncUniverse() {
       if (!industry && bseInfo.industry) industry = bseInfo.industry;
     }
 
+    // Carry forward existing benchmark and historical data from previous universe if available
+    const prevStock = previousUniverseByIsin.get(isin);
+    if (!historicalPrices && prevStock && prevStock.historical_prices) {
+      historicalPrices = prevStock.historical_prices;
+      sparkline7d = prevStock.sparkline_7d;
+      return1w = prevStock.return_1w;
+      sessionStartDate = prevStock.return_1w_session_start;
+      sessionEndDate = prevStock.return_1w_session_end;
+    }
+    if (marketCapCr == null && prevStock && prevStock.market_cap_cr != null) {
+      marketCapCr = prevStock.market_cap_cr;
+    }
+    if (!sector && prevStock && prevStock.sector) sector = prevStock.sector;
+    if (!industry && prevStock && prevStock.industry) industry = prevStock.industry;
+
     // Check 52W High from MCP tool
     if (bseScripCode && week52HighMap.has(bseScripCode)) {
       week52High = week52HighMap.get(bseScripCode);
@@ -669,6 +733,10 @@ async function syncUniverse() {
       listing_status: 'Active',
       sector: sector || null,
       industry: industry || null,
+      open_price: openPrice,
+      high_price: highPrice,
+      low_price: lowPrice,
+      close_price: currentPrice,
       current_price: currentPrice,
       prev_close: prevClose,
       change_percent: changePercent,
@@ -719,9 +787,108 @@ async function syncUniverse() {
     }
   });
 
-  // 6. STATISTICS CALCULATOR: Genuine Market Pulse calculations
-  console.log('[6/7] Calculating genuine Market Pulse statistics...');
+  // 6. NEW LISTING & UNIVERSE DIFF DETECTION ENGINE
+  console.log('[6/8] Detecting newly listed securities and universe modifications...');
   const compileTime = new Date();
+  const newlyListed = [];
+  const newExchangeListings = [];
+  const symbolChanges = [];
+  const seriesChanges = [];
+  const delistedOrSuspended = [];
+
+  const currentIsinSet = new Set(mergedStocks.map(s => s.isin));
+
+  mergedStocks.forEach(s => {
+    const prev = previousUniverseByIsin.get(s.isin);
+    if (!prev) {
+      newlyListed.push({
+        isin: s.isin,
+        symbol: s.symbol,
+        company_name: s.company_name,
+        exchanges: s.exchanges,
+        segment: s.segment,
+        series: s.series,
+        current_price: s.current_price,
+        has_eod_price: s.current_price != null,
+        detected_at: compileTime.toISOString()
+      });
+    } else {
+      const prevExchanges = new Set(prev.exchanges || []);
+      const addedExchanges = s.exchanges.filter(x => !prevExchanges.has(x));
+      if (addedExchanges.length > 0) {
+        newExchangeListings.push({
+          isin: s.isin,
+          symbol: s.symbol,
+          company_name: s.company_name,
+          previous_exchanges: prev.exchanges,
+          current_exchanges: s.exchanges,
+          added_exchanges: addedExchanges
+        });
+      }
+
+      if (prev.symbol && s.symbol && prev.symbol !== s.symbol) {
+        symbolChanges.push({
+          isin: s.isin,
+          company_name: s.company_name,
+          old_symbol: prev.symbol,
+          new_symbol: s.symbol
+        });
+      }
+
+      if (prev.series && s.series && prev.series !== s.series) {
+        seriesChanges.push({
+          isin: s.isin,
+          symbol: s.symbol,
+          company_name: s.company_name,
+          old_series: prev.series,
+          new_series: s.series,
+          old_segment: prev.segment,
+          new_segment: s.segment
+        });
+      }
+    }
+  });
+
+  for (const [isin, prev] of previousUniverseByIsin.entries()) {
+    if (!currentIsinSet.has(isin)) {
+      delistedOrSuspended.push({
+        isin: prev.isin,
+        symbol: prev.symbol,
+        company_name: prev.company_name,
+        last_exchanges: prev.exchanges,
+        last_series: prev.series
+      });
+    }
+  }
+
+  const changeLog = {
+    tradingDate: TARGET_TRADING_DATE,
+    detectedAt: compileTime.toISOString(),
+    previousUniverseCount: previousUniverseByIsin.size,
+    currentUniverseCount: mergedStocks.length,
+    summary: {
+      newlyListedCount: newlyListed.length,
+      newSmeCount: newlyListed.filter(s => s.segment === 'SME').length,
+      newMainboardCount: newlyListed.filter(s => s.segment === 'Mainboard').length,
+      newExchangeListingsCount: newExchangeListings.length,
+      symbolChangesCount: symbolChanges.length,
+      seriesChangesCount: seriesChanges.length,
+      delistedOrSuspendedCount: delistedOrSuspended.length
+    },
+    newlyListed,
+    newExchangeListings,
+    symbolChanges,
+    seriesChanges,
+    delistedOrSuspended
+  };
+
+  const changeLogFile = path.join(DOWNLOADS_DIR, `universe-changes-${TARGET_TRADING_DATE}.json`);
+  fs.writeFileSync(changeLogFile, JSON.stringify(changeLog, null, 2), 'utf-8');
+  console.log(`  ✓ Saved dated change log to ${changeLogFile}`);
+  console.log(`  → Detected: ${newlyListed.length} new listings, ${newExchangeListings.length} exchange additions, ${symbolChanges.length} symbol changes, ${seriesChanges.length} series changes, ${delistedOrSuspended.length} delisted/suspended.`);
+
+  // 7. STATISTICS CALCULATOR: Genuine Market Pulse calculations
+  console.log('[7/8] Calculating genuine Market Pulse statistics...');
 
   // Attach refreshed_at to all stocks
   mergedStocks.forEach(s => {
@@ -899,6 +1066,10 @@ async function syncUniverse() {
       methodology: 'Chronological EOD closing prices across 6 consecutive verified trading sessions spanning 1 calendar week (2026-10-28 to 2026-11-04). 1-Week return is computed from Session 1 close to Session 6 close.'
     },
 
+    // Automatic New Listing & Universe Modification Discovery
+    changeLogSummary: changeLog.summary,
+    changeLogFile: `downloads/universe-changes-${TARGET_TRADING_DATE}.json`,
+
     // Automation Status Documentation
     automationStatus: {
       localMcpStatus: mcpConnected ? 'Active (Connected to 127.0.0.1:3000/mcp)' : 'Offline / Standalone validation mode',
@@ -907,8 +1078,8 @@ async function syncUniverse() {
     }
   };
 
-  // 7. DATASET GENERATOR: Write to js/stocks-data.js
-  console.log('[7/7] Generating production dataset in js/stocks-data.js...');
+  // 8. DATASET GENERATOR: Write to js/stocks-data.js
+  console.log('[8/8] Generating production dataset in js/stocks-data.js...');
   const outputJs = `/* machli bazarr - Complete Stock Market Dataset (NSE + BSE) */
 /* Trading Date: ${TARGET_TRADING_DATE} | Compiled UTC: ${compileTime.toISOString()} | IST: ${istFormattedString} */
 /* Data Status: End-of-day official exchange Bhavcopy (NSE + BSE) */
@@ -940,6 +1111,12 @@ const STOCKS_DATA = ${JSON.stringify(mergedStocks, null, 2)};
   console.log(`Stocks with 1W Return  : ${mergedStocks.filter(s => s.return_1w != null).length}`);
   console.log(`Stocks with Sparkline  : ${mergedStocks.filter(s => s.sparkline_7d != null).length}`);
   console.log(`Historical Sessions    : ${HISTORICAL_DATES.length} (${HISTORICAL_DATES[0]} to ${HISTORICAL_DATES[HISTORICAL_DATES.length - 1]})`);
+  console.log(`New Listings (Diff)    : ${changeLog.summary.newlyListedCount} (SME: ${changeLog.summary.newSmeCount}, Mainboard: ${changeLog.summary.newMainboardCount})`);
+  console.log(`New Exchange Additions : ${changeLog.summary.newExchangeListingsCount}`);
+  console.log(`Symbol Changes (Diff)  : ${changeLog.summary.symbolChangesCount}`);
+  console.log(`Series Changes (Diff)  : ${changeLog.summary.seriesChangesCount}`);
+  console.log(`Delisted / Suspended   : ${changeLog.summary.delistedOrSuspendedCount}`);
+  console.log(`Change Log Saved       : ${changeLogFile}`);
   console.log(`Automation Status      : ${marketStats.automationStatus.cloudAutomation}`);
   console.log('================================================================\n');
 

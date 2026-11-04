@@ -57,21 +57,58 @@ console.log('[Section 1: Stock Universe & Search]');
 assert(STOCKS_DATA.length === 4965, 'Total stock universe is exactly 4,965', `Length: ${STOCKS_DATA.length}`);
 
 // 1. Search by Symbol
+const BRAND_ENTITY_MAP = {
+  'zomato': 'ETERNAL',
+  'blinkit': 'ETERNAL',
+  'policybazaar': 'POLICYBZR',
+  'paisabazaar': 'POLICYBZR',
+  'maggi': 'NESTLEIND',
+  'jlr': 'TATAMOTORS',
+  'jaguar': 'TATAMOTORS'
+};
+
 function searchStocks(query) {
   const q = query.toLowerCase().trim();
+  const qNorm = q.replace(/[^a-z0-9]/g, '');
+  const aliasSym = BRAND_ENTITY_MAP[q] || BRAND_ENTITY_MAP[qNorm];
   return STOCKS_DATA.filter(s =>
+    (aliasSym && (s.symbol === aliasSym || s.nse_symbol === aliasSym)) ||
     (s.symbol && s.symbol.toLowerCase().includes(q)) ||
     (s.company_name && s.company_name.toLowerCase().includes(q)) ||
     (s.nse_symbol && s.nse_symbol.toLowerCase().includes(q)) ||
     (s.bse_scrip_code && s.bse_scrip_code.toLowerCase().includes(q)) ||
     (s.isin && s.isin.toLowerCase().includes(q)) ||
     (s.sector && s.sector.toLowerCase().includes(q)) ||
-    (s.industry && s.industry.toLowerCase().includes(q))
+    (s.industry && s.industry.toLowerCase().includes(q)) ||
+    (qNorm.length >= 2 && (
+      (s.symbol && s.symbol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm)) ||
+      (s.company_name && s.company_name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm)) ||
+      (s.nse_symbol && s.nse_symbol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm))
+    ))
   );
 }
 
 const resSym = searchStocks('RELIANCE');
 assert(resSym.some(s => s.symbol === 'RELIANCE'), 'Search by symbol finds RELIANCE', `Matches: ${resSym.length}`);
+
+// 1b. Search specifically for JIOFIN and Reliance Industries
+const resJioFin = searchStocks('JIOFIN');
+assert(resJioFin.some(s => s.symbol === 'JIOFIN'), 'Search by symbol finds JIOFIN', `Matches: ${resJioFin.length}`);
+
+const resJioName = searchStocks('Jio Financial');
+assert(resJioName.some(s => s.symbol === 'JIOFIN'), 'Search by legal name "Jio Financial" finds JIOFIN', `Matches: ${resJioName.length}`);
+
+const resRelName = searchStocks('Reliance Industries');
+assert(resRelName.some(s => s.symbol === 'RELIANCE'), 'Search by legal name "Reliance Industries" finds RELIANCE', `Matches: ${resRelName.length}`);
+
+const resDmart = searchStocks('d-mart');
+assert(resDmart.some(s => s.symbol === 'DMART'), 'Search by brand "d-mart" finds Avenue Supermarts (DMART)');
+
+const resOne97 = searchStocks('one97');
+assert(resOne97.some(s => s.symbol === 'PAYTM'), 'Search by "one97" finds One 97 Communications (PAYTM)');
+
+const resZomato = searchStocks('zomato');
+assert(resZomato.some(s => s.symbol === 'ETERNAL'), 'Search by brand "zomato" resolves to legal entity Eternal Limited (ETERNAL)');
 
 // 2. Search by Company Name
 const resName = searchStocks('Tata Consultancy');
@@ -80,6 +117,9 @@ assert(resName.some(s => s.symbol === 'TCS'), 'Search by company name ("Tata Con
 // 3. Search by BSE Scrip Code
 const resBse = searchStocks('500325'); // Reliance BSE Scrip Code
 assert(resBse.some(s => s.symbol === 'RELIANCE' && s.bse_scrip_code === '500325'), 'Search by BSE scrip code 500325 finds RELIANCE');
+
+const resBseJio = searchStocks('543940'); // Jio Financial BSE Scrip Code
+assert(resBseJio.some(s => s.symbol === 'JIOFIN' && s.bse_scrip_code === '543940'), 'Search by BSE scrip code 543940 finds JIOFIN');
 
 const resBse2 = searchStocks('532540'); // TCS BSE Scrip Code
 assert(resBse2.some(s => s.symbol === 'TCS' && s.bse_scrip_code === '532540'), 'Search by BSE scrip code 532540 finds TCS');
@@ -91,6 +131,9 @@ assert(resNse.some(s => s.nse_symbol === 'HDFCBANK'), 'Search by NSE symbol find
 // 5. Search by ISIN
 const resIsin = searchStocks('INE002A01018');
 assert(resIsin.length === 1 && resIsin[0].symbol === 'RELIANCE', 'Search by ISIN INE002A01018 precisely matches RELIANCE');
+
+const resIsinJio = searchStocks('INE758E01017');
+assert(resIsinJio.length === 1 && resIsinJio[0].symbol === 'JIOFIN', 'Search by ISIN INE758E01017 precisely matches JIOFIN');
 
 // 6. Search by Sector
 const resSector = searchStocks('Financial Services');

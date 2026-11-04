@@ -420,17 +420,36 @@
       result = result.filter(s => s.is_near_high || (s.pct_from_high && Number(s.pct_from_high) >= -8));
     }
 
-    // Search query (symbol, company name, NSE symbol, BSE scrip code, ISIN, sector, industry)
+    // Known Brand-to-Listed Entity resolution map (maps popular consumer brands to their official exchange-listed parent entities without inventing fake tickers)
+    const BRAND_ENTITY_MAP = {
+      'zomato': 'ETERNAL',
+      'blinkit': 'ETERNAL',
+      'policybazaar': 'POLICYBZR',
+      'paisabazaar': 'POLICYBZR',
+      'maggi': 'NESTLEIND',
+      'jlr': 'TATAMOTORS',
+      'jaguar': 'TATAMOTORS'
+    };
+
+    // Search query (legal company name, trading symbol, NSE symbol, BSE scrip code, ISIN, sector, industry)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
+      const qNorm = q.replace(/[^a-z0-9]/g, '');
+      const aliasSym = BRAND_ENTITY_MAP[q] || BRAND_ENTITY_MAP[qNorm];
       result = result.filter(s =>
+        (aliasSym && (s.symbol === aliasSym || s.nse_symbol === aliasSym)) ||
         (s.symbol && s.symbol.toLowerCase().includes(q)) ||
         (s.company_name && s.company_name.toLowerCase().includes(q)) ||
         (s.nse_symbol && s.nse_symbol.toLowerCase().includes(q)) ||
         (s.bse_scrip_code && s.bse_scrip_code.toLowerCase().includes(q)) ||
         (s.isin && s.isin.toLowerCase().includes(q)) ||
         (s.sector && s.sector.toLowerCase().includes(q)) ||
-        (s.industry && s.industry.toLowerCase().includes(q))
+        (s.industry && s.industry.toLowerCase().includes(q)) ||
+        (qNorm.length >= 2 && (
+          (s.symbol && s.symbol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm)) ||
+          (s.company_name && s.company_name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm)) ||
+          (s.nse_symbol && s.nse_symbol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm))
+        ))
       );
     }
 
@@ -707,6 +726,22 @@
         <div>
           <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Segment / Series</span>
           <span class="text-ink-ink font-semibold">${escapeHtml(stock.series ? stock.series + ' · ' : '')}${escapeHtml(stock.segment || 'Mainboard')}</span>
+        </div>
+      </div>
+
+      <!-- Day EOD Range Strip -->
+      <div class="grid grid-cols-3 gap-2 py-2 px-3 my-2.5 bg-ink-paper rounded-lg border border-ink-rule/50 text-[11px] font-mono">
+        <div>
+          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Day Open</span>
+          <span class="text-ink-ink font-semibold">${stock.open_price != null ? '₹' + Number(stock.open_price).toLocaleString('en-IN') : '—'}</span>
+        </div>
+        <div>
+          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Day High</span>
+          <span class="text-ink-bullish font-semibold">${stock.high_price != null ? '₹' + Number(stock.high_price).toLocaleString('en-IN') : '—'}</span>
+        </div>
+        <div>
+          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Day Low</span>
+          <span class="text-ink-bearish font-semibold">${stock.low_price != null ? '₹' + Number(stock.low_price).toLocaleString('en-IN') : '—'}</span>
         </div>
       </div>
 

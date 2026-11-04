@@ -139,11 +139,20 @@ let unverifiedMcap = 0;
 let verifiedMcap = 0;
 let misleadingRankOnUnverified = 0;
 let invalidPrices = 0;
+let invalidOHLC = 0;
+let invalidHighLowSpread = 0;
+let closeMismatch = 0;
 
 stocks.forEach(s => {
   if (s.current_price != null && (isNaN(s.current_price) || s.current_price <= 0)) {
     invalidPrices++;
   }
+  if (s.open_price != null && (isNaN(s.open_price) || s.open_price <= 0)) invalidOHLC++;
+  if (s.high_price != null && (isNaN(s.high_price) || s.high_price <= 0)) invalidOHLC++;
+  if (s.low_price != null && (isNaN(s.low_price) || s.low_price <= 0)) invalidOHLC++;
+  if (s.high_price != null && s.low_price != null && s.high_price < s.low_price) invalidHighLowSpread++;
+  if (s.close_price !== s.current_price) closeMismatch++;
+
   if (s.market_cap_cr == null) {
     unverifiedMcap++;
     if (s.rank !== null) misleadingRankOnUnverified++;
@@ -153,6 +162,9 @@ stocks.forEach(s => {
 });
 
 assert(invalidPrices === 0, 'No invalid or negative stock prices', `(invalid: ${invalidPrices})`);
+assert(invalidOHLC === 0, 'No invalid or negative EOD OHLC values across universe', `(invalid: ${invalidOHLC})`);
+assert(invalidHighLowSpread === 0, 'High price is always greater than or equal to low price', `(invalid: ${invalidHighLowSpread})`);
+assert(closeMismatch === 0, 'close_price alias strictly matches current_price for all stocks', `(mismatch: ${closeMismatch})`);
 assert(misleadingRankOnUnverified === 0, 'Zero misleading market-cap ranks on unverified stocks');
 assert(verifiedMcap === stats.marketCapCoverageCount, 'Verified market cap count matches stats', `(${verifiedMcap} === ${stats.marketCapCoverageCount})`);
 assert(unverifiedMcap > 4000, 'Unverified market caps remain null and render as em-dash', `(${unverifiedMcap} stocks)`);
