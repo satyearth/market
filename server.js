@@ -41,7 +41,7 @@ const MIME_TYPES = {
 };
 
 /**
- * Extracts MARKET_STATS from js/stocks-data.js without loading the entire 4,965 array into VM
+ * Extracts MARKET_STATS from js/stocks-data.js without loading the entire 5,389 array into VM
  */
 function readMarketStatsFromDataset() {
   try {
@@ -49,8 +49,8 @@ function readMarketStatsFromDataset() {
     const content = fs.readFileSync(STOCKS_DATA_PATH, 'utf-8');
     const match = content.match(/const MARKET_STATS = (\{[\s\S]*?\});\s*(?:window\.MARKET_STATS|const STOCKS_DATA)/);
     if (!match) return null;
-    // Safely evaluate only the small stats object
-    return eval('(' + match[1] + ')');
+    // Safely parse the stats JSON object directly without eval
+    return JSON.parse(match[1]);
   } catch (err) {
     console.error('Error reading MARKET_STATS from dataset:', err.message);
     return null;
@@ -165,7 +165,7 @@ async function handleRequest(req, res) {
       tradingDate: currentTradingDate,
       istDisplayTime: stats?.istDisplayTime,
       refreshedAtUtc: stats?.refreshedAtUtc,
-      stockCount: stats?.stockCount || 4965,
+      stockCount: stats?.stockCount || 5389,
       isUpToDate: freshness.isFresh,
       needsSync: freshness.needsSync,
       reason: freshness.reason,

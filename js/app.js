@@ -15,19 +15,39 @@
   let isDense = false;
   let searchDebounceTimer = null;
 
-  // Verified known logos present in assets/logos/ to prevent 404 network requests
-  const KNOWN_LOGOS = new Set([
-    'ADANIENT', 'ADANIGREEN', 'ADANIPORTS', 'ADANIPOWER', 'ASIANPAINT',
-    'AXISBANK', 'BAJAJ-AUTO', 'BAJAJFINSV', 'BAJFINANCE', 'BEL',
-    'BHARTIARTL', 'COALINDIA', 'DIVISLAB', 'DMART', 'EICHERMOT',
-    'ETERNAL', 'GRASIM', 'HAL', 'HCLTECH', 'HDFCBANK',
-    'HINDALCO', 'HINDUNILVR', 'HINDZINC', 'ICICIBANK', 'INDIGO',
-    'INFY', 'IOC', 'ITC', 'JSWSTEEL', 'KOTAKBANK',
-    'LICI', 'LT', 'M&M', 'MARUTI', 'NESTLEIND',
-    'NTPC', 'ONGC', 'POWERGRID', 'RELIANCE', 'SBIN',
-    'SHRIRAMFIN', 'SOLARINDS', 'SUNPHARMA', 'TATASTEEL', 'TCS',
-    'TITAN', 'TVSMOTOR', 'ULTRACEMCO', 'WIPRO'
-  ]);
+  // Base endpoint for India API company logos (free, open, CDN-backed)
+  const LOGO_API_BASE = 'https://api.dharun.dev/v1/logos/';
+
+  // Resolve optimal ticker symbol for India API company logo endpoint
+  function getLogoTicker(stock) {
+    if (!stock) return '';
+    const aliases = (typeof window !== 'undefined' && window.LOGO_ALIASES) ? window.LOGO_ALIASES : {};
+
+    // 1. Check verified alias map (renamed symbols, hyphen formats, partly-paid shares)
+    if (stock.nse_symbol && aliases[stock.nse_symbol]) {
+      return aliases[stock.nse_symbol];
+    }
+    if (stock.symbol && aliases[stock.symbol]) {
+      return aliases[stock.symbol];
+    }
+    if (stock.isin && aliases[stock.isin]) {
+      return aliases[stock.isin];
+    }
+
+    // 2. Prefer official NSE symbol
+    if (stock.nse_symbol && String(stock.nse_symbol).trim()) {
+      return String(stock.nse_symbol).trim();
+    }
+    // 3. Primary trading symbol
+    if (stock.symbol && String(stock.symbol).trim()) {
+      return String(stock.symbol).trim();
+    }
+    // 4. Fallback to ISIN for exchange-neutral lookup
+    if (stock.isin && String(stock.isin).trim()) {
+      return String(stock.isin).trim();
+    }
+    return '';
+  }
 
   // DOM Elements
   const tbody = document.getElementById('stocks-tbody');
@@ -91,37 +111,45 @@
       : `background-color: rgba(196, 43, 43, ${opacity.toFixed(3)});`;
   }
 
-  // Logo rendering with zero 404 network errors
+  // Dynamic company logo rendering using India API with double-fallback and seamless initials badge
   function getLogoHtml(stock, size = 'sm') {
     const symbol = stock.symbol || '';
-    const hasImage = Boolean(stock.symbol && KNOWN_LOGOS.has(stock.symbol));
-    const logoSrc = `./assets/logos/${escapeHtml(symbol)}.png`;
+    const ticker = getLogoTicker(stock);
     const initials = escapeHtml((symbol || 'ST').slice(0, 2).toUpperCase());
 
-    if (size === 'lg') {
-      if (hasImage) {
+    if (!ticker) {
+      if (size === 'lg') {
         return `
-          <div class="w-11 h-11 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center flex-shrink-0">
-            <img src="${logoSrc}" alt="${escapeHtml(stock.company_name)} logo" class="max-h-full max-w-full object-contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'" />
-            <span style="display:none" class="items-center justify-center font-bold text-xs text-ink-muted uppercase">${initials}</span>
+          <div class="w-11 h-11 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center font-bold text-ink-muted text-xs uppercase flex-shrink-0">
+            ${initials}
           </div>`;
       }
       return `
-        <div class="w-11 h-11 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center font-bold text-ink-muted text-xs uppercase flex-shrink-0">
+        <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-inset text-ink-muted font-ui font-semibold h-6 w-6 text-[9px] uppercase">
           ${initials}
+        </span>`;
+    }
+
+    const primaryUrl = `${LOGO_API_BASE}${encodeURIComponent(ticker)}`;
+    let fallbackAttr = '';
+    if (stock.isin && stock.isin !== ticker) {
+      fallbackAttr = ` data-fallback="${LOGO_API_BASE}${encodeURIComponent(stock.isin)}"`;
+    }
+
+    const errorHandler = "if(this.dataset.fallback){this.src=this.dataset.fallback;delete this.dataset.fallback;}else{this.style.display='none';if(this.nextElementSibling){this.nextElementSibling.style.display='inline-flex';}}";
+
+    if (size === 'lg') {
+      return `
+        <div class="w-11 h-11 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center flex-shrink-0">
+          <img src="${primaryUrl}"${fallbackAttr} alt="${escapeHtml(stock.company_name || symbol)} logo" class="max-h-full max-w-full object-contain" decoding="async" onerror="${errorHandler}" />
+          <span style="display:none" class="items-center justify-center font-bold text-xs text-ink-muted uppercase">${initials}</span>
         </div>`;
     }
 
-    if (hasImage) {
-      return `
-        <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-paper text-ink-muted font-ui font-semibold h-6 w-6 text-[10px]">
-          <img src="${logoSrc}" alt="${escapeHtml(stock.company_name)} logo" class="block h-full w-full object-contain" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'" />
-          <span style="display:none" class="items-center justify-center font-bold text-[9px] text-ink-muted uppercase">${initials}</span>
-        </span>`;
-    }
     return `
-      <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-inset text-ink-muted font-ui font-semibold h-6 w-6 text-[9px] uppercase">
-        ${initials}
+      <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-paper text-ink-muted font-ui font-semibold h-6 w-6 text-[10px]">
+        <img src="${primaryUrl}"${fallbackAttr} alt="${escapeHtml(stock.company_name || symbol)} logo" class="block h-full w-full object-contain" loading="lazy" decoding="async" onerror="${errorHandler}" />
+        <span style="display:none" class="items-center justify-center font-bold text-[9px] text-ink-muted uppercase">${initials}</span>
       </span>`;
   }
 

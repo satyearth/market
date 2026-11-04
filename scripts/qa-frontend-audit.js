@@ -269,14 +269,20 @@ assert(!appContent.includes('seed %'), 'Zero pseudo-random seed equations in spa
 // -------------------------------------------------------------
 console.log('\n[Section 6: Assets & 404 Prevention]');
 
-assert(appContent.includes('const KNOWN_LOGOS = new Set('), 'app.js defines KNOWN_LOGOS set to guard image requests');
-assert(appContent.includes('KNOWN_LOGOS.has(stock.symbol)'), 'app.js checks KNOWN_LOGOS before rendering <img> tag');
+assert(appContent.includes('https://api.dharun.dev/v1/logos/'), 'app.js uses free India API company-logo endpoint (api.dharun.dev)');
+assert(appContent.includes('loading="lazy"'), 'app.js implements lazy loading on logo images');
+assert(appContent.includes('decoding="async"'), 'app.js implements asynchronous image decoding for 60fps performance');
+assert(appContent.includes('onerror='), 'app.js implements bulletproof onerror fallback to initials');
+assert(appContent.includes('data-fallback'), 'app.js implements double-fallback via data-fallback attribute');
+assert(indexContent.includes('js/logo-aliases.js'), 'index.html includes verified logo aliases script');
 
 // Check that no HTML hardcodes old 4,965 stock counts
+assert(!indexContent.includes('4,965'), 'index.html contains zero outdated 4,965 stock count references');
 assert(!indexContent.includes('aria-rowcount="4965"'), 'index.html aria-rowcount is updated to 5389');
 assert(indexContent.includes('aria-rowcount="5389"'), 'index.html aria-rowcount is exactly 5389');
 assert(!indexContent.includes('Showing 1–50 of 4,965'), 'index.html showing status is updated to 5,389');
 assert(indexContent.includes('Showing 1–50 of 5,389'), 'index.html showing status is exactly 5,389');
+assert(indexContent.includes('Browse 5,389 Indian equities'), 'index.html meta description specifies 5,389 equities');
 
 // -------------------------------------------------------------
 // SECTION 7: RESPONSIVE LAYOUT, SECURITY & PERFORMANCE

@@ -13,6 +13,7 @@
     "test:refresh": "node scripts/test-auto-refresh.js",
     "test:e2e": "node scripts/verify-auto-refresh-e2e.js",
     "test:browser": "node scripts/browser-test.js",
+    "test:logos": "node scripts/audit-logo-coverage.js",
     "sync": "node scripts/sync-stock-universe.js"
   },
   "devDependencies": {

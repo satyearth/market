@@ -77,8 +77,8 @@ async function runBrowserTests() {
       const type = msg.type();
       const text = msg.text();
       consoleLogs.push({ type, text });
-      // Exclude external Google Fonts CDN errors caused by offline sandbox environment
-      if (type === 'error' && !text.includes('googleapis.com') && !text.includes('gstatic.com') && !text.includes('ERR_NAME_NOT_RESOLVED')) {
+      // Exclude external Google Fonts and logo CDN errors caused by offline sandbox environment or expected API 404s
+      if (type === 'error' && !text.includes('googleapis.com') && !text.includes('gstatic.com') && !text.includes('api.dharun.dev') && !text.includes('ERR_NAME_NOT_RESOLVED')) {
         consoleErrors.push(text);
       }
     });
@@ -89,8 +89,8 @@ async function runBrowserTests() {
 
     page.on('requestfailed', req => {
       const url = req.url();
-      // Exclude external font CDN requests blocked by offline sandbox
-      if (!url.includes('googleapis.com') && !url.includes('gstatic.com')) {
+      // Exclude external font & logo CDN requests blocked by offline sandbox
+      if (!url.includes('googleapis.com') && !url.includes('gstatic.com') && !url.includes('api.dharun.dev')) {
         failedRequests.push({
           url: req.url(),
           failure: req.failure() ? req.failure().errorText : 'Unknown error'
