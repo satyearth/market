@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>All Stocks | 4,800+ Indian Stocks Ranked by Market Cap | machli bazarr</title>
+  <meta name="description" content="Browse all Indian stocks ranked by market capitalisation. Current prices, conviction signals, multi-period returns, and sector filters. Free to browse.">
+  <meta name="application-name" content="machli bazarr">
+  <meta name="author" content="machli bazarr">
+  <meta name="theme-color" content="#171614">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="All Stocks | 4,800+ Indian Stocks Ranked by Market Cap | machli bazarr">
+  <meta property="og:description" content="India's market intelligence: screening, conviction scoring, and filing analysis, alive in real time.">
+  <meta property="og:site_name" content="machli bazarr">
+  <meta property="og:type" content="website">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body class="bg-ink-bg text-ink-text font-ui antialiased selection:bg-ink-sienna selection:text-white min-h-screen flex flex-col">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-ink-sienna focus:text-white focus:text-sm focus:font-medium">Skip to main content</a>
+
+  <div class="relative min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="w-full bg-ink-bg">
+      <div class="mx-auto grid max-w-7xl grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-2.5 lg:grid-cols-[1fr_auto_1fr]">
+        <!-- Top Left Status -->
+        <div class="order-1 flex items-center gap-2.5 font-ui text-[11.5px] uppercase tracking-[0.04em] text-ink-muted whitespace-nowrap min-w-0">
+          <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-ink-bullish" aria-hidden="true"></span>
+          <span class="truncate">NSE &amp; BSE LIVE INTELLIGENCE</span>
+        </div>
+
+        <!-- Center Brand Logo -->
+        <a class="order-3 col-span-2 flex items-baseline justify-start whitespace-nowrap lg:order-2 lg:col-span-1 lg:justify-center group" href="/">
+          <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-ink lg:text-[30px] transition-colors group-hover:text-ink-sienna">machli</span>
+          <span class="font-display text-[26px] font-extrabold leading-none text-ink-sienna lg:text-[30px]">·</span>
+          <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-sienna lg:text-[30px]">bazarr</span>
+        </a>
+
+        <!-- Header Right Actions -->
+        <div class="order-2 flex items-center justify-end gap-1 lg:order-3">
+          <a class="hidden h-9 w-9 items-center justify-center rounded-full text-ink-muted transition-colors duration-150 hover:bg-ink-well hover:text-ink-sienna lg:inline-flex" title="Watchlist" aria-label="Watchlist" href="#watchlist">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-briefcase h-4 w-4" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path><rect width="20" height="14" x="2" y="6" rx="2"></rect></svg>
+          </a>
+          <a class="relative hidden h-9 w-9 items-center justify-center rounded-full text-ink-muted transition-colors duration-150 hover:bg-ink-well hover:text-ink-sienna lg:inline-flex" title="Alerts" aria-label="Alerts" href="#alerts">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bell h-4 w-4" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg>
+          </a>
+          <a class="ml-1 hidden shrink-0 items-center whitespace-nowrap rounded-full px-3 py-1.5 font-ui text-[13px] font-semibold text-ink-muted transition-colors duration-150 hover:text-ink-ink lg:inline-flex" href="#login">Sign in</a>
+          <a class="ml-1 inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-ink-sienna px-4 py-1.5 font-ui text-[13px] font-semibold text-white shadow-[0_4px_16px_rgba(200,75,49,0.28)] transition-all duration-150 hover:bg-ink-sienna-light hover:shadow-[0_6px_24px_rgba(200,75,49,0.38)]" href="#register">Register</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Top Rule Border -->
+    <div class="mx-auto w-full max-w-7xl px-4">
+      <div class="border-t-2 border-ink-ink dark:border-ink-rule-strong">
+        <div class="mt-0.5 border-t border-ink-ink dark:border-ink-rule-strong"></div>
+      </div>
+    </div>
+
+    <!-- Navigation Bar -->
+    <nav data-site-navigation="true" class="sticky top-0 z-50 w-full border-b border-ink-rule bg-ink-bg/[0.88] backdrop-blur-[16px] supports-[backdrop-filter]:bg-ink-bg/[0.88]">
+      <div class="mx-auto flex max-w-7xl items-center gap-3.5 px-4 py-2 lg:gap-4">
+        <div class="hidden items-center gap-1 lg:flex">
+          <a class="inline-flex items-center gap-1.5 rounded-full px-[15px] py-2 font-ui text-[13.5px] uppercase tracking-[0.04em] transition-colors duration-150 font-semibold text-ink-muted hover:bg-ink-well hover:text-ink-ink" href="#home">HOME</a>
+          
+          <!-- Markets Dropdown -->
+          <div class="group relative">
+            <button aria-haspopup="menu" class="inline-flex items-center gap-1.5 rounded-full px-[15px] py-2 font-ui text-[13.5px] uppercase tracking-[0.04em] transition-colors duration-150 font-semibold text-ink-muted hover:bg-ink-well hover:text-ink-ink">
+              MARKETS
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down h-2.5 w-2.5 opacity-55 transition-transform group-hover:rotate-180" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <div class="invisible absolute left-0 top-full z-50 pt-3 opacity-0 transition-all duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+              <div class="rounded-xl border border-ink-rule bg-ink-card p-1.5 shadow-soft-lg min-w-[232px]">
+                <a class="block rounded-lg px-3 py-2 transition-colors duration-150 text-ink-ink hover:bg-ink-well hover:text-ink-sienna" href="#market">
+                  <span class="block font-ui text-[13.5px] font-medium">Market Dashboard</span>
+                  <span class="mt-px block font-ui text-[11px] font-normal text-ink-faint">Markets, breadth and flows</span>
+                </a>
+                <a class="block rounded-lg px-3 py-2 transition-colors duration-150 text-ink-ink hover:bg-ink-well hover:text-ink-sienna" href="#indices">
+                  <span class="block font-ui text-[13.5px] font-medium">Indices</span>
+                  <span class="mt-px block font-ui text-[11px] font-normal text-ink-faint">NSE &amp; BSE benchmarks</span>
+                </a>
+                <a class="block rounded-lg px-3 py-2 transition-colors duration-150 text-ink-ink hover:bg-ink-well hover:text-ink-sienna" href="#sectors">
+                  <span class="block font-ui text-[13.5px] font-medium">Sectors</span>
+                  <span class="mt-px block font-ui text-[11px] font-normal text-ink-faint">Today's rotation</span>
+                </a>
+                <a class="block rounded-lg px-3 py-2 transition-colors duration-150 text-ink-ink hover:bg-ink-well hover:text-ink-sienna" href="#heatmap">
+                  <span class="block font-ui text-[13.5px] font-medium">Heatmap</span>
+                  <span class="mt-px block font-ui text-[11px] font-normal text-ink-faint">Size = cap, colour = move</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <a class="inline-flex items-center gap-1.5 rounded-full px-[15px] py-2 font-ui text-[13.5px] uppercase tracking-[0.04em] transition-colors duration-150 font-semibold text-ink-muted hover:bg-ink-well hover:text-ink-ink" href="#screener">SCREENER</a>
+          
+          <!-- STOCKS ACTIVE TAB -->
+          <a class="inline-flex items-center gap-1.5 rounded-full px-[15px] py-2 font-ui text-[13.5px] uppercase tracking-[0.04em] transition-colors duration-150 font-semibold bg-ink-well text-ink-sienna shadow-soft" href="#stocks">STOCKS</a>
+
+          <a class="inline-flex items-center gap-1.5 rounded-full px-[15px] py-2 font-ui text-[13.5px] uppercase tracking-[0.04em] transition-colors duration-150 font-semibold text-ink-muted hover:bg-ink-well hover:text-ink-ink" href="#filings">FILINGS</a>
+
+          <!-- Research Dropdown -->
+          <div class="group relative">
+            <button aria-haspopup="menu" class="inline-flex items-center gap-1.5 rounded-full px-[15px] py-2 font-ui text-[13.5px] uppercase tracking-[0.04em] transition-colors duration-150 font-semibold text-ink-muted hover:bg-ink-well hover:text-ink-ink">
+              RESEARCH
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down h-2.5 w-2.5 opacity-55 transition-transform group-hover:rotate-180" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <div class="invisible absolute left-0 top-full z-50 pt-3 opacity-0 transition-all duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+              <div class="rounded-xl border border-ink-rule bg-ink-card p-1.5 shadow-soft-lg min-w-[210px]">
+                <a class="block rounded-lg px-3 py-2 transition-colors duration-150 text-ink-ink hover:bg-ink-well hover:text-ink-sienna" href="#conviction">Conviction Scores</a>
+                <a class="block rounded-lg px-3 py-2 transition-colors duration-150 text-ink-ink hover:bg-ink-well hover:text-ink-sienna" href="#earnings">Earnings &amp; Results</a>
+                <a class="block rounded-lg px-3 py-2 transition-colors duration-150 text-ink-ink hover:bg-ink-well hover:text-ink-sienna" href="#deals">Bulk &amp; Block Deals</a>
+                <a class="block rounded-lg px-3 py-2 transition-colors duration-150 text-ink-ink hover:bg-ink-well hover:text-ink-sienna" href="#ipo">IPO Tracker</a>
+              </div>
+            </div>
+          </div>
+
+          <a class="inline-flex items-center gap-1.5 rounded-full px-[15px] py-2 font-ui text-[13.5px] uppercase tracking-[0.04em] transition-colors duration-150 font-semibold text-ink-muted hover:bg-ink-well hover:text-ink-ink" href="#portfolio">PORTFOLIO</a>
+          <a class="inline-flex items-center gap-1.5 rounded-full px-[15px] py-2 font-ui text-[13.5px] uppercase tracking-[0.04em] transition-colors duration-150 font-semibold text-ink-sienna hover:bg-ink-well" href="#ai">MY AI</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main id="main-content" class="flex-1">
+      <div class="container mx-auto px-4 max-w-7xl">
+        <!-- Hero Section -->
+        <div class="pt-5 pb-2">
+          <div class="mb-2 inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.05em] text-ink-muted">
+            <span class="relative inline-block size-[7px] shrink-0 rounded-full bg-ink-faint" aria-hidden="true"></span>
+            <span>Market closed · end of day · <span class="tabular-nums text-ink-text font-bold">4,070</span> listed companies</span>
+          </div>
+          <h1 class="font-display text-[clamp(26px,3vw,36px)] font-[750] leading-[1.06] tracking-[-0.025em] text-ink-ink">
+            Every stock, <em class="not-italic text-ink-sienna">ranked</em>.
+          </h1>
+          <p class="mt-2 text-sm text-ink-muted">Search Indian stocks. Compare returns, valuations and market size.</p>
+        </div>
+
+        <!-- Market Pulse Overview Cards -->
+        <div class="mt-3">
+          <div data-slot="pulse-card" class="pulse-card overflow-hidden rounded-xl border border-ink-rule bg-ink-card shadow-soft">
+            <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.25fr_1fr_1fr_1fr_1.35fr]">
+              <!-- Card 1: Total Market Cap -->
+              <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-r border-ink-rule xl:border-b-0">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Total Market Cap</span>
+                <span class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">₹463 L Cr</span>
+                <span class="text-[11.5px] text-ink-muted">NSE + BSE listed</span>
+              </div>
+
+              <!-- Card 2: India VIX -->
+              <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-ink-rule xl:border-r xl:border-b-0">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">India VIX</span>
+                <span class="flex items-baseline gap-2">
+                  <span class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">15.27</span>
+                  <span class="font-mono text-[12px] font-semibold tabular-nums text-ink-bullish">-2.89%</span>
+                </span>
+                <span class="text-[11.5px] text-ink-muted">Volatility index</span>
+              </div>
+
+              <!-- Card 3: Market Breadth -->
+              <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-r border-ink-rule lg:border-r-0 xl:border-r xl:border-b-0">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Market Breadth</span>
+                <div class="relative h-3.5 overflow-hidden rounded-full bg-ink-bearish/10 mt-0.5" role="img" aria-label="2720 advancing, 884 declining">
+                  <div class="absolute inset-y-0 left-0 rounded-l-full bg-ink-bullish" style="width:75%;transition:width 1200ms var(--ease-pulse)"></div>
+                  <div class="absolute top-1/2 h-[22px] w-1 -translate-x-1/2 -translate-y-1/2 rounded-[3px] bg-ink-ink shadow-[0_0_0_3px_var(--ink-bg)]" style="left:75%;transition:left 1200ms var(--ease-pulse)"></div>
+                </div>
+                <div class="flex items-center justify-between font-mono text-[12px] tabular-nums">
+                  <span class="text-ink-bullish">2,720 ▴</span>
+                  <span class="text-ink-bearish">884 ▾</span>
+                </div>
+              </div>
+
+              <!-- Card 4: Near 52W High -->
+              <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-ink-rule lg:border-b-0 lg:border-r xl:border-r">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Near 52W High</span>
+                <span class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">11<span class="text-[13px] text-ink-faint">%</span></span>
+                <span class="text-[11.5px] text-ink-muted">451 of 4,070 stocks</span>
+              </div>
+
+              <!-- Card 5: By Cap Segment -->
+              <div class="flex flex-col gap-[7px] px-[22px] py-4 col-span-2 lg:col-span-1">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">By Cap Segment</span>
+                <div class="mt-0.5 flex items-end gap-[3px] h-[26px]">
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="large: 357 stocks">
+                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:22%"></div>
+                  </div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="mid: 435 stocks">
+                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:26%"></div>
+                  </div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="small: 660 stocks">
+                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:40%"></div>
+                  </div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="micro: 975 stocks">
+                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:59%"></div>
+                  </div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="sme: 1,643 stocks">
+                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:100%"></div>
+                  </div>
+                </div>
+                <div class="flex gap-[3px]">
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">Lrg<span class="block tabular-nums">357</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">Mid<span class="block tabular-nums">435</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">Sml<span class="block tabular-nums">660</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">Mic<span class="block tabular-nums">975</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">SME<span class="block tabular-nums">1,643</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter Buttons Bar -->
+        <div class="py-3">
+          <div class="flex gap-1.5 overflow-x-auto no-scrollbar">
+            <button class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft">ALL</button>
+            <button class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:border-ink-sienna hover:text-ink-sienna">TOP GAINERS</button>
+            <button class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:border-ink-sienna hover:text-ink-sienna">TOP LOSERS</button>
+            <button class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:border-ink-sienna hover:text-ink-sienna">NEAR 52W HIGH</button>
+            <button class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:border-ink-sienna hover:text-ink-sienna">VOLUME SPIKE</button>
+            <button class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:border-ink-sienna hover:text-ink-sienna">NEW LISTINGS</button>
+          </div>
+        </div>
+
+        <!-- Table Card Container -->
+        <div class="py-4">
+          <div data-slot="pulse-card" class="pulse-card overflow-hidden rounded-xl border border-ink-rule bg-ink-card shadow-soft">
+            <!-- Search & Table Controls Toolbar -->
+            <div class="flex flex-wrap items-center gap-3 p-[18px] border-b border-ink-rule">
+              <!-- Search Input -->
+              <div class="relative">
+                <input data-stocks-search="true" type="text" placeholder="Search stocks..." class="bg-ink-well border border-ink-rule rounded-full text-ink-ink font-ui text-[13px] px-3.5 py-1.5 pr-7 w-[170px] md:w-[220px] outline-none transition-colors focus:border-ink-sienna placeholder:text-ink-faint" name="stocks-search" value="" />
+                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-faint bg-ink-inset rounded px-1">/</span>
+              </div>
+
+              <!-- Controls on the right -->
+              <div class="ml-auto flex items-center gap-2.5">
+                <div class="inline-flex gap-[3px] rounded-full bg-ink-well border border-ink-rule p-[3px]">
+                  <button aria-pressed="true" title="Sort only the rows on this page" class="rounded-full px-[11px] py-[3px] font-ui text-[10px] font-semibold whitespace-nowrap transition-all text-ink-ink bg-ink-card shadow-soft">This page</button>
+                  <button aria-pressed="false" title="Sort all matching stocks before pagination" class="flex items-center gap-1 rounded-full px-[11px] py-[3px] font-ui text-[10px] font-semibold whitespace-nowrap transition-all text-ink-muted hover:text-ink-text">All results</button>
+                </div>
+
+                <!-- Density Toggle -->
+                <button id="density-toggle-btn" class="w-[28px] h-[28px] flex items-center justify-center rounded-full border border-ink-rule bg-ink-well text-ink-muted transition-colors hover:text-ink-sienna hover:border-ink-sienna" title="Switch between default and dense rows">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list w-3.5 h-3.5" aria-hidden="true"><path d="M3 5h.01"></path><path d="M3 12h.01"></path><path d="M3 19h.01"></path><path d="M8 5h13"></path><path d="M8 12h13"></path><path d="M8 19h13"></path></svg>
+                </button>
+
+                <!-- Customize Columns -->
+                <div class="relative hidden md:block">
+                  <button class="w-[28px] h-[28px] flex items-center justify-center rounded-full border bg-ink-well transition-colors border-ink-rule text-ink-muted hover:text-ink-sienna hover:border-ink-sienna" title="Customize columns">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings w-3.5 h-3.5" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Table View -->
+            <div class="overflow-x-auto px-1.5">
+              <table class="w-full border-collapse" role="grid" aria-rowcount="200">
+                <thead>
+                  <tr>
+                    <th data-sortable="true" data-col="#" class="text-right w-[36px] text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">#</th>
+                    <th class="w-[22px] px-1 py-2 border-b border-ink-rule-strong sticky top-0 bg-ink-card"></th>
+                    <th data-sortable="true" data-col="Stock" class="text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">Stock</th>
+                    <th class="hidden lg:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong sticky top-0 bg-ink-card">Sector</th>
+                    <th data-sortable="true" data-col="Price" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">Price</th>
+                    <th data-sortable="true" data-col="Chg %" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">Chg %</th>
+                    <th data-sortable="true" data-col="MCap" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">MCap <span class="text-ink-sienna text-[9px]">▼</span></th>
+                    <th data-sortable="true" data-col="1W" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">1W</th>
+                    <th data-sortable="true" data-col="1M" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">1M</th>
+                    <th data-sortable="true" data-col="3M" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">3M</th>
+                    <th data-sortable="true" data-col="Vol" class="hidden xl:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-1.5 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">Vol</th>
+                    <th class="hidden xl:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted w-[64px] px-1 py-2 border-b border-ink-rule-strong sticky top-0 bg-ink-card">7D</th>
+                    <th class="w-[32px] px-1.5 py-2 border-b border-ink-rule-strong sticky top-0 bg-ink-card"></th>
+                  </tr>
+                </thead>
+                <tbody id="stocks-tbody">
+                  <!-- Populated by js/app.js -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div class="flex items-center justify-between px-[18px] py-3.5 border-t border-ink-rule">
+              <div id="showing-status" class="text-[12px] text-ink-muted">
+                Showing 1–50 of 200 stocks <span class="text-ink-faint">(of 4,070 total)</span>
+              </div>
+              <div id="pagination-controls" class="flex gap-0.5">
+                <!-- Rendered by app.js -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom CTA Sign-Up Card -->
+          <div data-slot="pulse-card" class="pulse-card mt-4 bg-gradient-to-br from-pulse-soft to-ink-card px-6 py-5 flex flex-col md:flex-row items-start md:items-center justify-between rounded-xl border border-ink-rule shadow-soft gap-4">
+            <div>
+              <p class="font-display text-[17px] font-bold text-ink-ink">You’re viewing 200 of 4,070 stocks</p>
+              <p class="text-[13px] text-ink-muted mt-1">Create a free account to browse all stocks, use custom filters, save to watchlist, and compare.</p>
+            </div>
+            <a class="shrink-0 px-6 py-2.5 rounded-full bg-ink-sienna text-white text-[11px] font-bold uppercase tracking-[0.14em] hover:bg-ink-sienna-light transition-colors shadow-soft" href="#register">Sign Up Free</a>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-ink-rule bg-ink-paper/40 pt-12 pb-8">
+      <div class="mx-auto max-w-7xl px-4">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
+          <!-- Col 1: Brand Info -->
+          <div class="md:col-span-2">
+            <a class="inline-flex items-baseline whitespace-nowrap mb-3" href="/">
+              <span class="font-display text-2xl font-extrabold text-ink-ink">machli</span>
+              <span class="font-display text-2xl font-extrabold text-ink-sienna">·</span>
+              <span class="font-display text-2xl font-extrabold text-ink-sienna">bazarr</span>
+            </a>
+            <p class="text-[13px] text-ink-muted leading-relaxed max-w-sm">
+              Track what you own. Screen what you don't. India's market intelligence: screening, conviction scoring, and filing analysis, alive in real time.
+            </p>
+            <p class="mt-3 text-[11px] uppercase font-bold tracking-wider text-ink-muted">Data: NSE &amp; BSE</p>
+            <a href="mailto:contact@machlibazarr.in" class="mt-4 inline-block font-display text-[13px] text-ink-ink transition-colors duration-150 hover:text-ink-sienna">contact@machlibazarr.in</a>
+            <div class="mt-3 flex gap-4">
+              <a href="#twitter" class="text-xs text-ink-muted hover:text-ink-sienna transition-colors">𝕏 Twitter</a>
+            </div>
+          </div>
+
+          <!-- Col 2: Markets -->
+          <div>
+            <span class="font-ui text-[11px] font-bold uppercase tracking-[0.14em] text-ink-muted block mb-3">Markets</span>
+            <ul class="space-y-2 text-[13px]">
+              <li><a href="#market" class="text-ink-muted hover:text-ink-ink transition-colors">Market Dashboard</a></li>
+              <li><a href="#screener" class="text-ink-muted hover:text-ink-ink transition-colors">Screener</a></li>
+              <li><a href="#stocks" class="text-ink-sienna font-medium">All Stocks</a></li>
+              <li><a href="#heatmap" class="text-ink-muted hover:text-ink-ink transition-colors">Heatmap</a></li>
+              <li><a href="#fii-dii" class="text-ink-muted hover:text-ink-ink transition-colors">FII / DII</a></li>
+            </ul>
+          </div>
+
+          <!-- Col 3: Research -->
+          <div>
+            <span class="font-ui text-[11px] font-bold uppercase tracking-[0.14em] text-ink-muted block mb-3">Research</span>
+            <ul class="space-y-2 text-[13px]">
+              <li><a href="#research" class="text-ink-muted hover:text-ink-ink transition-colors">Research Hub</a></li>
+              <li><a href="#filings" class="text-ink-muted hover:text-ink-ink transition-colors">Filings</a></li>
+              <li><a href="#conviction" class="text-ink-muted hover:text-ink-ink transition-colors">Conviction</a></li>
+              <li><a href="#earnings" class="text-ink-muted hover:text-ink-ink transition-colors">Earnings</a></li>
+              <li><a href="#deals" class="text-ink-muted hover:text-ink-ink transition-colors">Deals</a></li>
+              <li><a href="#ipo" class="text-ink-muted hover:text-ink-ink transition-colors">IPO Tracker</a></li>
+            </ul>
+          </div>
+
+          <!-- Col 4: Company & Legal -->
+          <div>
+            <span class="font-ui text-[11px] font-bold uppercase tracking-[0.14em] text-ink-muted block mb-3">Company</span>
+            <ul class="space-y-2 text-[13px]">
+              <li><a href="#about" class="text-ink-muted hover:text-ink-ink transition-colors">About</a></li>
+              <li><a href="#pricing" class="text-ink-muted hover:text-ink-ink transition-colors">Pricing</a></li>
+              <li><a href="#terms" class="text-ink-muted hover:text-ink-ink transition-colors">Terms</a></li>
+              <li><a href="#privacy" class="text-ink-muted hover:text-ink-ink transition-colors">Privacy</a></li>
+              <li><a href="#disclaimer" class="text-ink-muted hover:text-ink-ink transition-colors">Disclaimer</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="border-t border-ink-rule pt-6 flex flex-col sm:flex-row justify-between gap-4 text-[11px] text-ink-faint">
+          <div>Operated by Machli Bazarr Advisory LLP. © 2026 machli bazarr · Mumbai, India</div>
+          <div>Investment in securities market are subject to market risks. Read all related documents carefully before investing.</div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- AI Insight Modal / Drawer -->
+  <div id="ai-modal" class="ai-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-ink-card border border-ink-rule rounded-2xl w-full max-w-xl p-6 relative shadow-2xl">
+      <button id="ai-modal-close" class="absolute top-4 right-4 text-ink-muted hover:text-ink-ink w-8 h-8 rounded-full bg-ink-well flex items-center justify-center transition-colors">
+        ✕
+      </button>
+      <div id="ai-modal-content">
+        <!-- Injected dynamically by app.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- App Data and Scripts -->
+  <script src="./js/stocks-data.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
