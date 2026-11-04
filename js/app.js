@@ -13,7 +13,6 @@
   let sortDirection = 'desc'; // 'asc' or 'desc'
   let searchQuery = '';
   let isDense = false;
-  let watchlist = new Set(JSON.parse(localStorage.getItem('machli_watchlist') || '[]'));
 
   // DOM Elements
   const tbody = document.getElementById('stocks-tbody');
@@ -104,10 +103,6 @@
       result = result.filter(s => s.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent);
     } else if (activeFilter === 'NEAR 52W HIGH') {
       result = result.filter(s => s.is_near_high || (s.pct_from_high && Number(s.pct_from_high) >= -8));
-    } else if (activeFilter === 'VOLUME SPIKE') {
-      result = result.filter(s => (s.volume_ratio || 0) >= 1.4);
-    } else if (activeFilter === 'NEW LISTINGS') {
-      result = result.filter(s => s.listing_date && new Date(s.listing_date) >= new Date('2020-01-01'));
     }
 
     // Search query
@@ -122,7 +117,7 @@
     }
 
     // Sorting (if not overridden by filter)
-    if (activeFilter === 'ALL' || activeFilter === 'NEAR 52W HIGH' || activeFilter === 'VOLUME SPIKE') {
+    if (activeFilter === 'ALL' || activeFilter === 'NEAR 52W HIGH') {
       result.sort((a, b) => {
         let valA = a[sortColumn];
         let valB = b[sortColumn];
@@ -167,7 +162,7 @@
     if (pageRows.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="13" class="text-center py-12 text-ink-muted">
+          <td colspan="12" class="text-center py-12 text-ink-muted">
             <div class="font-display text-lg text-ink-ink mb-1">No stocks found</div>
             <p class="text-sm">Try searching for a different company or reset the filter.</p>
           </td>
@@ -179,7 +174,6 @@
     const padY = isDense ? '4px' : '9px';
 
     tbody.innerHTML = pageRows.map((s, idx) => {
-      const isStarred = watchlist.has(s.symbol);
       const isChgPositive = (s.change_percent || 0) >= 0;
       const chgColor = isChgPositive ? 'text-ink-bullish' : 'text-ink-bearish';
       const chgArrow = isChgPositive ? '▴' : '▾';
@@ -190,19 +184,10 @@
 
       return `
         <tr data-row-symbol="${s.symbol}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
-          <td class="text-right text-[13px] text-ink-muted px-1.5 tabular-nums" style="padding-top:${padY};padding-bottom:${padY}">${s.rank}</td>
+          <td class="text-right text-[13px] text-ink-muted px-2 tabular-nums" style="padding-top:${padY};padding-bottom:${padY}">${s.rank}</td>
           
-          <!-- Watchlist Star -->
-          <td class="text-center px-1" style="padding-top:${padY};padding-bottom:${padY}">
-            <button class="watchlist-btn transition-colors text-ink-faint hover:text-ink-sienna ${isStarred ? '!text-ink-sienna' : ''}" data-symbol="${s.symbol}" title="${isStarred ? 'Remove from Watchlist' : 'Add to Watchlist'}">
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="${isStarred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-              </svg>
-            </button>
-          </td>
-
           <!-- Stock Info -->
-          <td class="px-1.5" style="padding-top:${padY};padding-bottom:${padY}">
+          <td class="px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <div class="flex items-center gap-2.5 min-w-0 group/link">
               <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-paper text-ink-muted font-ui font-semibold h-6 w-6 text-[10px]">
                 <img src="${logoSrc}" alt="${s.company_name} logo" class="block h-full w-full object-contain" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'" />
@@ -216,44 +201,44 @@
           </td>
 
           <!-- Sector -->
-          <td class="hidden lg:table-cell px-1.5" style="padding-top:${padY};padding-bottom:${padY}">
+          <td class="hidden lg:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${s.sector || 'GENERAL'}">${s.sector || 'GENERAL'}</span>
           </td>
 
           <!-- Price -->
-          <td class="text-right text-[14px] text-ink-ink px-1.5" style="padding-top:${padY};padding-bottom:${padY}">
+          <td class="text-right text-[14px] text-ink-ink px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <span class="font-mono tabular-nums [letter-spacing:-0.02em]">${formatCurrency(s.current_price)}</span>
           </td>
 
           <!-- Change % -->
-          <td class="text-right text-[12px] font-medium px-1.5" style="padding-top:${padY};padding-bottom:${padY}">
+          <td class="text-right text-[12px] font-medium px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <span class="inline-flex items-baseline gap-1 font-mono tabular-nums [letter-spacing:-0.02em] ${chgColor} justify-end text-[12px]">
               <span aria-hidden="true">${chgArrow}</span>${formatPercent(s.change_percent)}
             </span>
           </td>
 
           <!-- Market Cap -->
-          <td class="text-right text-[12px] text-ink-text tabular-nums px-1.5" style="padding-top:${padY};padding-bottom:${padY}">
+          <td class="text-right text-[12px] text-ink-text tabular-nums px-2" style="padding-top:${padY};padding-bottom:${padY}">
             ${formatMarketCap(s.market_cap_cr)}
           </td>
 
           <!-- 1W Return -->
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-1.5 ${getReturnColorClass(s.return_1w)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1w)}">
+          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_1w)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1w)}">
             ${formatPercent(s.return_1w)}
           </td>
 
           <!-- 1M Return -->
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-1.5 ${getReturnColorClass(s.return_1m)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1m)}">
+          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_1m)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1m)}">
             ${formatPercent(s.return_1m)}
           </td>
 
           <!-- 3M Return -->
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-1.5 ${getReturnColorClass(s.return_3m)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_3m)}">
+          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_3m)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_3m)}">
             ${formatPercent(s.return_3m)}
           </td>
 
           <!-- Volume Bar -->
-          <td class="hidden xl:table-cell px-1.5" style="padding-top:${padY};padding-bottom:${padY}">
+          <td class="hidden xl:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <div class="w-[32px] h-[3.5px] bg-ink-inset rounded-full overflow-hidden relative" title="Volume Ratio: ${s.volume_ratio || 1.0}x">
               <div class="h-full bg-ink-muted/80 rounded-full" style="width:${volWidth}%"></div>
             </div>
@@ -308,7 +293,7 @@
 
     // Attach pagination listeners
     paginationControls.querySelectorAll('.page-num-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', () => {
         currentPage = Number(btn.getAttribute('data-page'));
         renderTable();
         window.scrollTo({ top: 380, behavior: 'smooth' });
@@ -334,26 +319,8 @@
     }
   }
 
-  // Row Event Listeners (Watchlist & AI Insights)
+  // Row Event Listeners (AI Insights)
   function attachRowEventListeners() {
-    // Watchlist stars
-    tbody.querySelectorAll('.watchlist-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const sym = btn.getAttribute('data-symbol');
-        if (watchlist.has(sym)) {
-          watchlist.delete(sym);
-          btn.classList.remove('!text-ink-sienna');
-          btn.querySelector('svg').setAttribute('fill', 'none');
-        } else {
-          watchlist.add(sym);
-          btn.classList.add('!text-ink-sienna');
-          btn.querySelector('svg').setAttribute('fill', 'currentColor');
-        }
-        localStorage.setItem('machli_watchlist', JSON.stringify([...watchlist]));
-      });
-    });
-
     // AI Insight button
     tbody.querySelectorAll('.ai-insight-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
