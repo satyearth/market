@@ -320,8 +320,8 @@ async function runBrowserTests() {
     // Test 7: Keyboard Shortcut ('/' focus search)
     // -------------------------------------------------------------
     console.log('\n[8/10] Testing Keyboard Shortcuts...');
-    // Click body to blur
-    await page.locator('body').click();
+    // Click body to blur (use top-left position to avoid clicking table rows)
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
     await page.keyboard.press('/');
     await page.waitForTimeout(100);
     const isSearchFocused = await searchInput.evaluate(el => el === document.activeElement);

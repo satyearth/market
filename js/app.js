@@ -953,11 +953,199 @@
     }
   }
 
+  // EOD Auto-Refresh Status Indicator & Lifecycle Management
+  function updateSyncIndicator(state, message, timeText) {
+    const indicator = document.getElementById('eod-sync-indicator');
+    const dot = document.getElementById('eod-sync-dot');
+    const textEl = document.getElementById('eod-sync-text');
+    const timeEl = document.getElementById('eod-sync-time');
+
+    if (!indicator || !dot || !textEl) return;
+
+    // Reset animation classes
+    dot.className = 'relative inline-block size-[7px] shrink-0 rounded-full';
+
+    const defaultTime = (typeof MARKET_STATS !== 'undefined' && MARKET_STATS && MARKET_STATS.istDisplayTime)
+      ? MARKET_STATS.istDisplayTime
+      : '04 Nov 2026, 22:33 IST';
+
+    switch (state) {
+      case 'updating':
+        dot.classList.add('bg-ink-sienna', 'animate-pulse');
+        textEl.textContent = message || 'Updating market data...';
+        if (timeEl) timeEl.textContent = '';
+        break;
+
+      case 'failed':
+        dot.classList.add('bg-amber-500');
+        textEl.textContent = message || 'Update failed — showing previous data';
+        if (timeEl) timeEl.textContent = ` · ${timeText || defaultTime}`;
+        break;
+
+      case 'closed':
+        dot.classList.add('bg-ink-muted');
+        textEl.textContent = message || 'Market closed';
+        if (timeEl) timeEl.textContent = ` · ${timeText || defaultTime}`;
+        break;
+
+      case 'latest':
+      default:
+        dot.classList.add('bg-emerald-500');
+        textEl.textContent = message || 'Latest EOD data';
+        if (timeEl) timeEl.textContent = ` · ${timeText || defaultTime}`;
+        break;
+    }
+  }
+
+  // Automatic EOD Data Refresh on Website Open
+  async function checkEodAutoRefresh() {
+    // Stale-while-revalidate initial display
+    updateSyncIndicator('latest');
+
+    // In static file mode (e.g. file:///), no backend HTTP server is available
+    if (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.host)) {
+      return;
+    }
+
+    // Client-side cache: prevent repeated requests within 5 minutes
+    const CACHE_KEY = 'mb_last_sync_check';
+    const CACHE_TTL_MS = 5 * 60 * 1000;
+    try {
+      const lastCheck = Number(sessionStorage.getItem(CACHE_KEY) || 0);
+      if (Date.now() - lastCheck < CACHE_TTL_MS) {
+        return; // Cache valid, keep showing latest verified EOD data
+      }
+    } catch (_) {
+      // Ignore storage access errors in restricted iframe/browser modes
+    }
+
+    // Attempt to query the backend EOD status API
+    try {
+      const res = await fetch('/api/market/status', {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-cache'
+      });
+
+      if (!res.ok) return; // Non-200 response: static hosting fallback
+      const data = await res.json();
+
+      if (!data || !data.ok) return;
+
+      const displayTime = data.istDisplayTime || (MARKET_STATS && MARKET_STATS.istDisplayTime);
+
+      if (data.isSyncing) {
+        // Sync is actively running in background
+        updateSyncIndicator('updating', 'Updating market data...');
+        pollSyncCompletion();
+        return;
+      }
+
+      if (data.needsSync) {
+        // Newer exchange session is available; trigger background sync
+        updateSyncIndicator('updating', 'Updating market data...');
+        try {
+          const refreshRes = await fetch('/api/market/refresh', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json' }
+          });
+          const refreshData = await refreshRes.json();
+
+          if (refreshData.ok && refreshData.status === 'updated') {
+            // Hot-reload fresh dataset without full page reload
+            await reloadDatasetHot();
+            updateSyncIndicator('latest', 'Latest EOD data', refreshData.istDisplayTime || displayTime);
+            try { sessionStorage.setItem(CACHE_KEY, String(Date.now())); } catch (_) {}
+          } else if (refreshData.status === 'in_progress') {
+            pollSyncCompletion();
+          } else {
+            // Update failed: keep displaying previous valid dataset
+            updateSyncIndicator('failed', 'Update failed — showing previous data', displayTime);
+          }
+        } catch (err) {
+          updateSyncIndicator('failed', 'Update failed — showing previous data', displayTime);
+        }
+        return;
+      }
+
+      // Already up-to-date
+      if (data.marketCalendar && (data.marketCalendar.isWeekend || data.marketCalendar.isHoliday)) {
+        updateSyncIndicator('latest', 'Latest EOD data (Market closed)', displayTime);
+      } else {
+        updateSyncIndicator('latest', 'Latest EOD data', displayTime);
+      }
+      try { sessionStorage.setItem(CACHE_KEY, String(Date.now())); } catch (_) {}
+
+    } catch (err) {
+      // In static deployment (e.g. GitHub Pages or file:///), /api/market/status will fail
+      // Stale-while-revalidate guarantees the loaded EOD dataset remains active and clean
+      updateSyncIndicator('latest');
+    }
+  }
+
+  // Polls backend status until background sync job concludes
+  function pollSyncCompletion() {
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/market/status');
+        if (!res.ok) {
+          clearInterval(pollInterval);
+          return;
+        }
+        const data = await res.json();
+        if (!data.isSyncing) {
+          clearInterval(pollInterval);
+          if (data.isUpToDate) {
+            await reloadDatasetHot();
+            updateSyncIndicator('latest', 'Latest EOD data', data.istDisplayTime);
+            try { sessionStorage.setItem('mb_last_sync_check', String(Date.now())); } catch (_) {}
+          } else {
+            updateSyncIndicator('failed', 'Update failed — showing previous data', data.istDisplayTime);
+          }
+        }
+      } catch (_) {
+        clearInterval(pollInterval);
+        updateSyncIndicator('failed', 'Update failed — showing previous data');
+      }
+    }, 3000);
+  }
+
+  // Dynamically reloads fresh dataset script without breaking UI state
+  async function reloadDatasetHot() {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = `./js/stocks-data.js?t=${Date.now()}`;
+      script.onload = () => {
+        if (typeof STOCKS_DATA !== 'undefined' && Array.isArray(STOCKS_DATA)) {
+          currentStocks = [...STOCKS_DATA];
+          filteredStocks = [...STOCKS_DATA];
+          if (activeFilter !== 'ALL') {
+            applyFilter(activeFilter);
+          } else if (searchQuery) {
+            handleSearch(searchQuery);
+          } else {
+            renderTable();
+          }
+          renderMarketPulse();
+        }
+        resolve();
+      };
+      script.onerror = () => resolve();
+      document.body.appendChild(script);
+    });
+  }
+
+  // Expose methods for E2E tests and lifecycle management
+  if (typeof window !== 'undefined') {
+    window.checkEodAutoRefresh = checkEodAutoRefresh;
+    window.updateSyncIndicator = updateSyncIndicator;
+  }
+
   // Initialize
   function init() {
     setupEvents();
     renderMarketPulse();
     renderTable();
+    checkEodAutoRefresh();
   }
 
   // Run on DOM ready

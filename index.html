@@ -37,8 +37,13 @@
           <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-sienna lg:text-[28px]">bazarr</span>
         </a>
 
-        <!-- Active Section Indicator -->
-        <div class="flex items-center">
+        <!-- Active Section Indicator & EOD Auto-Refresh Status -->
+        <div class="flex items-center gap-2.5">
+          <div id="eod-sync-indicator" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[11px] text-ink-muted bg-ink-well border border-ink-rule shadow-soft" role="status" aria-live="polite">
+            <span id="eod-sync-dot" class="relative inline-block size-[7px] shrink-0 rounded-full bg-emerald-500"></span>
+            <span id="eod-sync-text">Latest EOD data</span>
+            <span id="eod-sync-time" class="hidden sm:inline text-ink-faint">· 04 Nov 2026, 22:33 IST</span>
+          </div>
           <span class="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-ui text-[12px] uppercase tracking-[0.06em] font-semibold bg-ink-well text-ink-sienna border border-ink-rule shadow-soft">
             STOCKS
           </span>

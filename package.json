@@ -4,11 +4,14 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node scripts/verify-dataset.js && node scripts/qa-frontend-audit.js && node scripts/missing-stock-audit.js && node scripts/test-new-listing-discovery.js && node scripts/browser-test.js",
+    "start": "node server.js",
+    "test": "node scripts/verify-dataset.js && node scripts/qa-frontend-audit.js && node scripts/missing-stock-audit.js && node scripts/test-new-listing-discovery.js && node scripts/test-auto-refresh.js && node scripts/browser-test.js",
     "test:verify": "node scripts/verify-dataset.js",
     "test:qa": "node scripts/qa-frontend-audit.js",
     "test:audit": "node scripts/missing-stock-audit.js",
     "test:discovery": "node scripts/test-new-listing-discovery.js",
+    "test:refresh": "node scripts/test-auto-refresh.js",
+    "test:e2e": "node scripts/verify-auto-refresh-e2e.js",
     "test:browser": "node scripts/browser-test.js",
     "sync": "node scripts/sync-stock-universe.js"
   },
