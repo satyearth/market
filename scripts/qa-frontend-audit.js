@@ -54,7 +54,7 @@ function assert(condition, testName, details = '') {
 // -------------------------------------------------------------
 console.log('[Section 1: Stock Universe & Search]');
 
-assert(STOCKS_DATA.length === 4965, 'Total stock universe is exactly 4,965', `Length: ${STOCKS_DATA.length}`);
+assert(STOCKS_DATA.length === 5389, 'Total stock universe is exactly 5,389', `Length: ${STOCKS_DATA.length}`);
 
 // 1. Search by Symbol
 const BRAND_ENTITY_MAP = {
@@ -150,7 +150,7 @@ console.log('\n[Section 2: Filter Pills & Disambiguation]');
 
 // 1. ALL Filter
 const allCount = STOCKS_DATA.length;
-assert(allCount === 4965, 'ALL filter preserves full 4,965 universe');
+assert(allCount === 5389, 'ALL filter preserves full 5,389 universe');
 
 // 2. TOP GAINERS Filter
 const gainers = STOCKS_DATA.filter(s => s.change_percent > 0 || (s.prev_close != null && s.current_price > s.prev_close)).sort((a, b) => b.change_percent - a.change_percent);
@@ -182,7 +182,7 @@ console.log('\n[Section 3: Stock Data Display & Null Integrity]');
 
 // 1. Missing data handling: market cap
 const unranked = STOCKS_DATA.filter(s => s.market_cap_cr === null);
-assert(unranked.length === 4622, 'Unverified market caps remain strictly null (4,622 stocks)', `Count: ${unranked.length}`);
+assert(unranked.length === 5046, 'Unverified market caps remain strictly null (5,046 stocks)', `Count: ${unranked.length}`);
 
 // Formatter check
 function formatMarketCap(cr) {
@@ -197,7 +197,8 @@ assert(formatMarketCap(undefined) === '—', 'formatMarketCap(undefined) returns
 assert(formatMarketCap(1883296.8) === '₹18.8L Cr', 'formatMarketCap for Reliance is ₹18.8L Cr');
 
 // 2. Missing data handling: 1W return
-assert(STOCKS_DATA.filter(s => s.return_1w === null).length === 24, '24 unpriced/newly listed stocks have null 1W return');
+const null1wCount = STOCKS_DATA.filter(s => s.return_1w === null).length;
+assert(null1wCount === 190, '190 unpriced or single-session stocks have null 1W return', `Count: ${null1wCount}`);
 
 // 3. Multi-month returns audit (1M, 3M, 1Y are strictly null since only 6 daily sessions are verified)
 const nonNull1m = STOCKS_DATA.filter(s => s.return_1m != null).length;
@@ -225,13 +226,13 @@ assert(smeSample.segment === 'SME', 'SME platform security has segment SME');
 // -------------------------------------------------------------
 console.log('\n[Section 4: Market Pulse Cards Binding]');
 
-assert(MARKET_STATS.stockCount === 4965, 'Card: Market coverage is 4,965 listed companies');
+assert(MARKET_STATS.stockCount === 5389, 'Card: Market coverage is 5,389 listed companies');
 assert(MARKET_STATS.vix === 15.19, 'Card: India VIX value is 15.19');
 assert(MARKET_STATS.vixChangePct === -3.39, 'Card: India VIX change is -3.39%');
 assert(MARKET_STATS.vixDate === '04-NOV-2026', 'Card: India VIX date is 04-NOV-2026');
 assert(MARKET_STATS.advances === 3228, 'Card: Advances is 3,228');
 assert(MARKET_STATS.declines === 1539, 'Card: Declines is 1,539');
-assert(MARKET_STATS.unchanged === 196, 'Card: Unchanged is 196');
+assert(MARKET_STATS.unchanged === 620, 'Card: Unchanged is 620');
 assert(MARKET_STATS.marketBreadth.unpriced === 2, 'Card: Unpriced is 2');
 assert(MARKET_STATS.verifiedMarketCapCr === 29796109, 'Card: Verified market cap is ₹2,97,96,109 Cr (~₹298.0L Cr)');
 assert(indexContent.includes('Verified Market Cap'), 'Card 1 title is "Verified Market Cap", identifying partial coverage');
@@ -239,8 +240,8 @@ assert(indexContent.includes('Top 343 Equities (NSE + BSE)'), 'Card 1 subtitle i
 assert(MARKET_STATS.verifiedRankingSegments.top100 === 100, 'Card: Top 100 verified count is 100');
 assert(MARKET_STATS.verifiedRankingSegments.rank101_250 === 150, 'Card: Rank 101–250 verified count is 150');
 assert(MARKET_STATS.verifiedRankingSegments.remainingVerified === 93, 'Card: Remaining verified count is 93');
-assert(MARKET_STATS.verifiedRankingSegments.unranked === 3758, 'Card: Unranked count is 3,758');
-assert(MARKET_STATS.verifiedRankingSegments.smePlatform === 864, 'Card: SME platform count is 864');
+assert(MARKET_STATS.verifiedRankingSegments.unranked === 4000, 'Card: Unranked count is 4,000');
+assert(MARKET_STATS.verifiedRankingSegments.smePlatform === 1046, 'Card: SME platform count is 1,046');
 assert(MARKET_STATS.near52WeekHighCount === 36, 'Card: Near 52W high count is 36 stocks');
 assert(MARKET_STATS.near52WeekHighPct === 0.7, 'Card: Near 52W high percentage is 0.7%');
 assert(MARKET_STATS.near52WeekHighStatus && MARKET_STATS.near52WeekHighStatus.includes('2026-11-04'), 'Card: Near 52W high status verifies 2026-11-04 session match');
@@ -271,11 +272,11 @@ console.log('\n[Section 6: Assets & 404 Prevention]');
 assert(appContent.includes('const KNOWN_LOGOS = new Set('), 'app.js defines KNOWN_LOGOS set to guard image requests');
 assert(appContent.includes('KNOWN_LOGOS.has(stock.symbol)'), 'app.js checks KNOWN_LOGOS before rendering <img> tag');
 
-// Check that no HTML hardcodes old 4,951 stock counts
-assert(!indexContent.includes('aria-rowcount="4951"'), 'index.html aria-rowcount is updated to 4965');
-assert(indexContent.includes('aria-rowcount="4965"'), 'index.html aria-rowcount is exactly 4965');
-assert(!indexContent.includes('Showing 1–50 of 4,951'), 'index.html showing status is updated to 4,965');
-assert(indexContent.includes('Showing 1–50 of 4,965'), 'index.html showing status is exactly 4,965');
+// Check that no HTML hardcodes old 4,965 stock counts
+assert(!indexContent.includes('aria-rowcount="4965"'), 'index.html aria-rowcount is updated to 5389');
+assert(indexContent.includes('aria-rowcount="5389"'), 'index.html aria-rowcount is exactly 5389');
+assert(!indexContent.includes('Showing 1–50 of 4,965'), 'index.html showing status is updated to 5,389');
+assert(indexContent.includes('Showing 1–50 of 5,389'), 'index.html showing status is exactly 5,389');
 
 // -------------------------------------------------------------
 // SECTION 7: RESPONSIVE LAYOUT, SECURITY & PERFORMANCE
@@ -297,7 +298,7 @@ for (let i = 0; i < 20; i++) {
 }
 const elapsed = performance.now() - start;
 const avg = (elapsed / 60).toFixed(2);
-assert(Number(avg) < 5, 'Average search filter execution time is sub-5ms across 4,965 records', `${avg}ms / query`);
+assert(Number(avg) < 5, 'Average search filter execution time is sub-5ms across 5,389 records', `${avg}ms / query`);
 
 // -------------------------------------------------------------
 // SECTION 8: 10-POINT DATA CONSISTENCY RECONCILIATION
@@ -319,19 +320,19 @@ STOCKS_DATA.forEach(s => {
   else unchCount++;
 });
 
-assert(isinSet.size === 4965, 'Reconciliation: Total unique ISINs is 4,965', `Set size: ${isinSet.size}`);
-assert(nseScrips === 3085, 'Reconciliation: NSE count is 3,085', `Count: ${nseScrips}`);
-assert(bseScrips === 4310, 'Reconciliation: BSE count is 4,310', `Count: ${bseScrips}`);
-assert(dualScrips === 2430, 'Reconciliation: Dual-listed count is 2,430', `Count: ${dualScrips}`);
-assert(mainboardScrips === 4101, 'Reconciliation: Mainboard count is 4,101', `Count: ${mainboardScrips}`);
-assert(smeScrips === 864, 'Reconciliation: SME count is 864', `Count: ${smeScrips}`);
+assert(isinSet.size === 5389, 'Reconciliation: Total unique ISINs is 5,389', `Set size: ${isinSet.size}`);
+assert(nseScrips === 3191, 'Reconciliation: NSE count is 3,191', `Count: ${nseScrips}`);
+assert(bseScrips === 4702, 'Reconciliation: BSE count is 4,702', `Count: ${bseScrips}`);
+assert(dualScrips === 2504, 'Reconciliation: Dual-listed count is 2,504', `Count: ${dualScrips}`);
+assert(mainboardScrips === 4343, 'Reconciliation: Mainboard count is 4,343', `Count: ${mainboardScrips}`);
+assert(smeScrips === 1046, 'Reconciliation: SME count is 1,046', `Count: ${smeScrips}`);
 assert(advCount === 3228, 'Reconciliation: Advances count is 3,228', `Count: ${advCount}`);
 assert(decCount === 1539, 'Reconciliation: Declines count is 1,539', `Count: ${decCount}`);
-assert(unchCount === 196, 'Reconciliation: Unchanged count is 196', `Count: ${unchCount}`);
+assert(unchCount === 620, 'Reconciliation: Unchanged count is 620', `Count: ${unchCount}`);
 assert(unpCount === 2, 'Reconciliation: Unpriced count is 2', `Count: ${unpCount}`);
-assert(dualScrips + (nseScrips - dualScrips) + (bseScrips - dualScrips) === 4965, 'Mathematical identity: Dual (2430) + NSE-only (655) + BSE-only (1880) === 4965');
-assert(mainboardScrips + smeScrips === 4965, 'Mathematical identity: Mainboard (4101) + SME (864) === 4965');
-assert(advCount + decCount + unchCount + unpCount === 4965, 'Mathematical identity: Adv (3228) + Dec (1539) + Unch (196) + Unp (2) === 4965');
+assert(dualScrips + (nseScrips - dualScrips) + (bseScrips - dualScrips) === 5389, 'Mathematical identity: Dual (2504) + NSE-only (687) + BSE-only (2198) === 5389');
+assert(mainboardScrips + smeScrips === 5389, 'Mathematical identity: Mainboard (4343) + SME (1046) === 5389');
+assert(advCount + decCount + unchCount + unpCount === 5389, 'Mathematical identity: Adv (3228) + Dec (1539) + Unch (620) + Unp (2) === 5389');
 
 // -------------------------------------------------------------
 // SUMMARY

@@ -169,7 +169,7 @@ async function runAutoRefreshTestSuite() {
     assert.strictEqual(res.body.ok, true);
     assert.strictEqual(res.body.isSyncing, false);
     assert.strictEqual(res.body.tradingDate, '2026-11-04');
-    assert.strictEqual(res.body.stockCount, 4965);
+    assert.strictEqual(res.body.stockCount, 5389);
     assert.strictEqual(typeof res.body.isUpToDate, 'boolean');
     assert(res.body.istDisplayTime.includes('IST'));
     assert(res.body.marketCalendar != null);
@@ -188,7 +188,7 @@ async function runAutoRefreshTestSuite() {
     const res = await invokeMockHandler('/api/market/dataset', 'GET');
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.ok, true);
-    assert.strictEqual(res.body.stats.stockCount, 4965);
+    assert.strictEqual(res.body.stats.stockCount, 5389);
     assert.strictEqual(res.body.stats.tradingDate, '2026-11-04');
   });
 

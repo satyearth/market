@@ -113,10 +113,10 @@ async function runBrowserTests() {
     recordTest('Page title is branded Machli Bazzar', title.toLowerCase().includes('machli bazarr') || title.toLowerCase().includes('machli bazzar'), title);
 
     const statusBadge = await page.locator('#market-status-badge').innerText();
-    recordTest('Status badge shows 4,965 listed companies', statusBadge.toLowerCase().includes('4,965 listed companies'), statusBadge);
+    recordTest('Status badge shows 5,389 listed companies', statusBadge.toLowerCase().includes('5,389 listed companies'), statusBadge);
 
     const showingText = await page.locator('#showing-status').innerText();
-    recordTest('Showing status displays 1-50 of 4,965', showingText.includes('50 of 4,965'), showingText);
+    recordTest('Showing status displays 1-50 of 5,389', showingText.includes('50 of 5,389'), showingText);
 
     // -------------------------------------------------------------
     // Test 2: Market Pulse Cards Binding & 52W High Coverage Label
@@ -140,7 +140,7 @@ async function runBrowserTests() {
     const breadthSub = await page.locator('#card-breadth-sub').innerText();
     recordTest('Card 3: Market Breadth advances match 3,228', advText.includes('3,228'), advText);
     recordTest('Card 3: Market Breadth declines match 1,539', decText.includes('1,539'), decText);
-    recordTest('Card 3: Subtitle shows reconciled A/D identity', breadthSub.includes('196 Unch') && breadthSub.includes('2 Unpriced'), breadthSub);
+    recordTest('Card 3: Subtitle shows reconciled A/D identity', breadthSub.includes('620 Unch') && breadthSub.includes('2 Unpriced'), breadthSub);
 
     // Card 4: Near 52W High (Audited Coverage Label)
     const nearPct = await page.locator('#card-near52-pct').innerText();
@@ -148,7 +148,7 @@ async function runBrowserTests() {
     recordTest('Card 4: Displays verified count 36', nearPct === '36', `Value: ${nearPct}`);
     recordTest('Card 4: Subtitle specifies "36 verified BSE Group A/B equities"', nearSub.includes('36 verified BSE Group A/B equities'), nearSub);
     recordTest('Card 4: Subtitle includes source "BSE MCP" and date "2026-11-04"', nearSub.includes('BSE MCP') && (nearSub.includes('2026-11-04') || nearSub.includes('04-Nov-2026')), nearSub);
-    recordTest('Card 4: Does NOT claim 36/4,965 as complete market coverage', !nearSub.includes('of 4,965'), `Subtitle: "${nearSub}"`);
+    recordTest('Card 4: Does NOT claim 36/5,389 as complete market coverage', !nearSub.includes('of 5,389'), `Subtitle: "${nearSub}"`);
 
     // Card 5: Verified Cap Ranks
     const t100 = await page.locator('#card-seg-cnt-lrg').innerText();
@@ -156,8 +156,8 @@ async function runBrowserTests() {
     const rem = await page.locator('#card-seg-cnt-sml').innerText();
     const unr = await page.locator('#card-seg-cnt-mic').innerText();
     const sme = await page.locator('#card-seg-cnt-sme').innerText();
-    recordTest('Card 5: Segment counts verify 100, 150, 93, 3,758, 864',
-      t100.includes('100') && mid.includes('150') && rem.includes('93') && unr.includes('3,758') && sme.includes('864'),
+    recordTest('Card 5: Segment counts verify 100, 150, 93, 4,000, 1,046',
+      t100.includes('100') && mid.includes('150') && rem.includes('93') && unr.includes('4,000') && sme.includes('1,046'),
       `T100:${t100}, Mid:${mid}, Rem:${rem}, Unr:${unr}, SME:${sme}`
     );
 
@@ -248,7 +248,7 @@ async function runBrowserTests() {
     await prevBtn.click();
     await page.waitForTimeout(100);
     let page1Showing = await page.locator('#showing-status').innerText();
-    recordTest('Prev button returns to Page 1 (Showing 1-50)', page1Showing.includes('1') && page1Showing.includes('50 of 4,965'), page1Showing);
+    recordTest('Prev button returns to Page 1 (Showing 1-50)', page1Showing.includes('1') && page1Showing.includes('50 of 5,389'), page1Showing);
 
     // Jump to page 3
     const page3Btn = page.locator('button[data-page="3"]');

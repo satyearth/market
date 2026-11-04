@@ -200,7 +200,7 @@ assert(stats.advances === calcAdv, 'Market Breadth advances strictly match indiv
 assert(stats.declines === calcDec, 'Market Breadth declines strictly match individual quotes', `(${stats.declines} === ${calcDec})`);
 assert(stats.unchanged === calcUnc, 'Market Breadth unchanged strictly matches individual quotes', `(${stats.unchanged} === ${calcUnc})`);
 assert(stats.unpriced === calcUnpriced, 'Market Breadth unpriced strictly matches new listings', `(${stats.unpriced} === ${calcUnpriced})`);
-assert(calcAdv + calcDec + calcUnc + calcUnpriced === stocks.length, 'Advances + Declines + Unchanged + Unpriced strictly equals Eligible Universe (4,965)');
+assert(calcAdv + calcDec + calcUnc + calcUnpriced === stocks.length, 'Advances + Declines + Unchanged + Unpriced strictly equals Eligible Universe (5,389)');
 assert(stats.advances !== 2720, 'Advances are NOT old hardcoded value (2720)');
 
 // -----------------------------------------------------------------------------
@@ -277,15 +277,15 @@ const nseSme = smeStocks.filter(s => s.exchanges.includes('NSE'));
 const bseSme = smeStocks.filter(s => s.exchanges.includes('BSE'));
 const dualSme = smeStocks.filter(s => s.exchanges.includes('NSE') && s.exchanges.includes('BSE'));
 
-assert(smeStocks.length === 864, 'Total unique SME platform stocks is exactly 864', `(${smeStocks.length})`);
-assert(nseSme.length === 472, 'NSE SME stocks (Series SM & ST) is exactly 472', `(${nseSme.length})`);
-assert(bseSme.length === 392, 'BSE SME stocks (Groups M, MT & MS) is exactly 392', `(${bseSme.length})`);
+assert(smeStocks.length === 1046, 'Total unique SME platform stocks is exactly 1,046', `(${smeStocks.length})`);
+assert(nseSme.length === 553, 'NSE SME stocks (Series SM & ST) is exactly 553', `(${nseSme.length})`);
+assert(bseSme.length === 493, 'BSE SME stocks (Groups M, MT & MS) is exactly 493', `(${bseSme.length})`);
 assert(dualSme.length === 0, 'Dual-listed SME stocks is exactly 0 (per Indian regulatory exclusivity rule)', `(${dualSme.length})`);
-assert(nseSme.length + bseSme.length - dualSme.length === smeStocks.length, 'NSE SME + BSE SME - Dual SME equals total SME (472 + 392 - 0 = 864)');
+assert(nseSme.length + bseSme.length - dualSme.length === smeStocks.length, 'NSE SME + BSE SME - Dual SME equals total SME (553 + 493 - 0 = 1046)');
 
 const mainboardStocks = stocks.filter(s => s.segment === 'Mainboard');
-assert(mainboardStocks.length === 4101, 'Mainboard stocks count is exactly 4,101', `(${mainboardStocks.length})`);
-assert(mainboardStocks.length + smeStocks.length === stocks.length, 'Mainboard (4,101) + SME (864) strictly equals Total Universe (4,965)');
+assert(mainboardStocks.length === 4343, 'Mainboard stocks count is exactly 4,343', `(${mainboardStocks.length})`);
+assert(mainboardStocks.length + smeStocks.length === stocks.length, 'Mainboard (4,343) + SME (1,046) strictly equals Total Universe (5,389)');
 
 // -----------------------------------------------------------------------------
 // Test Group 11: Methodologically Sound Market-Cap Classification Labels
@@ -295,8 +295,8 @@ assert(stats.verifiedRankingSegments != null, 'verifiedRankingSegments object is
 assert(stats.verifiedRankingSegments.top100 === 100, 'Top 100 Verified Equities count is exactly 100', `(${stats.verifiedRankingSegments?.top100})`);
 assert(stats.verifiedRankingSegments.rank101_250 === 150, 'Rank 101–250 Verified Equities count is exactly 150', `(${stats.verifiedRankingSegments?.rank101_250})`);
 assert(stats.verifiedRankingSegments.remainingVerified === 93, 'Remaining Verified Equities count is exactly 93 (Rank 251–343)', `(${stats.verifiedRankingSegments?.remainingVerified})`);
-assert(stats.verifiedRankingSegments.smePlatform === 864, 'SME Platform Securities count is exactly 864', `(${stats.verifiedRankingSegments?.smePlatform})`);
-assert(stats.verifiedRankingSegments.unranked === 3758, 'Unranked Equities count is exactly 3,758 (4965 - 343 - 864)', `(${stats.verifiedRankingSegments?.unranked})`);
+assert(stats.verifiedRankingSegments.smePlatform === 1046, 'SME Platform Securities count is exactly 1,046', `(${stats.verifiedRankingSegments?.smePlatform})`);
+assert(stats.verifiedRankingSegments.unranked === 4000, 'Unranked Equities count is exactly 4,000 (5389 - 343 - 1046)', `(${stats.verifiedRankingSegments?.unranked})`);
 
 // Mathematical reconciliation of segments
 const segSum = stats.verifiedRankingSegments.top100 + 
@@ -304,7 +304,7 @@ const segSum = stats.verifiedRankingSegments.top100 +
                stats.verifiedRankingSegments.remainingVerified + 
                stats.verifiedRankingSegments.smePlatform + 
                stats.verifiedRankingSegments.unranked;
-assert(segSum === stocks.length, 'Top100 + Rank101-250 + Remaining + SME + Unranked equals 4,965', `(${segSum} === 4965)`);
+assert(segSum === stocks.length, 'Top100 + Rank101-250 + Remaining + SME + Unranked equals 5,389', `(${segSum} === 5389)`);
 
 // Verify disclaimer presence
 assert(typeof stats.rankingDisclaimer === 'string' && stats.rankingDisclaimer.includes('NOT an official SEBI'), 'Clear disclaimer that ranking is NOT an official SEBI classification is present');
@@ -322,16 +322,16 @@ assert(remStocks.length === 93, 'Exactly 93 stocks carry verified_rank_tier "Rem
 // -----------------------------------------------------------------------------
 console.log('\n[Test Group 12: Exchange Coverage Reconciliation]');
 assert(stats.exchangeCoverage != null, 'exchangeCoverage object is defined in MARKET_STATS');
-assert(stats.exchangeCoverage.totalUnique === 4965, 'Total unique coverage is 4,965', `(${stats.exchangeCoverage?.totalUnique})`);
-assert(stats.exchangeCoverage.nseListed === 3085, 'NSE listed count is 3,085 (2430 dual + 655 nseOnly)', `(${stats.exchangeCoverage?.nseListed})`);
-assert(stats.exchangeCoverage.bseListed === 4310, 'BSE listed count is 4,310 (2430 dual + 1880 bseOnly)', `(${stats.exchangeCoverage?.bseListed})`);
-assert(stats.exchangeCoverage.dualListed === 2430, 'Dual-listed count is 2,430', `(${stats.exchangeCoverage?.dualListed})`);
-assert(stats.exchangeCoverage.nseOnly === 655, 'NSE-only count is 655', `(${stats.exchangeCoverage?.nseOnly})`);
-assert(stats.exchangeCoverage.bseOnly === 1880, 'BSE-only count is 1,880', `(${stats.exchangeCoverage?.bseOnly})`);
+assert(stats.exchangeCoverage.totalUnique === 5389, 'Total unique coverage is 5,389', `(${stats.exchangeCoverage?.totalUnique})`);
+assert(stats.exchangeCoverage.nseListed === 3191, 'NSE listed count is 3,191 (2504 dual + 687 nseOnly)', `(${stats.exchangeCoverage?.nseListed})`);
+assert(stats.exchangeCoverage.bseListed === 4702, 'BSE listed count is 4,702 (2504 dual + 2198 bseOnly)', `(${stats.exchangeCoverage?.bseListed})`);
+assert(stats.exchangeCoverage.dualListed === 2504, 'Dual-listed count is 2,504', `(${stats.exchangeCoverage?.dualListed})`);
+assert(stats.exchangeCoverage.nseOnly === 687, 'NSE-only count is 687', `(${stats.exchangeCoverage?.nseOnly})`);
+assert(stats.exchangeCoverage.bseOnly === 2198, 'BSE-only count is 2,198', `(${stats.exchangeCoverage?.bseOnly})`);
 
 // Inclusion-exclusion principle check: NSE + BSE - Dual === Unique
 const calcUnique = stats.exchangeCoverage.nseListed + stats.exchangeCoverage.bseListed - stats.exchangeCoverage.dualListed;
-assert(calcUnique === 4965, 'Inclusion-Exclusion check: 3085 + 4310 - 2430 = 4,965', `(${calcUnique})`);
+assert(calcUnique === 5389, 'Inclusion-Exclusion check: 3191 + 4702 - 2504 = 5,389', `(${calcUnique})`);
 
 // -----------------------------------------------------------------------------
 // Test Group 13: Automation Status Labeling

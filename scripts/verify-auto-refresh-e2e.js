@@ -108,7 +108,7 @@ async function runE2EVerification() {
   const statusRes = await httpJsonRequest(APP_PORT, '/api/market/status');
   check('GET /api/market/status returns HTTP 200', statusRes.status === 200);
   check('Status reports correct tradingDate (2026-11-04)', statusRes.body.tradingDate === '2026-11-04');
-  check('Status reports correct stockCount (4,965)', statusRes.body.stockCount === 4965);
+  check('Status reports correct stockCount (5,389)', statusRes.body.stockCount === 5389);
   check('Status reports isSyncing is false initially', statusRes.body.isSyncing === false);
   check('Status reports dataset is currently up-to-date', statusRes.body.isUpToDate === true);
 
@@ -179,7 +179,7 @@ async function runE2EVerification() {
     // Verify stocks-data.js regenerated with fresh timestamp
     const regeneratedContent = fs.readFileSync(STOCKS_DATA_PATH, 'utf-8');
     check('stocks-data.js contains updated 2026-11-04 tradingDate', regeneratedContent.includes('"tradingDate": "2026-11-04"'));
-    check('stocks-data.js preserves all 4,965 stocks', regeneratedContent.includes('"stockCount": 4965'));
+    check('stocks-data.js preserves all 5,389 stocks', regeneratedContent.includes('"stockCount": 5389'));
 
     // Verify frontend hot-reload in browser
     await page.evaluate(async () => {

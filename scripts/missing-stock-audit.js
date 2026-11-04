@@ -75,7 +75,7 @@ async function runMissingStockAudit() {
   const STOCKS_DATA = eval('(' + matchData[1] + ')');
   const MARKET_STATS = eval('(' + matchStats[1] + ')');
 
-  assert(Array.isArray(STOCKS_DATA) && STOCKS_DATA.length === 4965, 'Dataset loaded with exactly 4,965 unique equities', `Count: ${STOCKS_DATA.length}`);
+  assert(Array.isArray(STOCKS_DATA) && STOCKS_DATA.length === 5389, 'Dataset loaded with exactly 5,389 unique equities', `Count: ${STOCKS_DATA.length}`);
 
   const stockByIsin = new Map();
   const stockBySymbol = new Map();
@@ -121,32 +121,45 @@ async function runMissingStockAudit() {
     );
   }
 
-  // 2. Reconcile against Official NSE & BSE Security Masters
+  // 2. Reconcile against Official NSE & BSE Security Masters across 6-Session Window
   console.log('\n[2/5] Reconciling against official NSE & BSE Bhavcopy Security Masters...');
-  const nseRaw = parseCsv(fs.readFileSync(NSE_BHAVCOPY_PATH, 'utf-8'));
-  const bseRaw = parseCsv(fs.readFileSync(BSE_BHAVCOPY_PATH, 'utf-8'));
-
+  const HISTORICAL_DATES = [
+    '2026-10-28',
+    '2026-10-29',
+    '2026-10-30',
+    '2026-11-02',
+    '2026-11-03',
+    '2026-11-04'
+  ];
   const NSE_EQUITY_SERIES = new Set(['EQ', 'BE', 'BZ', 'BL', 'SM', 'ST']);
   const BSE_EQUITY_GROUPS = new Set(['A', 'B', 'T', 'X', 'XT', 'Z', 'P', 'M', 'MT', 'MS']);
 
   const nseEligibleIsins = new Set();
   const bseEligibleIsins = new Set();
 
-  nseRaw.forEach(r => {
-    const isin = r.ISIN ? r.ISIN.trim() : '';
-    const series = r.SctySrs ? r.SctySrs.trim() : '';
-    if (NSE_EQUITY_SERIES.has(series) && (isin.startsWith('INE') || isin.startsWith('IN9'))) {
-      nseEligibleIsins.add(isin);
-    }
-  });
+  for (const dt of HISTORICAL_DATES) {
+    const dtCompact = dt.replace(/-/g, '');
+    const nFile = path.join(DOWNLOADS_DIR, `BhavCopy_NSE_CM_0_0_0_${dtCompact}_F_0000.csv`);
+    const bFile = path.join(DOWNLOADS_DIR, `BhavCopy_BSE_CM_0_0_0_${dtCompact}_F_0000.CSV`);
+    const nRaw = fs.existsSync(nFile) ? parseCsv(fs.readFileSync(nFile, 'utf-8')) : [];
+    const bRaw = fs.existsSync(bFile) ? parseCsv(fs.readFileSync(bFile, 'utf-8')) : [];
 
-  bseRaw.forEach(r => {
-    const isin = r.ISIN ? r.ISIN.trim() : '';
-    const group = r.SctySrs ? r.SctySrs.trim() : '';
-    if (BSE_EQUITY_GROUPS.has(group) && (isin.startsWith('INE') || isin.startsWith('IN9'))) {
-      bseEligibleIsins.add(isin);
-    }
-  });
+    nRaw.forEach(r => {
+      const isin = r.ISIN ? r.ISIN.trim() : '';
+      const series = r.SctySrs ? r.SctySrs.trim() : '';
+      if (NSE_EQUITY_SERIES.has(series) && (isin.startsWith('INE') || isin.startsWith('IN9'))) {
+        nseEligibleIsins.add(isin);
+      }
+    });
+
+    bRaw.forEach(r => {
+      const isin = r.ISIN ? r.ISIN.trim() : '';
+      const group = r.SctySrs ? r.SctySrs.trim() : '';
+      if (BSE_EQUITY_GROUPS.has(group) && (isin.startsWith('INE') || isin.startsWith('IN9'))) {
+        bseEligibleIsins.add(isin);
+      }
+    });
+  }
 
   const masterAllIsins = new Set([...nseEligibleIsins, ...bseEligibleIsins]);
 
@@ -172,8 +185,8 @@ async function runMissingStockAudit() {
   assert(extraInDataset.length === 0, 'Zero phantom/invented securities outside exchange masters', `Extra: ${extraInDataset.length}`);
   assert(STOCKS_DATA.length === masterAllIsins.size, 'Total dataset count strictly equals exchange master count', `${STOCKS_DATA.length} === ${masterAllIsins.size}`);
 
-  // 3. Specifically Verify RELIANCE and JIOFIN
-  console.log('\n[3/5] Specifically verifying RELIANCE vs. JIOFIN...');
+  // 3. Specifically Verify RELIANCE, JIOFIN, and JPL (Jio Platforms Limited)
+  console.log('\n[3/5] Specifically verifying RELIANCE, JIOFIN, and JPL...');
 
   // 3.1 RELIANCE
   const relBySym = stockBySymbol.get('RELIANCE');
@@ -197,7 +210,19 @@ async function runMissingStockAudit() {
   assert(jioBySym.segment === 'Mainboard' && jioBySym.series === 'EQ', 'JIOFIN is Mainboard Series EQ');
   assert(jioBySym.isin !== relBySym.isin, 'JIOFIN has distinct ISIN from RELIANCE (INE758E01017 !== INE002A01018)');
 
-  // 3.3 Search for Reliance and Jio
+  // 3.3 JPL (Jio Platforms Limited)
+  const jplBySym = stockBySymbol.get('JPL');
+  const jplByIsin = stockByIsin.get('INE0BJO01010');
+  assert(jplBySym != null && jplBySym === jplByIsin, 'JPL identified by both Symbol and ISIN (INE0BJO01010)');
+  assert(jplBySym.company_name === 'Jio Platforms Limited', 'JPL legal registered name is "Jio Platforms Limited"');
+  assert(jplBySym.nse_symbol === 'JPL', 'JPL NSE symbol verified: JPL');
+  assert(jplBySym.bse_scrip_code === '545004', 'JPL BSE scrip code verified: 545004');
+  assert(jplBySym.exchanges.includes('NSE') && jplBySym.exchanges.includes('BSE'), 'JPL is dual-listed on NSE and BSE');
+  assert(jplBySym.segment === 'Mainboard' && jplBySym.series === 'EQ', 'JPL is Mainboard Series EQ');
+  assert(jplBySym.current_price === 1421.7, 'JPL closing price on 2026-11-04 is ₹1,421.70');
+  assert(jplBySym.isin !== relBySym.isin && jplBySym.isin !== jioBySym.isin, 'JPL has distinct ISIN from RELIANCE and JIOFIN');
+
+  // Search for Reliance, Jio, and JPL
   const relSearchResults = searchDataset('Reliance Industries');
   assert(relSearchResults.some(s => s.symbol === 'RELIANCE'), 'Search by legal name "Reliance Industries" returns RELIANCE');
 
@@ -209,6 +234,15 @@ async function runMissingStockAudit() {
 
   const jioIsinResults = searchDataset('INE758E01017');
   assert(jioIsinResults.some(s => s.symbol === 'JIOFIN'), 'Search by ISIN INE758E01017 returns JIOFIN');
+
+  const jplNameSearch = searchDataset('Jio Platforms');
+  assert(jplNameSearch.some(s => s.symbol === 'JPL'), 'Search by legal name "Jio Platforms" returns JPL');
+  const jplSymSearch = searchDataset('JPL');
+  assert(jplSymSearch.some(s => s.symbol === 'JPL'), 'Search by symbol "JPL" returns JPL');
+  const jplCodeSearch = searchDataset('545004');
+  assert(jplCodeSearch.some(s => s.symbol === 'JPL'), 'Search by BSE scrip code 545004 returns JPL');
+  const jplIsinSearch = searchDataset('INE0BJO01010');
+  assert(jplIsinSearch.some(s => s.symbol === 'JPL'), 'Search by ISIN INE0BJO01010 returns JPL');
 
   // 4. Multi-Company Entity Resolution Battery
   console.log('\n[4/5] Running 40-Company Entity Resolution & Missing-Stock Battery...');
@@ -233,6 +267,8 @@ async function runMissingStockAudit() {
     // Category 2: Listed Equities with Distinct Brand vs. Legal Name
     { query: 'JIOFIN', expectedType: 'LISTED', expectedSymbol: 'JIOFIN', legalName: 'Jio Financial Services Limited', isin: 'INE758E01017' },
     { query: 'Jio Financial', expectedType: 'LISTED', expectedSymbol: 'JIOFIN', legalName: 'Jio Financial Services Limited', isin: 'INE758E01017' },
+    { query: 'JPL', expectedType: 'LISTED', expectedSymbol: 'JPL', legalName: 'Jio Platforms Limited', isin: 'INE0BJO01010' },
+    { query: 'Jio Platforms', expectedType: 'LISTED', expectedSymbol: 'JPL', legalName: 'Jio Platforms Limited', isin: 'INE0BJO01010' },
     { query: 'd-mart', expectedType: 'LISTED', expectedSymbol: 'DMART', legalName: 'Avenue Supermarts Limited', isin: 'INE192R01011' },
     { query: 'Avenue Supermarts', expectedType: 'LISTED', expectedSymbol: 'DMART', legalName: 'Avenue Supermarts Limited', isin: 'INE192R01011' },
     { query: 'paytm', expectedType: 'LISTED', expectedSymbol: 'PAYTM', legalName: 'One 97 Communications Ltd', isin: 'INE982J01020' },

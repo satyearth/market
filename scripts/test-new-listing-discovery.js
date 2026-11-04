@@ -175,7 +175,7 @@ async function runTests() {
   });
 
   assert(duplicateCount === 0, 'Zero duplicate ISINs across entire production stock universe', `Duplicates: ${duplicateCount}`);
-  assert(isinSet.size === 4965, 'Total unique ISINs equals 4,965', `Size: ${isinSet.size}`);
+  assert(isinSet.size === 5389, 'Total unique ISINs equals 5,389', `Size: ${isinSet.size}`);
 
   // Test ticker symbol collision disambiguation
   const gstlStocks = STOCKS_DATA.filter(s => s.symbol === 'GSTL');
