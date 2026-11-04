@@ -3,4 +3,6 @@ Thumbs.db
 node_modules/
 .vscode/*
 !.vscode/settings.json
+downloads/*.json
+*.log
 

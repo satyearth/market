@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "nse-bhavcopy": {
+      "serverUrl": "https://mcp.nseindia.in/bhavcopy/cm/mcp"
+    },
+    "nse-cm-market": {
+      "serverUrl": "https://mcp.nseindia.in/cmmkt/mcp"
+    },
+    "bse-mcp": {
+      "serverUrl": "http://localhost:3000/mcp",
+      "timeoutSeconds": 120
+    }
+  }
+}
+

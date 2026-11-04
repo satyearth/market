@@ -67,12 +67,15 @@
 
   // Generate 7-day sparkline SVG
   function createSparklineSvg(stock) {
+    if (stock.return_1w == null) {
+      return `<span class="text-ink-muted text-[11px] flex justify-center">—</span>`;
+    }
     const isPositive = (stock.return_1w || 0) >= 0;
     const color = isPositive ? '#1a8a4a' : '#c42b2b';
     const fill = isPositive ? 'rgba(26, 138, 74, 0.1)' : 'rgba(196, 43, 43, 0.1)';
 
     // Deterministic wavy path based on 1w and 1m returns
-    const seed = Math.abs(stock.current_price % 10) + 1;
+    const seed = Math.abs((stock.current_price || 0) % 10) + 1;
     const delta = isPositive ? 1 : -1;
     const y0 = 16 - delta * 4;
     const y1 = 12 + (seed % 4) - 2;
@@ -109,8 +112,10 @@
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(s =>
-        s.symbol.toLowerCase().includes(q) ||
-        s.company_name.toLowerCase().includes(q) ||
+        (s.symbol && s.symbol.toLowerCase().includes(q)) ||
+        (s.company_name && s.company_name.toLowerCase().includes(q)) ||
+        (s.bse_scrip_code && s.bse_scrip_code.toLowerCase().includes(q)) ||
+        (s.isin && s.isin.toLowerCase().includes(q)) ||
         (s.sector && s.sector.toLowerCase().includes(q)) ||
         (s.industry && s.industry.toLowerCase().includes(q))
       );
@@ -152,7 +157,7 @@
     // Update Showing text
     if (showingText) {
       showingText.innerHTML = total > 0
-        ? `Showing <span class="text-ink-ink font-medium">${startIdx + 1}–${endIdx}</span> of <span class="text-ink-ink font-medium">${total}</span> stocks <span class="text-ink-faint">(of 4,070 total)</span>`
+        ? `Showing <span class="text-ink-ink font-medium">${startIdx + 1}–${endIdx}</span> of <span class="text-ink-ink font-medium">${total.toLocaleString('en-IN')}</span> stocks <span class="text-ink-faint">(of ${STOCKS_DATA.length.toLocaleString('en-IN')} total)</span>`
         : `No matching stocks found`;
     }
 
@@ -180,11 +185,11 @@
       const volWidth = Math.min(100, Math.max(10, ((s.volume_ratio || 1) / 2.5) * 100));
 
       const logoSrc = s.logo_url || `./assets/logos/${s.symbol}.png`;
-      const fallbackInitials = s.symbol.slice(0, 2);
+      const fallbackInitials = (s.symbol || 'ST').slice(0, 2);
 
       return `
         <tr data-row-symbol="${s.symbol}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
-          <td class="text-right text-[13px] text-ink-muted px-2 tabular-nums" style="padding-top:${padY};padding-bottom:${padY}">${s.rank}</td>
+          <td class="text-right text-[13px] text-ink-muted px-2 tabular-nums" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
           
           <!-- Stock Info -->
           <td class="px-2" style="padding-top:${padY};padding-bottom:${padY}">
@@ -202,7 +207,7 @@
 
           <!-- Sector -->
           <td class="hidden lg:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            <span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${s.sector || 'GENERAL'}">${s.sector || 'GENERAL'}</span>
+            <span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${s.sector || 'GENERAL'}">${s.sector || '—'}</span>
           </td>
 
           <!-- Price -->
@@ -273,8 +278,37 @@
       <button ${currentPage === 1 ? 'disabled' : ''} class="page-prev-btn w-[28px] h-[28px] flex items-center justify-center rounded-full text-[12px] cursor-pointer transition-colors text-ink-muted hover:text-ink-sienna hover:bg-ink-well ${currentPage === 1 ? 'opacity-30 pointer-events-none' : ''}">‹</button>
     `;
 
-    for (let p = 1; p <= totalPages; p++) {
-      if (p === currentPage) {
+    // Windowed pagination
+    const getPageList = () => {
+      if (totalPages <= 7) {
+        return Array.from({ length: totalPages }, (_, i) => i + 1);
+      }
+      const list = [1];
+      let left = Math.max(2, currentPage - 1);
+      let right = Math.min(totalPages - 1, currentPage + 1);
+
+      if (currentPage <= 3) {
+        left = 2;
+        right = 4;
+      } else if (currentPage >= totalPages - 2) {
+        left = totalPages - 3;
+        right = totalPages - 1;
+      }
+
+      if (left > 2) list.push('...');
+      for (let p = left; p <= right; p++) {
+        list.push(p);
+      }
+      if (right < totalPages - 1) list.push('...');
+      list.push(totalPages);
+      return list;
+    };
+
+    const pages = getPageList();
+    pages.forEach(p => {
+      if (p === '...') {
+        html += `<span class="w-[24px] h-[28px] flex items-center justify-center text-[11px] text-ink-muted select-none">…</span>`;
+      } else if (p === currentPage) {
         html += `
           <button class="w-[28px] h-[28px] flex items-center justify-center rounded-full text-[12px] cursor-pointer transition-colors text-ink-ink border border-ink-sienna bg-ink-sienna-muted font-bold">${p}</button>
         `;
@@ -283,7 +317,7 @@
           <button class="page-num-btn w-[28px] h-[28px] flex items-center justify-center rounded-full text-[12px] cursor-pointer transition-colors text-ink-muted hover:text-ink-sienna hover:bg-ink-well" data-page="${p}">${p}</button>
         `;
       }
-    }
+    });
 
     html += `
       <button ${currentPage === totalPages ? 'disabled' : ''} class="page-next-btn w-[28px] h-[28px] flex items-center justify-center rounded-full text-[12px] cursor-pointer transition-colors text-ink-muted hover:text-ink-sienna hover:bg-ink-well ${currentPage === totalPages ? 'opacity-30 pointer-events-none' : ''}">›</button>
@@ -365,7 +399,7 @@
           </div>
         </div>
         <div class="text-right">
-          <div class="font-mono text-lg font-bold text-ink-ink">₹${stock.current_price.toLocaleString('en-IN')}</div>
+          <div class="font-mono text-lg font-bold text-ink-ink">${formatCurrency(stock.current_price)}</div>
           <div class="font-mono text-xs font-semibold ${chgClass}">${chgArrow} ${formatPercent(stock.change_percent)}</div>
         </div>
       </div>
@@ -378,15 +412,15 @@
         </div>
         <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
           <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">P/E Ratio</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.pe_ratio || '24.5'}</span>
+          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.pe_ratio != null ? stock.pe_ratio : '—'}</span>
         </div>
         <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
           <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">ROCE</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.roce ? stock.roce + '%' : '14.8%'}</span>
+          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.roce != null ? stock.roce + '%' : '—'}</span>
         </div>
         <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
           <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">D/E Ratio</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.debt_to_equity || '0.35'}</span>
+          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.debt_to_equity != null ? stock.debt_to_equity : '—'}</span>
         </div>
       </div>
 
@@ -397,9 +431,9 @@
           <span>machli bazarr AI Intelligence</span>
         </div>
         <p class="text-xs text-ink-text leading-relaxed">
-          <strong>${stock.symbol}</strong> is currently positioned at Rank #${stock.rank} in the Indian universe. With a 1-month return of 
+          <strong>${stock.symbol}</strong> is currently positioned at Rank #${stock.rank != null ? stock.rank : '—'} in the Indian equity universe. With a 1-month return of 
           <span class="${getReturnColorClass(stock.return_1m)} font-mono font-bold">${formatPercent(stock.return_1m)}</span> and volume activity tracking at 
-          <span class="font-mono font-bold text-ink-ink">${stock.volume_ratio || 1.0}x</span> average, the company displays strong institutional support in the ${stock.sector || 'market'} segment.
+          <span class="font-mono font-bold text-ink-ink">${stock.volume_ratio != null ? stock.volume_ratio + 'x' : '—'}</span> average, the company is listed in the ${stock.sector || stock.segment || 'equity'} segment (${stock.exchanges ? stock.exchanges.join(', ') : 'NSE/BSE'}).
         </p>
       </div>
 
