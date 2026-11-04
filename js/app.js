@@ -459,6 +459,9 @@
         let valA = a[sortColumn];
         let valB = b[sortColumn];
 
+        if (valA == null && valB == null) {
+          return (a.rank || 999999) - (b.rank || 999999) || (a.symbol || '').localeCompare(b.symbol || '');
+        }
         if (valA == null) return 1;
         if (valB == null) return -1;
 

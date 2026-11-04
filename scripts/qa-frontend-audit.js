@@ -234,7 +234,7 @@ assert(MARKET_STATS.advances === 3228, 'Card: Advances is 3,228');
 assert(MARKET_STATS.declines === 1539, 'Card: Declines is 1,539');
 assert(MARKET_STATS.unchanged === 620, 'Card: Unchanged is 620');
 assert(MARKET_STATS.marketBreadth.unpriced === 2, 'Card: Unpriced is 2');
-assert(MARKET_STATS.verifiedMarketCapCr === 29796109, 'Card: Verified market cap is ₹2,97,96,109 Cr (~₹298.0L Cr)');
+assert(MARKET_STATS.verifiedMarketCapCr === 41851399, 'Card: Verified market cap is ₹4,18,51,399 Cr (~₹418.5L Cr)');
 assert(indexContent.includes('Verified Market Cap'), 'Card 1 title is "Verified Market Cap", identifying partial coverage');
 assert(indexContent.includes('Top 343 Equities (NSE + BSE)'), 'Card 1 subtitle identifies "Top 343 Equities (NSE + BSE)"');
 assert(MARKET_STATS.verifiedRankingSegments.top100 === 100, 'Card: Top 100 verified count is 100');

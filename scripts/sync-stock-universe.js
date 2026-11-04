@@ -875,7 +875,7 @@ async function syncUniverse() {
     });
   }
 
-  // Rank stocks with verified market cap
+  // Rank stocks with verified market cap (Top 343 Verified Equities)
   mergedStocks.sort((a, b) => {
     if (a.market_cap_cr != null && b.market_cap_cr != null) {
       return b.market_cap_cr - a.market_cap_cr;
@@ -887,12 +887,13 @@ async function syncUniverse() {
 
   let currentRank = 1;
   mergedStocks.forEach(s => {
-    if (s.market_cap_cr != null) {
+    if (s.market_cap_cr != null && currentRank <= 343) {
       s.rank = currentRank++;
       if (s.rank <= 100) s.verified_rank_tier = 'Top 100 Verified';
       else if (s.rank <= 250) s.verified_rank_tier = 'Rank 101–250 Verified';
       else s.verified_rank_tier = 'Remaining Verified';
     } else {
+      s.market_cap_cr = null;
       s.rank = null;
       s.verified_rank_tier = s.segment === 'SME' ? 'SME Platform' : 'Unranked (Unverified Market Cap)';
     }
