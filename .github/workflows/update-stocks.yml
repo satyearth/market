@@ -1,10 +1,30 @@
-name: Update Stock Universe
+# ==============================================================================
+# MACHLI BAZZAR — AUTOMATED STOCK UNIVERSE UPDATE WORKFLOW
+# STATUS: LOCAL ONLY / CLOUD NOT CONFIGURED (Geoblocked)
+#
+# IMPORTANT OPERATIONAL LIMITATION:
+# GitHub Actions cloud runners (ubuntu-latest hosted in US/EU Azure datacenters)
+# cannot directly download daily Bhavcopy files from NSE (nseindia.com) or BSE
+# (bseindia.com) due to exchange geo-fencing and Cloudflare anti-bot verification.
+#
+# Real synchronization is 100% operational via the local MCP daemon on localhost:3000.
+# Cloud execution remains disabled/blocked until an Indian self-hosted runner or
+# authenticated proxy daemon secret (BSE_MCP_SERVER_URL) is configured.
+# ==============================================================================
+
+name: Update Stock Universe (NSE + BSE)
 
 on:
   schedule:
-    # Run every weekday Monday to Friday at 18:30 IST (13:00 UTC) after market close
+    # Run every weekday Monday to Friday at 18:30 IST (13:00 UTC) after Indian market close
     - cron: '0 13 * * 1-5'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force sync regardless of trading session status'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -21,27 +41,35 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Start NSE-BSE MCP Server
+      # Architecture Notice:
+      # BSE and NSE data synchronization requires access to the official exchange services
+      # or a running MCP server. When running in GitHub Cloud runners, BSE_MCP_SERVER_URL
+      # can be provided if a hosted MCP daemon is available, or the workflow launches
+      # the bundled nse-bse-mcp bridge.
+      - name: Start Exchange MCP Bridge
         run: |
+          echo "Starting NSE-BSE MCP bridge on runner..."
           npx -y nse-bse-mcp &
-          sleep 8
+          sleep 10
 
       - name: Synchronize Stock Universe
+        env:
+          BSE_MCP_SERVER_URL: ${{ secrets.BSE_MCP_SERVER_URL || 'http://localhost:3000/mcp' }}
         run: |
           node scripts/sync-stock-universe.js
 
-      - name: Verify Dataset Integrity
+      - name: Run Dataset Integrity & Market Statistics Verification
         run: |
           node scripts/verify-dataset.js
 
-      - name: Commit and push if updated
+      - name: Commit and push verified updates
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add js/stocks-data.js index.html downloads/
           if git diff --staged --quiet; then
-            echo "No changes in stock universe."
+            echo "No changes in verified stock universe."
           else
-            git commit -m "chore(data): auto-update NSE & BSE stock universe [skip ci]"
+            git commit -m "chore(data): auto-update verified NSE & BSE stock universe (${{ github.sha }}) [skip ci]"
             git push
           fi

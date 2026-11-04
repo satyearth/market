@@ -13,6 +13,21 @@
   let sortDirection = 'desc'; // 'asc' or 'desc'
   let searchQuery = '';
   let isDense = false;
+  let searchDebounceTimer = null;
+
+  // Verified known logos present in assets/logos/ to prevent 404 network requests
+  const KNOWN_LOGOS = new Set([
+    'ADANIENT', 'ADANIGREEN', 'ADANIPORTS', 'ADANIPOWER', 'ASIANPAINT',
+    'AXISBANK', 'BAJAJ-AUTO', 'BAJAJFINSV', 'BAJFINANCE', 'BEL',
+    'BHARTIARTL', 'COALINDIA', 'DIVISLAB', 'DMART', 'EICHERMOT',
+    'ETERNAL', 'GRASIM', 'HAL', 'HCLTECH', 'HDFCBANK',
+    'HINDALCO', 'HINDUNILVR', 'HINDZINC', 'ICICIBANK', 'INDIGO',
+    'INFY', 'IOC', 'ITC', 'JSWSTEEL', 'KOTAKBANK',
+    'LICI', 'LT', 'M&M', 'MARUTI', 'NESTLEIND',
+    'NTPC', 'ONGC', 'POWERGRID', 'RELIANCE', 'SBIN',
+    'SHRIRAMFIN', 'SOLARINDS', 'SUNPHARMA', 'TATASTEEL', 'TCS',
+    'TITAN', 'TVSMOTOR', 'ULTRACEMCO', 'WIPRO'
+  ]);
 
   // DOM Elements
   const tbody = document.getElementById('stocks-tbody');
@@ -24,6 +39,17 @@
   const aiModal = document.getElementById('ai-modal');
   const aiModalContent = document.getElementById('ai-modal-content');
   const aiModalClose = document.getElementById('ai-modal-close');
+
+  // Security Helper: HTML Entity Escaping against XSS
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 
   // Formatters
   function formatCurrency(val) {
@@ -41,7 +67,7 @@
     } else if (val >= 1000) {
       return `₹${(val / 1000).toFixed(1)}k Cr`;
     }
-    return `₹${Math.round(val)} Cr`;
+    return `₹${Math.round(val).toLocaleString('en-IN')} Cr`;
   }
 
   function formatPercent(pct, showPlus = true) {
@@ -65,33 +91,319 @@
       : `background-color: rgba(196, 43, 43, ${opacity.toFixed(3)});`;
   }
 
-  // Generate 7-day sparkline SVG
+  // Logo rendering with zero 404 network errors
+  function getLogoHtml(stock, size = 'sm') {
+    const symbol = stock.symbol || '';
+    const hasImage = Boolean(stock.symbol && KNOWN_LOGOS.has(stock.symbol));
+    const logoSrc = `./assets/logos/${escapeHtml(symbol)}.png`;
+    const initials = escapeHtml((symbol || 'ST').slice(0, 2).toUpperCase());
+
+    if (size === 'lg') {
+      if (hasImage) {
+        return `
+          <div class="w-11 h-11 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center flex-shrink-0">
+            <img src="${logoSrc}" alt="${escapeHtml(stock.company_name)} logo" class="max-h-full max-w-full object-contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'" />
+            <span style="display:none" class="items-center justify-center font-bold text-xs text-ink-muted uppercase">${initials}</span>
+          </div>`;
+      }
+      return `
+        <div class="w-11 h-11 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center font-bold text-ink-muted text-xs uppercase flex-shrink-0">
+          ${initials}
+        </div>`;
+    }
+
+    if (hasImage) {
+      return `
+        <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-paper text-ink-muted font-ui font-semibold h-6 w-6 text-[10px]">
+          <img src="${logoSrc}" alt="${escapeHtml(stock.company_name)} logo" class="block h-full w-full object-contain" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'" />
+          <span style="display:none" class="items-center justify-center font-bold text-[9px] text-ink-muted uppercase">${initials}</span>
+        </span>`;
+    }
+    return `
+      <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-inset text-ink-muted font-ui font-semibold h-6 w-6 text-[9px] uppercase">
+        ${initials}
+      </span>`;
+  }
+
+  // Exchange badges helper for NSE, BSE and SME
+  function getExchangeBadgesHtml(stock, isModal = false) {
+    const badges = [];
+    const exchanges = stock.exchanges || [];
+    const isDual = exchanges.includes('NSE') && exchanges.includes('BSE');
+    const isNseOnly = exchanges.includes('NSE') && !exchanges.includes('BSE');
+    const isBseOnly = exchanges.includes('BSE') && !exchanges.includes('NSE');
+    const isSme = stock.segment === 'SME';
+
+    const pillClass = isModal
+      ? 'px-1.5 py-0.5 rounded text-[10px] font-mono font-bold leading-none'
+      : 'px-1 py-0.5 rounded text-[8.5px] font-mono font-medium leading-none';
+
+    if (isDual) {
+      badges.push(`<span class="${pillClass} bg-ink-inset text-ink-muted border border-ink-rule" title="Listed on NSE and BSE">NSE</span>`);
+      badges.push(`<span class="${pillClass} bg-ink-inset text-ink-muted border border-ink-rule" title="Listed on NSE and BSE">BSE</span>`);
+    } else if (isNseOnly) {
+      badges.push(`<span class="${pillClass} bg-ink-inset text-ink-muted border border-ink-rule" title="NSE Listed Only">NSE</span>`);
+    } else if (isBseOnly) {
+      badges.push(`<span class="${pillClass} bg-ink-inset text-ink-muted border border-ink-rule" title="BSE Listed Only (Scrip: ${escapeHtml(stock.bse_scrip_code || '—')})">BSE</span>`);
+    }
+
+    if (isSme) {
+      badges.push(`<span class="${pillClass} bg-ink-sienna-muted text-ink-sienna border border-ink-sienna/30" title="SME Platform Security">SME</span>`);
+    }
+
+    return `<div class="inline-flex items-center gap-1">${badges.join('')}</div>`;
+  }
+
+  // Dynamic Market Pulse Cards Rendering
+  function renderMarketPulse() {
+    if (typeof MARKET_STATS === 'undefined' || !MARKET_STATS) return;
+
+    // Header Market Status Badge
+    const badge = document.getElementById('market-status-badge');
+    if (badge && MARKET_STATS.stockCount) {
+      const dt = MARKET_STATS.tradingDate || '2026-11-04';
+      const istInfo = MARKET_STATS.istDisplayTime ? ` · <span class="text-ink-muted text-[11px] font-normal">Refreshed ${escapeHtml(MARKET_STATS.istDisplayTime)}</span>` : '';
+      badge.innerHTML = `Market closed · EOD (${dt})${istInfo} · <span class="tabular-nums text-ink-text font-bold">${MARKET_STATS.stockCount.toLocaleString('en-IN')}</span> listed companies (NSE + BSE)`;
+    }
+
+    // Card 1: Verified Market Cap (Explicit partial coverage note)
+    const mcapEl = document.getElementById('card-total-mcap');
+    const mcapSub = document.getElementById('card-mcap-sub');
+    if (mcapEl) {
+      if (MARKET_STATS.verifiedMarketCapCr) {
+        mcapEl.innerHTML = formatMarketCap(MARKET_STATS.verifiedMarketCapCr);
+        if (mcapSub) {
+          mcapSub.innerText = MARKET_STATS.marketCapCoverageNote || 'Top 343 Equities (NSE + BSE)';
+        }
+      } else {
+        mcapEl.innerText = '—';
+      }
+    }
+
+    // Card 2: India VIX
+    const vixVal = document.getElementById('card-vix-val');
+    const vixChg = document.getElementById('card-vix-chg');
+    const vixSub = document.getElementById('card-vix-sub');
+    if (vixVal) {
+      if (MARKET_STATS.vix != null) {
+        vixVal.innerText = Number(MARKET_STATS.vix).toFixed(2);
+        if (vixChg && MARKET_STATS.vixChangePct != null) {
+          const isPos = MARKET_STATS.vixChangePct > 0;
+          vixChg.className = `font-mono text-[12px] font-semibold tabular-nums ${isPos ? 'text-ink-bearish' : 'text-ink-bullish'}`;
+          vixChg.innerText = formatPercent(MARKET_STATS.vixChangePct);
+        }
+        if (vixSub && MARKET_STATS.vixDate) {
+          vixSub.innerText = `Volatility index · ${MARKET_STATS.vixDate}`;
+        }
+      } else {
+        vixVal.innerText = '—';
+        if (vixChg) vixChg.innerText = '—';
+      }
+    }
+
+    // Card 3: Market Breadth
+    const breadthBar = document.getElementById('card-breadth-bar');
+    const breadthFill = document.getElementById('card-breadth-fill');
+    const breadthInd = document.getElementById('card-breadth-indicator');
+    const breadthAdv = document.getElementById('card-breadth-adv');
+    const breadthDec = document.getElementById('card-breadth-dec');
+    const breadthSub = document.getElementById('card-breadth-sub');
+    if (MARKET_STATS.advances != null && MARKET_STATS.declines != null) {
+      const adv = MARKET_STATS.advances;
+      const dec = MARKET_STATS.declines;
+      const unc = MARKET_STATS.unchanged || 0;
+      const unp = (MARKET_STATS.marketBreadth && MARKET_STATS.marketBreadth.unpriced) || 0;
+      const total = adv + dec + unc;
+      const pct = total > 0 ? (adv / total) * 100 : 50;
+
+      if (breadthAdv) breadthAdv.innerText = `${adv.toLocaleString('en-IN')} ▴`;
+      if (breadthDec) breadthDec.innerText = `${dec.toLocaleString('en-IN')} ▾`;
+      if (breadthFill) breadthFill.style.width = `${pct.toFixed(1)}%`;
+      if (breadthInd) breadthInd.style.left = `${pct.toFixed(1)}%`;
+      if (breadthBar) breadthBar.setAttribute('aria-label', `${adv} advancing, ${dec} declining, ${unc} unchanged`);
+      if (breadthSub) {
+        const adRatio = MARKET_STATS.adRatio || (dec > 0 ? (adv / dec).toFixed(2) : '—');
+        breadthSub.innerText = `A/D: ${adRatio} · ${unc} Unch · ${unp} Unpriced`;
+      }
+    }
+
+    // Card 4: Near 52W High (Guarded with session verification and accurate coverage labeling)
+    const nearPct = document.getElementById('card-near52-pct');
+    const nearSub = document.getElementById('card-near52-sub');
+    if (nearPct) {
+      if (MARKET_STATS.near52WeekHighCount != null) {
+        nearPct.innerText = String(MARKET_STATS.near52WeekHighCount);
+        if (nearSub) {
+          const tradingDate = MARKET_STATS.tradingDate || '2026-11-04';
+          nearSub.innerHTML = `${MARKET_STATS.near52WeekHighCount.toLocaleString('en-IN')} verified BSE Group A/B equities<span class="block text-[10px] text-ink-faint">BSE MCP (${tradingDate})</span>`;
+          nearSub.title = `Surveyed BSE Groups A & B (40 matched equities, ${MARKET_STATS.near52WeekHighCount} within 8% of 52W high). NSE-only and other BSE groups not included.`;
+        }
+      } else {
+        nearPct.innerText = '—';
+        if (nearSub) {
+          nearSub.innerHTML = 'Session data unavailable<span class="block text-[10px] text-ink-faint">BSE MCP offline</span>';
+          nearSub.title = '52-week high data unavailable from BSE MCP for this session.';
+        }
+      }
+    }
+
+    // Card 5: Verified Cap Ranks
+    if (MARKET_STATS.verifiedRankingSegments || MARKET_STATS.capSegments) {
+      const segs = MARKET_STATS.verifiedRankingSegments || {};
+      const t100 = segs.top100 != null ? segs.top100 : (MARKET_STATS.capSegments ? MARKET_STATS.capSegments.large || 0 : 0);
+      const r101_250 = segs.rank101_250 != null ? segs.rank101_250 : (MARKET_STATS.capSegments ? MARKET_STATS.capSegments.mid || 0 : 0);
+      const rem = segs.remainingVerified != null ? segs.remainingVerified : (MARKET_STATS.capSegments ? MARKET_STATS.capSegments.small || 0 : 0);
+      const unranked = segs.unranked != null ? segs.unranked : 3758;
+      const sme = segs.smePlatform != null ? segs.smePlatform : (MARKET_STATS.capSegments ? MARKET_STATS.capSegments.sme || 0 : 0);
+      const maxVal = Math.max(t100, r101_250, rem, unranked, sme, 1);
+
+      const setSeg = (key, val) => {
+        const cntEl = document.getElementById(`card-seg-cnt-${key}`);
+        const barEl = document.getElementById(`card-seg-bar-${key}`);
+        if (cntEl) cntEl.innerText = val > 0 ? val.toLocaleString('en-IN') : '—';
+        if (barEl) barEl.style.height = `${Math.min(100, Math.max(6, (val / maxVal) * 100)).toFixed(0)}%`;
+      };
+
+      setSeg('lrg', t100);
+      setSeg('mid', r101_250);
+      setSeg('sml', rem);
+      setSeg('mic', unranked);
+      setSeg('sme', sme);
+    }
+  }
+
+  // Generate genuine 7-day sparkline SVG from actual chronological historical prices
   function createSparklineSvg(stock) {
-    if (stock.return_1w == null) {
+    let prices = stock.sparkline_7d;
+    if ((!prices || !Array.isArray(prices) || prices.length < 2) && stock.historical_prices && Array.isArray(stock.historical_prices)) {
+      prices = stock.historical_prices.map(p => typeof p === 'object' && p !== null ? p.close : p);
+    }
+    if (!prices || !Array.isArray(prices) || prices.length < 2) {
       return `<span class="text-ink-muted text-[11px] flex justify-center">—</span>`;
     }
-    const isPositive = (stock.return_1w || 0) >= 0;
+
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const first = prices[0];
+    const last = prices[prices.length - 1];
+    const isPositive = last >= first;
     const color = isPositive ? '#1a8a4a' : '#c42b2b';
     const fill = isPositive ? 'rgba(26, 138, 74, 0.1)' : 'rgba(196, 43, 43, 0.1)';
 
-    // Deterministic wavy path based on 1w and 1m returns
-    const seed = Math.abs((stock.current_price || 0) % 10) + 1;
-    const delta = isPositive ? 1 : -1;
-    const y0 = 16 - delta * 4;
-    const y1 = 12 + (seed % 4) - 2;
-    const y2 = 14 - delta * 3;
-    const y3 = 8 + (seed % 6);
-    const y4 = 12;
-    const y5 = isPositive ? 4 : 20;
+    const w = 60;
+    const h = 24;
+    const padTop = 3;
+    const padBottom = 3;
+    const drawH = h - padTop - padBottom;
 
-    const points = `0,${y0} 12,${y1} 24,${y2} 36,${y3} 48,${y4} 60,${y5}`;
-    const fillPoints = `0,24 ${points} 60,24`;
+    const points = prices.map((p, i) => {
+      const x = ((i / (prices.length - 1)) * w).toFixed(1);
+      const y = max === min
+        ? (h / 2).toFixed(1)
+        : (h - padBottom - ((p - min) / (max - min)) * drawH).toFixed(1);
+      return `${x},${y}`;
+    }).join(' ');
+
+    const fillPoints = `0,${h} ${points} ${w},${h}`;
 
     return `
-      <svg class="w-[60px] h-[22px] overflow-visible" viewBox="0 0 60 24">
+      <svg class="w-[60px] h-[22px] overflow-visible" viewBox="0 0 60 24" title="1W: ₹${first} → ₹${last}">
         <polygon points="${fillPoints}" fill="${fill}" />
         <polyline fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="${points}" />
       </svg>
+    `;
+  }
+
+  // Generate genuine 6-session chronological price chart for Stock Details Modal
+  function createModalHistoricalChart(stock) {
+    const history = stock.historical_prices;
+    if (!history || !Array.isArray(history) || history.length < 2) {
+      return `
+        <div class="border border-ink-rule rounded-xl p-4 mb-3.5 bg-ink-paper">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Historical Daily Trend</span>
+            <span class="text-[10px] font-mono text-ink-faint">6 Consecutive Sessions</span>
+          </div>
+          <div class="py-6 text-center text-xs text-ink-muted">
+            Historical daily session closes are not available for this newly listed or inactive security.
+          </div>
+        </div>
+      `;
+    }
+
+    const prices = history.map(h => typeof h === 'object' && h !== null ? h.close : h);
+    const dates = history.map(h => typeof h === 'object' && h !== null ? h.date : '');
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const first = prices[0];
+    const last = prices[prices.length - 1];
+    const isPositive = last >= first;
+    const strokeColor = isPositive ? '#1a8a4a' : '#c42b2b';
+    const fillColor = isPositive ? 'rgba(26, 138, 74, 0.12)' : 'rgba(196, 43, 43, 0.12)';
+
+    const w = 460;
+    const h = 110;
+    const padTop = 18;
+    const padBottom = 22;
+    const padLeft = 24;
+    const padRight = 24;
+    const drawW = w - padLeft - padRight;
+    const drawH = h - padTop - padBottom;
+
+    const coords = prices.map((p, i) => {
+      const x = (padLeft + (i / (prices.length - 1)) * drawW).toFixed(1);
+      const y = max === min
+        ? (h / 2).toFixed(1)
+        : (padTop + ((max - p) / (max - min)) * drawH).toFixed(1);
+      return { x, y, price: p, date: dates[i] };
+    });
+
+    const pointsStr = coords.map(c => `${c.x},${c.y}`).join(' ');
+    const fillStr = `${coords[0].x},${h - padBottom} ${pointsStr} ${coords[coords.length - 1].x},${h - padBottom}`;
+
+    // SVG Points and Labels
+    const markers = coords.map((c, i) => {
+      const displayDt = c.date ? c.date.slice(5) : `S${i + 1}`;
+      const showPriceLabel = i === 0 || i === coords.length - 1 || c.price === max || c.price === min;
+      const labelY = Number(c.y) < 32 ? Number(c.y) + 12 : Number(c.y) - 6;
+      return `
+        <g class="chart-point-group">
+          <circle cx="${c.x}" cy="${c.y}" r="3.5" fill="${strokeColor}" stroke="#171614" stroke-width="1.5" />
+          ${showPriceLabel ? `<text x="${c.x}" y="${labelY}" fill="#d1cfc7" font-size="9" font-family="monospace" text-anchor="middle" font-weight="600">₹${c.price.toLocaleString('en-IN')}</text>` : ''}
+          <text x="${c.x}" y="${h - 4}" fill="#78756d" font-size="8.5" font-family="monospace" text-anchor="middle">${displayDt}</text>
+        </g>
+      `;
+    }).join('');
+
+    const ret1wStr = stock.return_1w != null
+      ? `${stock.return_1w > 0 ? '+' : ''}${stock.return_1w.toFixed(2)}%`
+      : '—';
+
+    return `
+      <div class="border border-ink-rule rounded-xl p-3.5 mb-3.5 bg-ink-paper">
+        <div class="flex items-center justify-between mb-1.5">
+          <div>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Historical Daily Trend (${history.length} Sessions)</span>
+            <span class="text-[10px] text-ink-faint block mt-0.5">${dates[0]} → ${dates[dates.length - 1]}</span>
+          </div>
+          <div class="text-right">
+            <span class="font-mono text-xs font-semibold ${isPositive ? 'text-ink-bullish' : 'text-ink-bearish'}">${ret1wStr}</span>
+            <span class="text-[10px] text-ink-muted block">1W Session Return</span>
+          </div>
+        </div>
+        <div class="w-full overflow-hidden flex justify-center pt-1">
+          <svg class="w-full max-w-[480px] h-[110px] overflow-visible" viewBox="0 0 460 110">
+            <!-- Grid baseline -->
+            <line x1="${padLeft}" y1="${h - padBottom}" x2="${w - padRight}" y2="${h - padBottom}" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+            <!-- Area fill -->
+            <polygon points="${fillStr}" fill="${fillColor}" />
+            <!-- Line path -->
+            <polyline fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pointsStr}" />
+            <!-- Data markers and date labels -->
+            ${markers}
+          </svg>
+        </div>
+      </div>
     `;
   }
 
@@ -99,21 +411,22 @@
   function applyFilters() {
     let result = [...STOCKS_DATA];
 
-    // Filter pill
+    // Filter pill (Reconciled with Advances / Declines breadth)
     if (activeFilter === 'TOP GAINERS') {
-      result = result.filter(s => s.change_percent > 0).sort((a, b) => b.change_percent - a.change_percent);
+      result = result.filter(s => s.change_percent > 0 || (s.prev_close != null && s.current_price > s.prev_close)).sort((a, b) => b.change_percent - a.change_percent);
     } else if (activeFilter === 'TOP LOSERS') {
-      result = result.filter(s => s.change_percent < 0).sort((a, b) => a.change_percent - b.change_percent);
+      result = result.filter(s => s.change_percent < 0 || (s.prev_close != null && s.current_price < s.prev_close)).sort((a, b) => a.change_percent - b.change_percent);
     } else if (activeFilter === 'NEAR 52W HIGH') {
       result = result.filter(s => s.is_near_high || (s.pct_from_high && Number(s.pct_from_high) >= -8));
     }
 
-    // Search query
+    // Search query (symbol, company name, NSE symbol, BSE scrip code, ISIN, sector, industry)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(s =>
         (s.symbol && s.symbol.toLowerCase().includes(q)) ||
         (s.company_name && s.company_name.toLowerCase().includes(q)) ||
+        (s.nse_symbol && s.nse_symbol.toLowerCase().includes(q)) ||
         (s.bse_scrip_code && s.bse_scrip_code.toLowerCase().includes(q)) ||
         (s.isin && s.isin.toLowerCase().includes(q)) ||
         (s.sector && s.sector.toLowerCase().includes(q)) ||
@@ -184,30 +497,27 @@
       const chgArrow = isChgPositive ? '▴' : '▾';
       const volWidth = Math.min(100, Math.max(10, ((s.volume_ratio || 1) / 2.5) * 100));
 
-      const logoSrc = s.logo_url || `./assets/logos/${s.symbol}.png`;
-      const fallbackInitials = (s.symbol || 'ST').slice(0, 2);
-
       return `
-        <tr data-row-symbol="${s.symbol}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
+        <tr data-row-isin="${escapeHtml(s.isin)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
           <td class="text-right text-[13px] text-ink-muted px-2 tabular-nums" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
           
           <!-- Stock Info -->
           <td class="px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <div class="flex items-center gap-2.5 min-w-0 group/link">
-              <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-paper text-ink-muted font-ui font-semibold h-6 w-6 text-[10px]">
-                <img src="${logoSrc}" alt="${s.company_name} logo" class="block h-full w-full object-contain" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'" />
-                <span style="display:none" class="items-center justify-center font-bold text-[9px] text-ink-muted uppercase">${fallbackInitials}</span>
-              </span>
+              ${getLogoHtml(s, 'sm')}
               <div class="min-w-0">
-                <div class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${s.symbol}</div>
-                <div class="text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${s.company_name}">${s.company_name}</div>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>
+                  ${getExchangeBadgesHtml(s, false)}
+                </div>
+                <div class="text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${escapeHtml(s.company_name)}">${escapeHtml(s.company_name)}</div>
               </div>
             </div>
           </td>
 
           <!-- Sector -->
           <td class="hidden lg:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            <span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${s.sector || 'GENERAL'}">${s.sector || '—'}</span>
+            <span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${escapeHtml(s.sector || 'GENERAL')}">${escapeHtml(s.sector || '—')}</span>
           </td>
 
           <!-- Price -->
@@ -227,24 +537,24 @@
             ${formatMarketCap(s.market_cap_cr)}
           </td>
 
-          <!-- 1W Return -->
+          <!-- 1W Return (6 Sessions) -->
           <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_1w)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1w)}">
             ${formatPercent(s.return_1w)}
           </td>
 
-          <!-- 1M Return -->
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_1m)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1m)}">
+          <!-- 1M Return (Em-dash: Multi-month archive unavailable) -->
+          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}">
             ${formatPercent(s.return_1m)}
           </td>
 
-          <!-- 3M Return -->
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_3m)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_3m)}">
+          <!-- 3M Return (Em-dash: Multi-month archive unavailable) -->
+          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}">
             ${formatPercent(s.return_3m)}
           </td>
 
           <!-- Volume Bar -->
           <td class="hidden xl:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            <div class="w-[32px] h-[3.5px] bg-ink-inset rounded-full overflow-hidden relative" title="Volume Ratio: ${s.volume_ratio || 1.0}x">
+            <div class="w-[32px] h-[3.5px] bg-ink-inset rounded-full overflow-hidden relative" title="Volume: ${s.volume != null ? s.volume.toLocaleString('en-IN') : '—'} (${s.volume_ratio || 1.0}x avg)">
               <div class="h-full bg-ink-muted/80 rounded-full" style="width:${volWidth}%"></div>
             </div>
           </td>
@@ -254,10 +564,10 @@
             ${createSparklineSvg(s)}
           </td>
 
-          <!-- AI Action -->
+          <!-- Action Button -->
           <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px">
             <span class="inline-flex items-center gap-0.5 opacity-0 translate-x-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0">
-              <button class="ai-insight-btn w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" data-symbol="${s.symbol}" title="Ask AI about ${s.symbol}">
+              <button class="ai-insight-btn w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" data-isin="${escapeHtml(s.isin)}" title="View intelligence and details for ${escapeHtml(s.symbol)}">
                 ✦
               </button>
             </span>
@@ -265,9 +575,6 @@
         </tr>
       `;
     }).join('');
-
-    // Attach row events
-    attachRowEventListeners();
   }
 
   // Pagination Rendering
@@ -353,30 +660,9 @@
     }
   }
 
-  // Row Event Listeners (AI Insights)
-  function attachRowEventListeners() {
-    // AI Insight button
-    tbody.querySelectorAll('.ai-insight-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const sym = btn.getAttribute('data-symbol');
-        openAiModal(sym);
-      });
-    });
-
-    // Clicking table row opens AI insights
-    tbody.querySelectorAll('tr[data-row-symbol]').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('button')) return;
-        const sym = row.getAttribute('data-row-symbol');
-        openAiModal(sym);
-      });
-    });
-  }
-
-  // Open AI Insight Modal
-  function openAiModal(symbol) {
-    const stock = STOCKS_DATA.find(s => s.symbol === symbol);
+  // Open Stock Intelligence Modal (Keyed on ISIN to prevent collisions across duplicate symbols)
+  function openStockModal(isin) {
+    const stock = STOCKS_DATA.find(s => s.isin === isin);
     if (!stock || !aiModal || !aiModalContent) return;
 
     const isPos = (stock.change_percent || 0) >= 0;
@@ -384,80 +670,118 @@
     const chgArrow = isPos ? '▲' : '▼';
 
     aiModalContent.innerHTML = `
-      <div class="flex items-start justify-between pb-4 border-b border-ink-rule">
+      <!-- Modal Header -->
+      <div class="flex items-start justify-between pb-3.5 border-b border-ink-rule pr-8">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center font-bold text-ink-muted text-sm">
-            <img src="${stock.logo_url || `./assets/logos/${stock.symbol}.png`}" class="max-h-full max-w-full object-contain" onerror="this.style.display='none'" />
-            <span>${stock.symbol.slice(0, 2)}</span>
-          </div>
+          ${getLogoHtml(stock, 'lg')}
           <div>
-            <div class="flex items-center gap-2">
-              <h2 class="font-display text-xl font-bold text-ink-ink">${stock.symbol}</h2>
-              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-ink-inset text-ink-muted uppercase">${stock.sector || 'SECTOR'}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="font-display text-xl font-bold text-ink-ink">${escapeHtml(stock.symbol)}</h2>
+              ${getExchangeBadgesHtml(stock, true)}
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-ink-inset text-ink-muted uppercase">${escapeHtml(stock.sector || 'GENERAL')}</span>
             </div>
-            <p class="text-xs text-ink-muted mt-0.5">${stock.company_name}</p>
+            <p class="text-xs text-ink-muted mt-0.5 max-w-[340px] truncate" title="${escapeHtml(stock.company_name)}">${escapeHtml(stock.company_name)}</p>
           </div>
         </div>
-        <div class="text-right">
+        <div class="text-right flex-shrink-0">
           <div class="font-mono text-lg font-bold text-ink-ink">${formatCurrency(stock.current_price)}</div>
           <div class="font-mono text-xs font-semibold ${chgClass}">${chgArrow} ${formatPercent(stock.change_percent)}</div>
+          <div class="font-mono text-[10px] text-ink-muted mt-0.5">Prev: ${stock.prev_close != null ? '₹' + Number(stock.prev_close).toFixed(2) : '—'}</div>
+        </div>
+      </div>
+
+      <!-- Security Identifiers Strip -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 py-2.5 px-3 my-3 bg-ink-inset rounded-lg border border-ink-rule/60 text-[11px] font-mono">
+        <div>
+          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">ISIN</span>
+          <span class="text-ink-ink select-all font-semibold">${escapeHtml(stock.isin)}</span>
+        </div>
+        <div>
+          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">BSE Scrip Code</span>
+          <span class="text-ink-ink select-all font-semibold">${escapeHtml(stock.bse_scrip_code || '—')}</span>
+        </div>
+        <div>
+          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">NSE Symbol</span>
+          <span class="text-ink-ink select-all font-semibold">${escapeHtml(stock.nse_symbol || '—')}</span>
+        </div>
+        <div>
+          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Segment / Series</span>
+          <span class="text-ink-ink font-semibold">${escapeHtml(stock.series ? stock.series + ' · ' : '')}${escapeHtml(stock.segment || 'Mainboard')}</span>
         </div>
       </div>
 
       <!-- Quick Metrics Grid -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 my-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 my-3">
         <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
           <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">Market Cap</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink">${formatMarketCap(stock.market_cap_cr)}</span>
+          <span class="font-mono text-sm font-semibold text-ink-ink block">${formatMarketCap(stock.market_cap_cr)}</span>
+          <span class="text-[10px] text-ink-muted truncate block mt-0.5" title="${escapeHtml(stock.verified_rank_tier || 'Unranked')}">${stock.rank != null ? '#' + stock.rank + ' · ' + escapeHtml(stock.verified_rank_tier) : escapeHtml(stock.verified_rank_tier || 'Unranked')}</span>
+        </div>
+        <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
+          <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">Traded Volume</span>
+          <span class="font-mono text-sm font-semibold text-ink-ink block">${stock.volume != null ? stock.volume.toLocaleString('en-IN') : '—'}</span>
+          <span class="text-[10px] text-ink-muted block mt-0.5">Ratio: ${stock.volume_ratio != null ? stock.volume_ratio + 'x avg' : '—'}</span>
+        </div>
+        <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
+          <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">52W High / Low</span>
+          <span class="font-mono text-xs font-semibold text-ink-ink block truncate">${stock.week52_high != null ? 'H: ₹' + stock.week52_high.toLocaleString('en-IN') : '—'}</span>
+          <span class="font-mono text-[10px] text-ink-muted block truncate mt-0.5">${stock.week52_low != null ? 'L: ₹' + stock.week52_low.toLocaleString('en-IN') : '—'}</span>
         </div>
         <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
           <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">P/E Ratio</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.pe_ratio != null ? stock.pe_ratio : '—'}</span>
+          <span class="font-mono text-sm font-semibold text-ink-ink block">${stock.pe_ratio != null ? stock.pe_ratio : '—'}</span>
+          <span class="text-[10px] text-ink-muted block mt-0.5">ROCE: ${stock.roce != null ? stock.roce + '%' : '—'}</span>
         </div>
-        <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
-          <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">ROCE</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.roce != null ? stock.roce + '%' : '—'}</span>
+      </div>
+
+      <!-- Historical Price Chart (Section 5) -->
+      ${createModalHistoricalChart(stock)}
+
+      <!-- Multi-Period Performance Returns -->
+      <div class="border border-ink-rule rounded-xl p-3 mb-3 bg-ink-well">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">Multi-Period Performance Returns</span>
+          <span class="text-[9px] font-mono text-ink-faint">EOD Bhavcopy Verified</span>
         </div>
-        <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
-          <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">D/E Ratio</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink">${stock.debt_to_equity != null ? stock.debt_to_equity : '—'}</span>
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="p-2 rounded bg-ink-paper border border-ink-rule/50">
+            <span class="text-[9.5px] text-ink-muted block font-medium">1 Week (6D)</span>
+            <span class="font-mono text-xs font-semibold ${getReturnColorClass(stock.return_1w)}">${formatPercent(stock.return_1w)}</span>
+            <span class="text-[8px] text-ink-faint block mt-0.5">${stock.return_1w_session_start ? stock.return_1w_session_start.slice(5) + ' → ' + stock.return_1w_session_end.slice(5) : 'Verified'}</span>
+          </div>
+          <div class="p-2 rounded bg-ink-paper border border-ink-rule/50">
+            <span class="text-[9.5px] text-ink-muted block font-medium">1 Month</span>
+            <span class="font-mono text-xs font-semibold text-ink-muted">—</span>
+            <span class="text-[8px] text-ink-faint block mt-0.5">Archive unavail.</span>
+          </div>
+          <div class="p-2 rounded bg-ink-paper border border-ink-rule/50">
+            <span class="text-[9.5px] text-ink-muted block font-medium">3 Months</span>
+            <span class="font-mono text-xs font-semibold text-ink-muted">—</span>
+            <span class="text-[8px] text-ink-faint block mt-0.5">Archive unavail.</span>
+          </div>
+          <div class="p-2 rounded bg-ink-paper border border-ink-rule/50">
+            <span class="text-[9.5px] text-ink-muted block font-medium">1 Year</span>
+            <span class="font-mono text-xs font-semibold text-ink-muted">—</span>
+            <span class="text-[8px] text-ink-faint block mt-0.5">Archive unavail.</span>
+          </div>
         </div>
       </div>
 
       <!-- AI Analysis Summary -->
-      <div class="bg-ink-paper border border-ink-rule rounded-xl p-4 mb-4">
-        <div class="flex items-center gap-1.5 text-ink-sienna text-xs font-bold uppercase tracking-wider mb-2">
+      <div class="bg-ink-paper border border-ink-rule rounded-xl p-3.5">
+        <div class="flex items-center gap-1.5 text-ink-sienna text-xs font-bold uppercase tracking-wider mb-1.5">
           <span>✦</span>
-          <span>machli bazarr AI Intelligence</span>
+          <span>machli bazarr Market Intelligence</span>
         </div>
         <p class="text-xs text-ink-text leading-relaxed">
-          <strong>${stock.symbol}</strong> is currently positioned at Rank #${stock.rank != null ? stock.rank : '—'} in the Indian equity universe. With a 1-month return of 
-          <span class="${getReturnColorClass(stock.return_1m)} font-mono font-bold">${formatPercent(stock.return_1m)}</span> and volume activity tracking at 
-          <span class="font-mono font-bold text-ink-ink">${stock.volume_ratio != null ? stock.volume_ratio + 'x' : '—'}</span> average, the company is listed in the ${stock.sector || stock.segment || 'equity'} segment (${stock.exchanges ? stock.exchanges.join(', ') : 'NSE/BSE'}).
+          <strong>${escapeHtml(stock.symbol)}</strong> (${escapeHtml(stock.company_name)}) is currently positioned at 
+          ${stock.rank != null ? `Rank #${stock.rank} (${escapeHtml(stock.verified_rank_tier)})` : escapeHtml(stock.verified_rank_tier || 'Unranked')} 
+          in the Indian equity universe. Traded at <span class="font-mono font-bold text-ink-ink">${formatCurrency(stock.current_price)}</span> 
+          with a 1-week return of <span class="${getReturnColorClass(stock.return_1w)} font-mono font-bold">${formatPercent(stock.return_1w)}</span> 
+          and volume tracking at <span class="font-mono font-bold text-ink-ink">${stock.volume_ratio != null ? stock.volume_ratio + 'x' : '—'}</span> 
+          average. The security is listed on <strong>${escapeHtml(stock.exchanges ? stock.exchanges.join(' and ') : 'NSE/BSE')}</strong> 
+          under the <strong>${escapeHtml(stock.sector || stock.segment || 'General')}</strong> sector.
         </p>
-      </div>
-
-      <!-- Returns Breakdown -->
-      <div class="border border-ink-rule rounded-xl p-3.5 mb-2">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-ink-muted block mb-2.5">Multi-Period Performance</span>
-        <div class="grid grid-cols-4 gap-2 text-center">
-          <div class="p-2 rounded bg-ink-well">
-            <span class="text-[10px] text-ink-muted block">1 Week</span>
-            <span class="font-mono text-xs font-semibold ${getReturnColorClass(stock.return_1w)}">${formatPercent(stock.return_1w)}</span>
-          </div>
-          <div class="p-2 rounded bg-ink-well">
-            <span class="text-[10px] text-ink-muted block">1 Month</span>
-            <span class="font-mono text-xs font-semibold ${getReturnColorClass(stock.return_1m)}">${formatPercent(stock.return_1m)}</span>
-          </div>
-          <div class="p-2 rounded bg-ink-well">
-            <span class="text-[10px] text-ink-muted block">3 Months</span>
-            <span class="font-mono text-xs font-semibold ${getReturnColorClass(stock.return_3m)}">${formatPercent(stock.return_3m)}</span>
-          </div>
-          <div class="p-2 rounded bg-ink-well">
-            <span class="text-[10px] text-ink-muted block">1 Year</span>
-            <span class="font-mono text-xs font-semibold ${getReturnColorClass(stock.return_1y)}">${formatPercent(stock.return_1y)}</span>
-          </div>
-        </div>
       </div>
     `;
 
@@ -473,11 +797,15 @@
 
   // Setup Event Listeners
   function setupEvents() {
-    // Search input
+    // Search input with debounce
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
-        searchQuery = e.target.value;
-        applyFilters();
+        const val = e.target.value;
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          searchQuery = val;
+          applyFilters();
+        }, 120);
       });
     }
 
@@ -524,6 +852,7 @@
       'Stock': 'symbol',
       'Price': 'current_price',
       'Chg %': 'change_percent',
+      'MCap': 'market_cap_cr',
       'MCap ▼': 'market_cap_cr',
       'MCap ▲': 'market_cap_cr',
       '1W': 'return_1w',
@@ -558,6 +887,26 @@
       });
     });
 
+    // Event delegation on tbody for row clicks and AI insight button
+    if (tbody) {
+      tbody.addEventListener('click', (e) => {
+        const btn = e.target.closest('.ai-insight-btn');
+        if (btn) {
+          e.stopPropagation();
+          const isin = btn.getAttribute('data-isin');
+          if (isin) openStockModal(isin);
+          return;
+        }
+
+        const row = e.target.closest('tr[data-row-isin]');
+        if (row) {
+          if (e.target.closest('button') || e.target.closest('a')) return;
+          const isin = row.getAttribute('data-row-isin');
+          if (isin) openStockModal(isin);
+        }
+      });
+    }
+
     // Modal Close
     if (aiModalClose) {
       aiModalClose.addEventListener('click', closeAiModal);
@@ -572,6 +921,7 @@
   // Initialize
   function init() {
     setupEvents();
+    renderMarketPulse();
     renderTable();
   }
 

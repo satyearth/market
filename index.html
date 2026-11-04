@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>All Stocks | 4,950+ Indian Stocks Ranked by Market Cap | Machli Bazzar</title>
-  <meta name="description" content="Browse 4,950+ Indian stocks (NSE + BSE) ranked by market capitalisation. Current prices, multi-period returns, and sector filters.">
+  <title>NSE &amp; BSE Listed Equities | Machli Bazzar</title>
+  <meta name="description" content="Browse 4,965 Indian equities listed on NSE &amp; BSE. End-of-day closing prices, market breadth, and sector intelligence.">
   <meta name="application-name" content="Machli Bazzar">
   <meta name="author" content="Machli Bazzar">
   <meta name="theme-color" content="#171614">
 
   <!-- Open Graph -->
-  <meta property="og:title" content="All Stocks | 4,950+ Indian Stocks Ranked by Market Cap | Machli Bazzar">
-  <meta property="og:description" content="India's stock market intelligence: real-time screening, multi-period performance, and valuation metrics.">
+  <meta property="og:title" content="NSE &amp; BSE Listed Equities | Machli Bazzar">
+  <meta property="og:description" content="India's equity market intelligence: 4,965 listed companies across NSE &amp; BSE, EOD closing prices, and sector screening.">
   <meta property="og:site_name" content="Machli Bazzar">
   <meta property="og:type" content="website">
 
@@ -53,7 +53,7 @@
         <div class="pt-5 pb-2">
           <div class="mb-2 inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.05em] text-ink-muted">
             <span class="relative inline-block size-[7px] shrink-0 rounded-full bg-ink-faint" aria-hidden="true"></span>
-            <span>Market closed · end of day · <span class="tabular-nums text-ink-text font-bold">4,951</span> listed companies (NSE + BSE)</span>
+            <span id="market-status-badge">Market closed · <span class="tabular-nums text-ink-text font-bold">4,965</span> listed companies (NSE + BSE)</span>
           </div>
           <h1 class="font-display text-[clamp(26px,3vw,36px)] font-[750] leading-[1.06] tracking-[-0.025em] text-ink-ink">
             Every stock, <em class="not-italic text-ink-sienna">ranked</em>.
@@ -65,69 +65,70 @@
         <div class="mt-3">
           <div data-slot="pulse-card" class="pulse-card overflow-hidden rounded-xl border border-ink-rule bg-ink-card shadow-soft">
             <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.25fr_1fr_1fr_1fr_1.35fr]">
-              <!-- Card 1: Total Market Cap -->
+              <!-- Card 1: Verified Market Cap (Top 343 Equities) -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-r border-ink-rule xl:border-b-0">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Total Market Cap</span>
-                <span class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">₹463 L Cr</span>
-                <span class="text-[11.5px] text-ink-muted">NSE + BSE listed</span>
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Verified Market Cap</span>
+                <span id="card-total-mcap" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">—</span>
+                <span id="card-mcap-sub" class="text-[11.5px] text-ink-muted">Top 343 Equities (NSE + BSE)</span>
               </div>
 
               <!-- Card 2: India VIX -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-ink-rule xl:border-r xl:border-b-0">
                 <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">India VIX</span>
                 <span class="flex items-baseline gap-2">
-                  <span class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">15.27</span>
-                  <span class="font-mono text-[12px] font-semibold tabular-nums text-ink-bullish">-2.89%</span>
+                  <span id="card-vix-val" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">—</span>
+                  <span id="card-vix-chg" class="font-mono text-[12px] font-semibold tabular-nums text-ink-muted">—</span>
                 </span>
-                <span class="text-[11.5px] text-ink-muted">Volatility index</span>
+                <span id="card-vix-sub" class="text-[11.5px] text-ink-muted">Volatility index</span>
               </div>
 
               <!-- Card 3: Market Breadth -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-r border-ink-rule lg:border-r-0 xl:border-r xl:border-b-0">
                 <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Market Breadth</span>
-                <div class="relative h-3.5 overflow-hidden rounded-full bg-ink-bearish/10 mt-0.5" role="img" aria-label="2720 advancing, 884 declining">
-                  <div class="absolute inset-y-0 left-0 rounded-l-full bg-ink-bullish" style="width:75%;transition:width 1200ms var(--ease-pulse)"></div>
-                  <div class="absolute top-1/2 h-[22px] w-1 -translate-x-1/2 -translate-y-1/2 rounded-[3px] bg-ink-ink shadow-[0_0_0_3px_var(--ink-bg)]" style="left:75%;transition:left 1200ms var(--ease-pulse)"></div>
+                <div id="card-breadth-bar" class="relative h-3.5 overflow-hidden rounded-full bg-ink-bearish/10 mt-0.5" role="img" aria-label="Market Breadth">
+                  <div id="card-breadth-fill" class="absolute inset-y-0 left-0 rounded-l-full bg-ink-bullish" style="width:50%;transition:width 1200ms var(--ease-pulse)"></div>
+                  <div id="card-breadth-indicator" class="absolute top-1/2 h-[22px] w-1 -translate-x-1/2 -translate-y-1/2 rounded-[3px] bg-ink-ink shadow-[0_0_0_3px_var(--ink-bg)]" style="left:50%;transition:left 1200ms var(--ease-pulse)"></div>
                 </div>
                 <div class="flex items-center justify-between font-mono text-[12px] tabular-nums">
-                  <span class="text-ink-bullish">2,720 ▴</span>
-                  <span class="text-ink-bearish">884 ▾</span>
+                  <span id="card-breadth-adv" class="text-ink-bullish">— ▴</span>
+                  <span id="card-breadth-dec" class="text-ink-bearish">— ▾</span>
                 </div>
+                <span id="card-breadth-sub" class="text-[11px] text-ink-muted truncate">A/D: — · 196 Unch · 2 Unpriced</span>
               </div>
 
               <!-- Card 4: Near 52W High -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-ink-rule lg:border-b-0 lg:border-r xl:border-r">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Near 52W High</span>
-                <span class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">11<span class="text-[13px] text-ink-faint">%</span></span>
-                <span class="text-[11.5px] text-ink-muted">451 of 4,951 stocks</span>
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Surveyed BSE Groups A & B via BSE MCP. NSE-only and other BSE groups not included.">Near 52W High</span>
+                <span id="card-near52-pct" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">36</span>
+                <span id="card-near52-sub" class="text-[11.5px] text-ink-muted leading-tight">36 verified BSE Group A/B equities<span class="block text-[10px] text-ink-faint">BSE MCP (04-Nov-2026)</span></span>
               </div>
 
-              <!-- Card 5: By Cap Segment -->
+              <!-- Card 5: Verified Cap Ranks -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 col-span-2 lg:col-span-1">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">By Cap Segment</span>
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Internal ranking of 343 verified market caps. Not official SEBI classification.">Verified Cap Ranks</span>
                 <div class="mt-0.5 flex items-end gap-[3px] h-[26px]">
-                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="large: 357 stocks">
-                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:22%"></div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Top 100 Verified Equities">
+                    <div id="card-seg-bar-lrg" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
                   </div>
-                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="mid: 435 stocks">
-                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:26%"></div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Rank 101–250 Verified Equities">
+                    <div id="card-seg-bar-mid" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
                   </div>
-                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="small: 660 stocks">
-                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:40%"></div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Remaining Verified Equities (Rank 251–343)">
+                    <div id="card-seg-bar-sml" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
                   </div>
-                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="micro: 975 stocks">
-                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:59%"></div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Unranked / Unverified Equities (3,758 scrips)">
+                    <div id="card-seg-bar-mic" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
                   </div>
-                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="sme: 1,643 stocks">
-                    <div class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:100%"></div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="SME Platform Equities (864 scrips)">
+                    <div id="card-seg-bar-sme" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
                   </div>
                 </div>
                 <div class="flex gap-[3px]">
-                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">Lrg<span class="block tabular-nums">357</span></span>
-                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">Mid<span class="block tabular-nums">435</span></span>
-                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">Sml<span class="block tabular-nums">660</span></span>
-                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">Mic<span class="block tabular-nums">975</span></span>
-                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted">SME<span class="block tabular-nums">1,643</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted" title="Top 100 Verified">T100<span id="card-seg-cnt-lrg" class="block tabular-nums">—</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted" title="Rank 101–250 Verified">Mid<span id="card-seg-cnt-mid" class="block tabular-nums">—</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted" title="Remaining Verified">Rem<span id="card-seg-cnt-sml" class="block tabular-nums">—</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted" title="Unranked Equities">Unr<span id="card-seg-cnt-mic" class="block tabular-nums">—</span></span>
+                  <span class="flex-1 text-center font-mono text-[9px] tracking-[0.03em] text-ink-muted" title="SME Platform">SME<span id="card-seg-cnt-sme" class="block tabular-nums">—</span></span>
                 </div>
               </div>
             </div>
@@ -178,7 +179,7 @@
 
             <!-- Table View -->
             <div class="overflow-x-auto px-1.5">
-              <table class="w-full border-collapse" role="grid" aria-rowcount="4951">
+              <table class="w-full border-collapse" role="grid" aria-rowcount="4965">
                 <thead>
                   <tr>
                     <th data-sortable="true" data-col="#" class="text-right w-[40px] text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">#</th>
@@ -204,7 +205,7 @@
             <!-- Pagination Bar -->
             <div class="flex items-center justify-between px-[18px] py-3.5 border-t border-ink-rule">
               <div id="showing-status" class="text-[12px] text-ink-muted">
-                Showing 1–50 of 4,951 stocks <span class="text-ink-faint">(of 4,951 total)</span>
+                Showing 1–50 of 4,965 stocks <span class="text-ink-faint">(of 4,965 total)</span>
               </div>
               <div id="pagination-controls" class="flex gap-0.5">
                 <!-- Rendered by app.js -->
@@ -218,8 +219,8 @@
 
   <!-- AI Insight Modal / Drawer -->
   <div id="ai-modal" class="ai-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-ink-card border border-ink-rule rounded-2xl w-full max-w-xl p-6 relative shadow-2xl">
-      <button id="ai-modal-close" class="absolute top-4 right-4 text-ink-muted hover:text-ink-ink w-8 h-8 rounded-full bg-ink-well flex items-center justify-center transition-colors">
+    <div class="bg-ink-card border border-ink-rule rounded-2xl w-full max-w-xl p-6 relative shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar">
+      <button id="ai-modal-close" aria-label="Close stock details modal" class="absolute top-4 right-4 z-10 text-ink-muted hover:text-ink-ink w-8 h-8 rounded-full bg-ink-well flex items-center justify-center transition-colors">
         ✕
       </button>
       <div id="ai-modal-content">

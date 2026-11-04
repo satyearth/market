@@ -1,0 +1,16 @@
+{
+  "name": "machli-bazzar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node scripts/verify-dataset.js && node scripts/qa-frontend-audit.js && node scripts/browser-test.js",
+    "test:verify": "node scripts/verify-dataset.js",
+    "test:qa": "node scripts/qa-frontend-audit.js",
+    "test:browser": "node scripts/browser-test.js",
+    "sync": "node scripts/sync-stock-universe.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  }
+}
