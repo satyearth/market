@@ -4,9 +4,18 @@
   'use strict';
 
   // State
-  let currentStocks = [...STOCKS_DATA];
-  let filteredStocks = [...STOCKS_DATA];
-  let currentPage = 1;
+  let loadedStocks = [];
+  let loadedIsins = new Set();
+  let marketStats = null;
+  let nextOffset = 0;
+  let resultTotal = 0;
+  let hasMore = true;
+  let loading = false;
+  let loadError = false;
+  let queryVersion = 0;
+  let activeController = null;
+  let observer = null;
+  let sortOverride = false;
   const pageSize = 50;
   let activeFilter = 'ALL';
   let sortColumn = 'market_cap_cr';
@@ -53,7 +62,9 @@
   const tbody = document.getElementById('stocks-tbody');
   const searchInput = document.querySelector('input[data-stocks-search="true"]');
   const showingText = document.getElementById('showing-status');
-  const paginationControls = document.getElementById('pagination-controls');
+  const infiniteStatus = document.getElementById('infinite-status');
+  const infiniteSentinel = document.getElementById('infinite-sentinel');
+  const retryButton = document.getElementById('infinite-retry');
   const filterButtons = document.querySelectorAll('.filter-pill-btn');
   const densityToggleBtn = document.getElementById('density-toggle-btn');
 
@@ -179,24 +190,24 @@
 
   // Dynamic Market Pulse Cards Rendering
   function renderMarketPulse() {
-    if (typeof MARKET_STATS === 'undefined' || !MARKET_STATS) return;
+    if (!marketStats) return;
 
     // Header Market Status Badge
     const badge = document.getElementById('market-status-badge');
-    if (badge && MARKET_STATS.stockCount) {
-      const dt = MARKET_STATS.tradingDate || '2026-11-04';
-      const istInfo = MARKET_STATS.istDisplayTime ? ` · <span class="text-ink-muted text-[11px] font-normal">Refreshed ${escapeHtml(MARKET_STATS.istDisplayTime)}</span>` : '';
-      badge.innerHTML = `Market closed · EOD (${dt})${istInfo} · <span class="tabular-nums text-ink-text font-bold">${MARKET_STATS.stockCount.toLocaleString('en-IN')}</span> listed companies (NSE + BSE)`;
+    if (badge && marketStats.stockCount) {
+      const dt = marketStats.tradingDate || '2026-11-04';
+      const istInfo = marketStats.istDisplayTime ? ` · <span class="text-ink-muted text-[11px] font-normal">Refreshed ${escapeHtml(marketStats.istDisplayTime)}</span>` : '';
+      badge.innerHTML = `Market closed · EOD (${dt})${istInfo} · <span class="tabular-nums text-ink-text font-bold">${marketStats.stockCount.toLocaleString('en-IN')}</span> listed companies (NSE + BSE)`;
     }
 
     // Card 1: Verified Market Cap (Explicit partial coverage note)
     const mcapEl = document.getElementById('card-total-mcap');
     const mcapSub = document.getElementById('card-mcap-sub');
     if (mcapEl) {
-      if (MARKET_STATS.verifiedMarketCapCr) {
-        mcapEl.innerHTML = formatMarketCap(MARKET_STATS.verifiedMarketCapCr);
+      if (marketStats.verifiedMarketCapCr) {
+        mcapEl.innerHTML = formatMarketCap(marketStats.verifiedMarketCapCr);
         if (mcapSub) {
-          mcapSub.innerText = MARKET_STATS.marketCapCoverageNote || 'Top 343 Equities (NSE + BSE)';
+          mcapSub.innerText = marketStats.marketCapCoverageNote || 'Top 343 Equities (NSE + BSE)';
         }
       } else {
         mcapEl.innerText = '—';
@@ -208,15 +219,15 @@
     const vixChg = document.getElementById('card-vix-chg');
     const vixSub = document.getElementById('card-vix-sub');
     if (vixVal) {
-      if (MARKET_STATS.vix != null) {
-        vixVal.innerText = Number(MARKET_STATS.vix).toFixed(2);
-        if (vixChg && MARKET_STATS.vixChangePct != null) {
-          const isPos = MARKET_STATS.vixChangePct > 0;
+      if (marketStats.vix != null) {
+        vixVal.innerText = Number(marketStats.vix).toFixed(2);
+        if (vixChg && marketStats.vixChangePct != null) {
+          const isPos = marketStats.vixChangePct > 0;
           vixChg.className = `font-mono text-[12px] font-semibold tabular-nums ${isPos ? 'text-ink-bearish' : 'text-ink-bullish'}`;
-          vixChg.innerText = formatPercent(MARKET_STATS.vixChangePct);
+          vixChg.innerText = formatPercent(marketStats.vixChangePct);
         }
-        if (vixSub && MARKET_STATS.vixDate) {
-          vixSub.innerText = `Volatility index · ${MARKET_STATS.vixDate}`;
+        if (vixSub && marketStats.vixDate) {
+          vixSub.innerText = `Volatility index · ${marketStats.vixDate}`;
         }
       } else {
         vixVal.innerText = '—';
@@ -231,11 +242,11 @@
     const breadthAdv = document.getElementById('card-breadth-adv');
     const breadthDec = document.getElementById('card-breadth-dec');
     const breadthSub = document.getElementById('card-breadth-sub');
-    if (MARKET_STATS.advances != null && MARKET_STATS.declines != null) {
-      const adv = MARKET_STATS.advances;
-      const dec = MARKET_STATS.declines;
-      const unc = MARKET_STATS.unchanged || 0;
-      const unp = (MARKET_STATS.marketBreadth && MARKET_STATS.marketBreadth.unpriced) || 0;
+    if (marketStats.advances != null && marketStats.declines != null) {
+      const adv = marketStats.advances;
+      const dec = marketStats.declines;
+      const unc = marketStats.unchanged || 0;
+      const unp = (marketStats.marketBreadth && marketStats.marketBreadth.unpriced) || 0;
       const total = adv + dec + unc;
       const pct = total > 0 ? (adv / total) * 100 : 50;
 
@@ -245,7 +256,7 @@
       if (breadthInd) breadthInd.style.left = `${pct.toFixed(1)}%`;
       if (breadthBar) breadthBar.setAttribute('aria-label', `${adv} advancing, ${dec} declining, ${unc} unchanged`);
       if (breadthSub) {
-        const adRatio = MARKET_STATS.adRatio || (dec > 0 ? (adv / dec).toFixed(2) : '—');
+        const adRatio = marketStats.adRatio || (dec > 0 ? (adv / dec).toFixed(2) : '—');
         breadthSub.innerText = `A/D: ${adRatio} · ${unc} Unch · ${unp} Unpriced`;
       }
     }
@@ -254,12 +265,12 @@
     const nearPct = document.getElementById('card-near52-pct');
     const nearSub = document.getElementById('card-near52-sub');
     if (nearPct) {
-      if (MARKET_STATS.near52WeekHighCount != null) {
-        nearPct.innerText = String(MARKET_STATS.near52WeekHighCount);
+      if (marketStats.near52WeekHighCount != null) {
+        nearPct.innerText = String(marketStats.near52WeekHighCount);
         if (nearSub) {
-          const tradingDate = MARKET_STATS.tradingDate || '2026-11-04';
-          nearSub.innerHTML = `${MARKET_STATS.near52WeekHighCount.toLocaleString('en-IN')} verified BSE Group A/B equities<span class="block text-[10px] text-ink-faint">BSE MCP (${tradingDate})</span>`;
-          nearSub.title = `Surveyed BSE Groups A & B (40 matched equities, ${MARKET_STATS.near52WeekHighCount} within 8% of 52W high). NSE-only and other BSE groups not included.`;
+          const tradingDate = marketStats.tradingDate || '2026-11-04';
+          nearSub.innerHTML = `${marketStats.near52WeekHighCount.toLocaleString('en-IN')} verified BSE Group A/B equities<span class="block text-[10px] text-ink-faint">BSE MCP (${tradingDate})</span>`;
+          nearSub.title = `Surveyed BSE Groups A & B (40 matched equities, ${marketStats.near52WeekHighCount} within 8% of 52W high). NSE-only and other BSE groups not included.`;
         }
       } else {
         nearPct.innerText = '—';
@@ -271,13 +282,13 @@
     }
 
     // Card 5: Verified Cap Ranks
-    if (MARKET_STATS.verifiedRankingSegments || MARKET_STATS.capSegments) {
-      const segs = MARKET_STATS.verifiedRankingSegments || {};
-      const t100 = segs.top100 != null ? segs.top100 : (MARKET_STATS.capSegments ? MARKET_STATS.capSegments.large || 0 : 0);
-      const r101_250 = segs.rank101_250 != null ? segs.rank101_250 : (MARKET_STATS.capSegments ? MARKET_STATS.capSegments.mid || 0 : 0);
-      const rem = segs.remainingVerified != null ? segs.remainingVerified : (MARKET_STATS.capSegments ? MARKET_STATS.capSegments.small || 0 : 0);
+    if (marketStats.verifiedRankingSegments || marketStats.capSegments) {
+      const segs = marketStats.verifiedRankingSegments || {};
+      const t100 = segs.top100 != null ? segs.top100 : (marketStats.capSegments ? marketStats.capSegments.large || 0 : 0);
+      const r101_250 = segs.rank101_250 != null ? segs.rank101_250 : (marketStats.capSegments ? marketStats.capSegments.mid || 0 : 0);
+      const rem = segs.remainingVerified != null ? segs.remainingVerified : (marketStats.capSegments ? marketStats.capSegments.small || 0 : 0);
       const unranked = segs.unranked != null ? segs.unranked : 3758;
-      const sme = segs.smePlatform != null ? segs.smePlatform : (MARKET_STATS.capSegments ? MARKET_STATS.capSegments.sme || 0 : 0);
+      const sme = segs.smePlatform != null ? segs.smePlatform : (marketStats.capSegments ? marketStats.capSegments.sme || 0 : 0);
       const maxVal = Math.max(t100, r101_250, rem, unranked, sme, 1);
 
       const setSeg = (key, val) => {
@@ -337,280 +348,103 @@
     `;
   }
 
-  // Filter & Search Logic
-  function applyFilters() {
-    let result = [...STOCKS_DATA];
-
-    // Filter pill (Reconciled with Advances / Declines breadth)
-    if (activeFilter === 'TOP GAINERS') {
-      result = result.filter(s => s.change_percent > 0 || (s.prev_close != null && s.current_price > s.prev_close)).sort((a, b) => b.change_percent - a.change_percent);
-    } else if (activeFilter === 'TOP LOSERS') {
-      result = result.filter(s => s.change_percent < 0 || (s.prev_close != null && s.current_price < s.prev_close)).sort((a, b) => a.change_percent - b.change_percent);
-    } else if (activeFilter === 'NEAR 52W HIGH') {
-      result = result.filter(s => s.is_near_high || (s.pct_from_high && Number(s.pct_from_high) >= -8));
-    }
-
-    // Known Brand-to-Listed Entity resolution map (maps popular consumer brands to their official exchange-listed parent entities without inventing fake tickers)
-    const BRAND_ENTITY_MAP = {
-      'zomato': 'ETERNAL',
-      'blinkit': 'ETERNAL',
-      'policybazaar': 'POLICYBZR',
-      'paisabazaar': 'POLICYBZR',
-      'maggi': 'NESTLEIND',
-      'jlr': 'TATAMOTORS',
-      'jaguar': 'TATAMOTORS'
-    };
-
-    // Search query (legal company name, trading symbol, NSE symbol, BSE scrip code, ISIN, sector, industry)
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const qNorm = q.replace(/[^a-z0-9]/g, '');
-      const aliasSym = BRAND_ENTITY_MAP[q] || BRAND_ENTITY_MAP[qNorm];
-      result = result.filter(s =>
-        (aliasSym && (s.symbol === aliasSym || s.nse_symbol === aliasSym)) ||
-        (s.symbol && s.symbol.toLowerCase().includes(q)) ||
-        (s.company_name && s.company_name.toLowerCase().includes(q)) ||
-        (s.nse_symbol && s.nse_symbol.toLowerCase().includes(q)) ||
-        (s.bse_scrip_code && s.bse_scrip_code.toLowerCase().includes(q)) ||
-        (s.isin && s.isin.toLowerCase().includes(q)) ||
-        (s.sector && s.sector.toLowerCase().includes(q)) ||
-        (s.industry && s.industry.toLowerCase().includes(q)) ||
-        (qNorm.length >= 2 && (
-          (s.symbol && s.symbol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm)) ||
-          (s.company_name && s.company_name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm)) ||
-          (s.nse_symbol && s.nse_symbol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm))
-        ))
-      );
-    }
-
-    // Sorting (if not overridden by filter)
-    if (activeFilter === 'ALL' || activeFilter === 'NEAR 52W HIGH') {
-      result.sort((a, b) => {
-        let valA = a[sortColumn];
-        let valB = b[sortColumn];
-
-        if (valA == null && valB == null) {
-          return (a.rank || 999999) - (b.rank || 999999) || (a.symbol || '').localeCompare(b.symbol || '');
-        }
-        if (valA == null) return 1;
-        if (valB == null) return -1;
-
-        if (typeof valA === 'string') {
-          return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        }
-        return sortDirection === 'asc' ? valA - valB : valB - valA;
-      });
-    }
-
-    filteredStocks = result;
-    currentPage = 1;
-    renderTable();
+  // Server-side filtering keeps search and sorting complete across all listed stocks.
+  function queryParameters(offset) {
+    const defaultColumn = activeFilter === 'TOP GAINERS' || activeFilter === 'TOP LOSERS' ? 'change_percent' : sortColumn;
+    const defaultDirection = activeFilter === 'TOP GAINERS' ? 'desc' : activeFilter === 'TOP LOSERS' ? 'asc' : sortDirection;
+    return new URLSearchParams({ limit: String(pageSize), offset: String(offset), search: searchQuery, filter: activeFilter, sort: sortOverride ? sortColumn : defaultColumn, direction: sortOverride ? sortDirection : defaultDirection, sortOverride: String(sortOverride) });
   }
-
-  // Render Table
-  function renderTable() {
-    if (!tbody) return;
-
-    const total = filteredStocks.length;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    if (currentPage > totalPages) currentPage = totalPages;
-
-    const startIdx = (currentPage - 1) * pageSize;
-    const endIdx = Math.min(startIdx + pageSize, total);
-    const pageRows = filteredStocks.slice(startIdx, endIdx);
-
-    // Update Showing text
-    if (showingText) {
-      showingText.innerHTML = total > 0
-        ? `Showing <span class="text-ink-ink font-medium">${startIdx + 1}–${endIdx}</span> of <span class="text-ink-ink font-medium">${total.toLocaleString('en-IN')}</span> stocks <span class="text-ink-faint">(of ${STOCKS_DATA.length.toLocaleString('en-IN')} total)</span>`
-        : `No matching stocks found`;
-    }
-
-    // Render Pagination Controls
-    renderPagination(totalPages);
-
-    if (pageRows.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="12" class="text-center py-12 text-ink-muted">
-            <div class="font-display text-lg text-ink-ink mb-1">No stocks found</div>
-            <p class="text-sm">Try searching for a different company or reset the filter.</p>
-          </td>
-        </tr>
-      `;
-      return;
-    }
-
+  function renderRows(rows, append) {
+    if (!tbody || !rows.length) return;
     const padY = isDense ? '4px' : '9px';
-
-    tbody.innerHTML = pageRows.map((s, idx) => {
+    const html = rows.map((s, idx) => {
       const isChgPositive = (s.change_percent || 0) >= 0;
       const chgColor = isChgPositive ? 'text-ink-bullish' : 'text-ink-bearish';
       const chgArrow = isChgPositive ? '▴' : '▾';
       const volWidth = Math.min(100, Math.max(10, ((s.volume_ratio || 1) / 2.5) * 100));
-
       return `
         <tr data-row-isin="${escapeHtml(s.isin)}" tabindex="0" aria-label="Open details for ${escapeHtml(s.company_name || s.symbol)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna focus-visible:outline-offset-[-1px] pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
           <td class="text-right text-[13px] text-ink-muted px-2 tabular-nums" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
-          
-          <!-- Stock Info -->
           <td class="px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <a class="flex items-center gap-2.5 min-w-0 group/link rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}">
-              ${getLogoHtml(s, 'sm')}
-              <div class="min-w-0">
-                <div class="flex items-center gap-1.5 flex-wrap">
-                  <span class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>
-                  ${getExchangeBadgesHtml(s)}
-                </div>
-                <div class="text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${escapeHtml(s.company_name)}">${escapeHtml(s.company_name)}</div>
-              </div>
+              ${getLogoHtml(s, 'sm')}<div class="min-w-0"><div class="flex items-center gap-1.5 flex-wrap"><span class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>${getExchangeBadgesHtml(s)}</div>
+              <div class="text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${escapeHtml(s.company_name)}">${escapeHtml(s.company_name)}</div></div>
             </a>
           </td>
-
-          <!-- Sector -->
-          <td class="hidden lg:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            <span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${escapeHtml(s.sector || 'GENERAL')}">${escapeHtml(s.sector || '—')}</span>
-          </td>
-
-          <!-- Price -->
-          <td class="text-right text-[14px] text-ink-ink px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            <span class="font-mono tabular-nums [letter-spacing:-0.02em]">${formatCurrency(s.current_price)}</span>
-          </td>
-
-          <!-- Change % -->
-          <td class="text-right text-[12px] font-medium px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            <span class="inline-flex items-baseline gap-1 font-mono tabular-nums [letter-spacing:-0.02em] ${chgColor} justify-end text-[12px]">
-              <span aria-hidden="true">${chgArrow}</span>${formatPercent(s.change_percent)}
-            </span>
-          </td>
-
-          <!-- Market Cap -->
-          <td class="text-right text-[12px] text-ink-text tabular-nums px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            ${formatMarketCap(s.market_cap_cr)}
-          </td>
-
-          <!-- 1W Return (6 Sessions) -->
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_1w)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1w)}">
-            ${formatPercent(s.return_1w)}
-          </td>
-
-          <!-- 1M Return (Em-dash: Multi-month archive unavailable) -->
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}">
-            ${formatPercent(s.return_1m)}
-          </td>
-
-          <!-- 3M Return (Em-dash: Multi-month archive unavailable) -->
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}">
-            ${formatPercent(s.return_3m)}
-          </td>
-
-          <!-- Volume Bar -->
-          <td class="hidden xl:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            <div class="w-[32px] h-[3.5px] bg-ink-inset rounded-full overflow-hidden relative" title="Volume: ${s.volume != null ? s.volume.toLocaleString('en-IN') : '—'} (${s.volume_ratio || 1.0}x avg)">
-              <div class="h-full bg-ink-muted/80 rounded-full" style="width:${volWidth}%"></div>
-            </div>
-          </td>
-
-          <!-- 7D Sparkline -->
-          <td class="hidden xl:table-cell w-[64px] px-1" style="padding-top:${padY};padding-bottom:${padY}">
-            ${createSparklineSvg(s)}
-          </td>
-
-          <!-- Action Button -->
-          <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px">
-            <span class="inline-flex items-center gap-0.5 opacity-0 translate-x-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0">
-              <a class="stock-details-link w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">
-                ↗
-              </a>
-            </span>
-          </td>
-        </tr>
-      `;
+          <td class="hidden lg:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${escapeHtml(s.sector || 'GENERAL')}">${escapeHtml(s.sector || '—')}</span></td>
+          <td class="text-right text-[14px] text-ink-ink px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="font-mono tabular-nums [letter-spacing:-0.02em]">${formatCurrency(s.current_price)}</span></td>
+          <td class="text-right text-[12px] font-medium px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="inline-flex items-baseline gap-1 font-mono tabular-nums [letter-spacing:-0.02em] ${chgColor} justify-end text-[12px]"><span aria-hidden="true">${chgArrow}</span>${formatPercent(s.change_percent)}</span></td>
+          <td class="text-right text-[12px] text-ink-text tabular-nums px-2" style="padding-top:${padY};padding-bottom:${padY}">${formatMarketCap(s.market_cap_cr)}</td>
+          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_1w)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1w)}">${formatPercent(s.return_1w)}</td>
+          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}">${formatPercent(s.return_1m)}</td>
+          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}">${formatPercent(s.return_3m)}</td>
+          <td class="hidden xl:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}"><div class="w-[32px] h-[3.5px] bg-ink-inset rounded-full overflow-hidden relative" title="Volume: ${s.volume != null ? s.volume.toLocaleString('en-IN') : '—'} (${s.volume_ratio || 1.0}x avg)"><div class="h-full bg-ink-muted/80 rounded-full" style="width:${volWidth}%"></div></div></td>
+          <td class="hidden xl:table-cell w-[64px] px-1" style="padding-top:${padY};padding-bottom:${padY}">${createSparklineSvg(s)}</td>
+          <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px"><span class="inline-flex items-center gap-0.5 opacity-0 translate-x-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0"><a class="stock-details-link w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">↗</a></span></td>
+        </tr>`;
     }).join('');
+    if (append) tbody.insertAdjacentHTML('beforeend', html);
+    else tbody.innerHTML = html;
   }
-
-  // Pagination Rendering
-  function renderPagination(totalPages) {
-    if (!paginationControls) return;
-
-    let html = `
-      <button ${currentPage === 1 ? 'disabled' : ''} class="page-prev-btn w-[28px] h-[28px] flex items-center justify-center rounded-full text-[12px] cursor-pointer transition-colors text-ink-muted hover:text-ink-sienna hover:bg-ink-well ${currentPage === 1 ? 'opacity-30 pointer-events-none' : ''}">‹</button>
-    `;
-
-    // Windowed pagination
-    const getPageList = () => {
-      if (totalPages <= 7) {
-        return Array.from({ length: totalPages }, (_, i) => i + 1);
-      }
-      const list = [1];
-      let left = Math.max(2, currentPage - 1);
-      let right = Math.min(totalPages - 1, currentPage + 1);
-
-      if (currentPage <= 3) {
-        left = 2;
-        right = 4;
-      } else if (currentPage >= totalPages - 2) {
-        left = totalPages - 3;
-        right = totalPages - 1;
-      }
-
-      if (left > 2) list.push('...');
-      for (let p = left; p <= right; p++) {
-        list.push(p);
-      }
-      if (right < totalPages - 1) list.push('...');
-      list.push(totalPages);
-      return list;
-    };
-
-    const pages = getPageList();
-    pages.forEach(p => {
-      if (p === '...') {
-        html += `<span class="w-[24px] h-[28px] flex items-center justify-center text-[11px] text-ink-muted select-none">…</span>`;
-      } else if (p === currentPage) {
-        html += `
-          <button class="w-[28px] h-[28px] flex items-center justify-center rounded-full text-[12px] cursor-pointer transition-colors text-ink-ink border border-ink-sienna bg-ink-sienna-muted font-bold">${p}</button>
-        `;
-      } else {
-        html += `
-          <button class="page-num-btn w-[28px] h-[28px] flex items-center justify-center rounded-full text-[12px] cursor-pointer transition-colors text-ink-muted hover:text-ink-sienna hover:bg-ink-well" data-page="${p}">${p}</button>
-        `;
-      }
-    });
-
-    html += `
-      <button ${currentPage === totalPages ? 'disabled' : ''} class="page-next-btn w-[28px] h-[28px] flex items-center justify-center rounded-full text-[12px] cursor-pointer transition-colors text-ink-muted hover:text-ink-sienna hover:bg-ink-well ${currentPage === totalPages ? 'opacity-30 pointer-events-none' : ''}">›</button>
-    `;
-
-    paginationControls.innerHTML = html;
-
-    // Attach pagination listeners
-    paginationControls.querySelectorAll('.page-num-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        currentPage = Number(btn.getAttribute('data-page'));
-        renderTable();
-        window.scrollTo({ top: 380, behavior: 'smooth' });
-      });
-    });
-
-    const prev = paginationControls.querySelector('.page-prev-btn');
-    if (prev && currentPage > 1) {
-      prev.addEventListener('click', () => {
-        currentPage--;
-        renderTable();
-        window.scrollTo({ top: 380, behavior: 'smooth' });
-      });
-    }
-
-    const next = paginationControls.querySelector('.page-next-btn');
-    if (next && currentPage < totalPages) {
-      next.addEventListener('click', () => {
-        currentPage++;
-        renderTable();
-        window.scrollTo({ top: 380, behavior: 'smooth' });
-      });
+  function renderSkeletons(count = 6) {
+    if (tbody) tbody.innerHTML = Array.from({length:count}, () => '<tr aria-hidden="true" class="border-b border-ink-rule animate-pulse"><td colspan="12" class="px-4 py-3"><div class="h-3 rounded bg-ink-well" style="width:62%"></div></td></tr>').join('');
+  }
+  function updateInfiniteStatus() {
+    if (!infiniteStatus) return;
+    if (loading) infiniteStatus.innerHTML = loadedStocks.length ? '<span class="inline-flex items-center gap-2 text-[11px] text-ink-muted"><span class="size-3 rounded-full border border-ink-muted border-t-transparent animate-spin"></span>Loading more stocks…</span>' : '';
+    else if (loadError) {
+      infiniteStatus.innerHTML = '<span class="inline-flex items-center gap-2 text-[11px] text-ink-muted">Could not load stocks. <button id="infinite-retry" class="text-ink-sienna underline underline-offset-2">Retry</button></span>';
+      document.getElementById('infinite-retry')?.addEventListener('click', () => fetchNextBatch(true));
+    } else if (!hasMore && loadedStocks.length) infiniteStatus.innerHTML = '<span class="text-[11px] text-ink-muted">You\'ve reached the end</span>';
+    else infiniteStatus.textContent = '';
+    if (showingText) showingText.innerHTML = loadedStocks.length
+      ? `Showing <span class="text-ink-ink font-medium">1–${loadedStocks.length.toLocaleString('en-IN')}</span> of <span class="text-ink-ink font-medium">${resultTotal.toLocaleString('en-IN')}</span> stocks <span class="text-ink-faint">(of ${(marketStats?.stockCount || resultTotal).toLocaleString('en-IN')} total)</span>`
+      : (loading ? 'Loading stocks…' : 'No matching stocks found');
+  }
+  async function fetchNextBatch(retry = false) {
+    if (loading || !hasMore || (loadError && !retry)) return;
+    loading = true; loadError = false;
+    const version = queryVersion, offset = nextOffset;
+    updateInfiniteStatus(); if (!loadedStocks.length) renderSkeletons();
+    const controller = new AbortController(); activeController = controller;
+    try {
+      const response = await fetch(`/api/stocks?${queryParameters(offset)}`, {headers:{Accept:'application/json'}, signal:controller.signal, cache:'no-store'});
+      if (!response.ok) throw new Error(`Stock request failed (${response.status})`);
+      const data = await response.json();
+      if (version !== queryVersion) return;
+      if (!data?.ok || !Array.isArray(data.stocks)) throw new Error('Invalid stock response');
+      marketStats = data.stats || marketStats; resultTotal = Number(data.total)||0; hasMore = Boolean(data.hasMore);
+      const unique = data.stocks.filter(stock => stock.isin && !loadedIsins.has(String(stock.isin).toUpperCase()));
+      unique.forEach(stock => loadedIsins.add(String(stock.isin).toUpperCase()));
+      if (unique.length) { loadedStocks.push(...unique); renderRows(unique,true); }
+      else if (!loadedStocks.length && tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-ink-muted"><div class="font-display text-lg text-ink-ink mb-1">No stocks found</div><p class="text-sm">Try searching for a different company or reset the filter.</p></td></tr>';
+      nextOffset = Number.isFinite(Number(data.nextOffset)) ? Number(data.nextOffset) : offset + data.stocks.length;
+      if (!data.stocks.length || nextOffset <= offset) hasMore = false;
+      renderMarketPulse();
+    } catch (error) { if (error.name !== 'AbortError' && version === queryVersion) { loadError = true; if (!loadedStocks.length && tbody) tbody.innerHTML = ''; } }
+    finally {
+      if (version === queryVersion) { loading=false; updateInfiniteStatus(); }
+      if (activeController === controller) activeController=null;
     }
   }
+  function applyFilters() {
+    queryVersion++; if (activeController) activeController.abort();
+    loading=false; loadError=false; nextOffset=0; resultTotal=0; hasMore=true; loadedStocks=[]; loadedIsins=new Set();
+    if (tbody) tbody.innerHTML=''; updateInfiniteStatus(); fetchNextBatch();
+  }
+  function renderTable() { if (tbody) { tbody.innerHTML=''; renderRows(loadedStocks,false); } }
+  function setupInfiniteScroll() {
+    if (!infiniteSentinel) return;
+    if ('IntersectionObserver' in window) {
+      observer=new IntersectionObserver(entries => { if(entries.some(e=>e.isIntersecting)) fetchNextBatch(); },{root:null,rootMargin:'700px 0px',threshold:0});
+      observer.observe(infiniteSentinel);
+    } else {
+      const onScroll=()=>{ if(window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-700) fetchNextBatch(); };
+      window.addEventListener('scroll',onScroll,{passive:true}); window.addEventListener('pagehide',()=>window.removeEventListener('scroll',onScroll),{once:true});
+    }
+    window.addEventListener('pagehide',()=>{if(observer)observer.disconnect();if(activeController)activeController.abort();},{once:true});
+  }
+
 
   // Setup Event Listeners
   function setupEvents() {
@@ -683,6 +517,7 @@
         const headerText = th.getAttribute('data-col') || th.innerText.replace(/[▲▼]/g, '').trim();
         const colField = thMap[headerText] || headerText;
 
+        sortOverride = true;
         if (sortColumn === colField) {
           sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
         } else {
@@ -738,8 +573,8 @@
     // Reset animation classes
     dot.className = 'relative inline-block size-[7px] shrink-0 rounded-full';
 
-    const defaultTime = (typeof MARKET_STATS !== 'undefined' && MARKET_STATS && MARKET_STATS.istDisplayTime)
-      ? MARKET_STATS.istDisplayTime
+    const defaultTime = (marketStats && marketStats.istDisplayTime)
+      ? marketStats.istDisplayTime
       : '04 Nov 2026, 22:33 IST';
 
     switch (state) {
@@ -804,7 +639,7 @@
 
       if (!data || !data.ok) return;
 
-      const displayTime = data.istDisplayTime || (MARKET_STATS && MARKET_STATS.istDisplayTime);
+      const displayTime = data.istDisplayTime || (marketStats && marketStats.istDisplayTime);
 
       if (data.isSyncing) {
         // Sync is actively running in background
@@ -882,30 +717,8 @@
     }, 3000);
   }
 
-  // Dynamically reloads fresh dataset script without breaking UI state
-  async function reloadDatasetHot() {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = `./js/stocks-data.js?t=${Date.now()}`;
-      script.onload = () => {
-        if (typeof STOCKS_DATA !== 'undefined' && Array.isArray(STOCKS_DATA)) {
-          currentStocks = [...STOCKS_DATA];
-          filteredStocks = [...STOCKS_DATA];
-          if (activeFilter !== 'ALL') {
-            applyFilter(activeFilter);
-          } else if (searchQuery) {
-            handleSearch(searchQuery);
-          } else {
-            renderTable();
-          }
-          renderMarketPulse();
-        }
-        resolve();
-      };
-      script.onerror = () => resolve();
-      document.body.appendChild(script);
-    });
-  }
+  // Reload current query after the backend refreshes its EOD dataset.
+  async function reloadDatasetHot() { applyFilters(); }
 
   // Expose methods for E2E tests and lifecycle management
   if (typeof window !== 'undefined') {
@@ -916,8 +729,8 @@
   // Initialize
   function init() {
     setupEvents();
-    renderMarketPulse();
-    renderTable();
+    setupInfiniteScroll();
+    fetchNextBatch();
     checkEodAutoRefresh();
   }
 

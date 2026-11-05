@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkSessionFreshness, getLatestExpectedTradingDate, getIstTime } = require('./scripts/exchange-calendar');
+const { queryStocks } = require('./lib/stocks-query');
 
 const PORT = process.env.PORT || 8080;
 const ROOT_DIR = __dirname;
@@ -150,6 +151,18 @@ async function handleRequest(req, res) {
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     return res.end();
+  }
+
+  if (pathname === '/api/stocks' && req.method === 'GET') {
+    try {
+      const payload = queryStocks(Object.fromEntries(parsedUrl.searchParams.entries()));
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify(payload));
+    } catch (err) {
+      console.error('Stock page query failed:', err.message);
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ ok: false, error: 'Unable to load stocks right now.' }));
+    }
   }
 
   // 1. API: GET /api/market/status
