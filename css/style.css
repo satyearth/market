@@ -44,14 +44,61 @@ tr.pulse-stocks-rise {
   background: var(--ink-rule-strong, #4d4a40);
 }
 
+/* Stock logo container: fixed 32x32 rounded-full */
+.stock-logo-wrap {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  max-width: 32px !important;
+  max-height: 32px !important;
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.stock-logo-wrap.company-logo-fallback-lg,
+.stock-logo-wrap[data-company-logo] img[width="48"] {
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  max-width: 48px !important;
+  max-height: 48px !important;
+}
+
 /* Dense mode styling */
 body.dense-mode td {
   padding-top: 4px !important;
   padding-bottom: 4px !important;
 }
 body.dense-mode .stock-logo-wrap {
-  width: 20px !important;
-  height: 20px !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+/* Sticky Table Header */
+.top-\[57px\] {
+  top: 57px !important;
+}
+thead.sticky,
+thead.sticky th {
+  position: sticky !important;
+  top: 57px !important;
+  z-index: 20 !important;
+  background-color: var(--ink-card, #211e1a) !important;
+}
+
+@media (min-width: 1024px) {
+  .table-scroll-container {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+  }
 }
 
 /* Custom modal backdrop & drawer */

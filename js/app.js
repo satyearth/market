@@ -64,6 +64,16 @@
     return `₹${Math.round(val).toLocaleString('en-IN')} Cr`;
   }
 
+  function formatVolume(val) {
+    if (val == null || val === '') return '—';
+    const num = Number(val);
+    if (!Number.isFinite(num) || num <= 0) return '—';
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${Math.round(num / 1000)}K`;
+    return String(Math.round(num));
+  }
+
+
   function formatPercent(pct, showPlus = true) {
     if (pct == null) return '—';
     const num = Number(pct);
@@ -202,7 +212,7 @@
         nearPct.innerText = String(marketStats.near52WeekHighCount);
         if (nearSub) {
           const tradingDate = marketStats.tradingDate || '2026-11-04';
-          nearSub.innerHTML = `${marketStats.near52WeekHighCount.toLocaleString('en-IN')} verified BSE Group A/B equities<span class="block text-[10px] text-ink-faint">BSE MCP (${tradingDate})</span>`;
+          nearSub.innerHTML = `<span class="block">${marketStats.near52WeekHighCount.toLocaleString('en-IN')} verified BSE Group A/B equities</span><span class="block text-[10px] text-ink-faint mt-0.5">Source: BSE MCP (${tradingDate})</span>`;
           nearSub.title = `Surveyed BSE Groups A & B (40 matched equities, ${marketStats.near52WeekHighCount} within 8% of 52W high). NSE-only and other BSE groups not included.`;
         }
       } else {
@@ -224,11 +234,28 @@
       const sme = segs.smePlatform != null ? segs.smePlatform : (marketStats.capSegments ? marketStats.capSegments.sme || 0 : 0);
       const maxVal = Math.max(t100, r101_250, rem, unranked, sme, 1);
 
+      const segLabels = {
+        lrg: 'Top 100 Verified',
+        mid: 'Rank 101–250 Verified',
+        sml: 'Remaining Verified (Rank 251–343)',
+        mic: 'Unranked / Unverified Equities',
+        sme: 'SME Platform Equities'
+      };
+
       const setSeg = (key, val) => {
         const cntEl = document.getElementById(`card-seg-cnt-${key}`);
         const barEl = document.getElementById(`card-seg-bar-${key}`);
         if (cntEl) cntEl.innerText = val > 0 ? val.toLocaleString('en-IN') : '—';
-        if (barEl) barEl.style.height = `${Math.min(100, Math.max(6, (val / maxVal) * 100)).toFixed(0)}%`;
+        if (barEl) {
+          const logVal = val > 0 ? Math.log10(val) : 0;
+          const logMax = Math.log10(maxVal);
+          const ratio = logMax > 0 ? logVal / logMax : 0;
+          const heightPct = val > 0 ? Math.min(100, Math.max(24, Math.round(ratio * 100))) : 0;
+          barEl.style.height = `${heightPct}%`;
+          const titleText = `${segLabels[key] || key}: ${val > 0 ? val.toLocaleString('en-IN') : '0'} stocks`;
+          barEl.setAttribute('title', titleText);
+          if (barEl.parentElement) barEl.parentElement.setAttribute('title', titleText);
+        }
       };
 
       setSeg('lrg', t100);
@@ -294,24 +321,24 @@
       const isChgPositive = (s.change_percent || 0) >= 0;
       const chgColor = isChgPositive ? 'text-ink-bullish' : 'text-ink-bearish';
       const chgArrow = isChgPositive ? '▴' : '▾';
-      const volWidth = Math.min(100, Math.max(10, ((s.volume_ratio || 1) / 2.5) * 100));
+      const sectorText = (!s.sector || String(s.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : s.sector;
       return `
         <tr data-row-isin="${escapeHtml(s.isin)}" tabindex="0" aria-label="Open details for ${escapeHtml(s.company_name || s.symbol)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna focus-visible:outline-offset-[-1px] pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
-          <td class="text-right text-[13px] text-ink-muted px-2 tabular-nums" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
+          <td class="text-right font-mono tabular-nums text-[13px] text-ink-muted px-2" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
           <td class="px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <a class="flex items-center gap-2.5 min-w-0 group/link rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}">
               ${getLogoHtml(s, 'sm')}<div class="min-w-0"><div class="flex items-center gap-1.5 flex-wrap"><span class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>${getExchangeBadgesHtml(s)}</div>
               <div class="text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${escapeHtml(s.company_name)}">${escapeHtml(s.company_name)}</div></div>
             </a>
           </td>
-          <td class="hidden lg:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${escapeHtml(s.sector || 'GENERAL')}">${escapeHtml(s.sector || '—')}</span></td>
-          <td class="text-right text-[14px] text-ink-ink px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="font-mono tabular-nums [letter-spacing:-0.02em]">${formatCurrency(s.current_price)}</span></td>
-          <td class="text-right text-[12px] font-medium px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="inline-flex items-baseline gap-1 font-mono tabular-nums [letter-spacing:-0.02em] ${chgColor} justify-end text-[12px]"><span aria-hidden="true">${chgArrow}</span>${formatPercent(s.change_percent)}</span></td>
-          <td class="text-right text-[12px] text-ink-text tabular-nums px-2" style="padding-top:${padY};padding-bottom:${padY}">${formatMarketCap(s.market_cap_cr)}</td>
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 ${getReturnColorClass(s.return_1w)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1w)}">${formatPercent(s.return_1w)}</td>
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}">${formatPercent(s.return_1m)}</td>
-          <td class="hidden xl:table-cell text-right text-[11px] tabular-nums px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}">${formatPercent(s.return_3m)}</td>
-          <td class="hidden xl:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}"><div class="w-[32px] h-[3.5px] bg-ink-inset rounded-full overflow-hidden relative" title="Volume: ${s.volume != null ? s.volume.toLocaleString('en-IN') : '—'} (${s.volume_ratio || 1.0}x avg)"><div class="h-full bg-ink-muted/80 rounded-full" style="width:${volWidth}%"></div></div></td>
+          <td class="hidden lg:table-cell px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="inline-block max-w-[125px] truncate align-middle text-[9px] font-bold tracking-[0.12em] uppercase text-ink-muted bg-ink-inset px-1.5 py-0.5 rounded-[3px]" title="${escapeHtml(sectorText)}">${escapeHtml(sectorText)}</span></td>
+          <td class="text-right font-mono tabular-nums text-[14px] text-ink-ink px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="font-mono tabular-nums [letter-spacing:-0.02em]">${formatCurrency(s.current_price)}</span></td>
+          <td class="text-right font-mono tabular-nums text-[12px] font-medium px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="inline-flex items-baseline gap-1 font-mono tabular-nums [letter-spacing:-0.02em] ${chgColor} justify-end text-[12px]"><span aria-hidden="true">${chgArrow}</span>${formatPercent(s.change_percent)}</span></td>
+          <td class="text-right font-mono tabular-nums text-[12px] text-ink-text px-2" style="padding-top:${padY};padding-bottom:${padY}">${formatMarketCap(s.market_cap_cr)}</td>
+          <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 ${getReturnColorClass(s.return_1w)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1w)}">${formatPercent(s.return_1w)}</td>
+          <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}" title="Data not available yet">${formatPercent(s.return_1m)}</td>
+          <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}" title="Data not available yet">${formatPercent(s.return_3m)}</td>
+          <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] text-ink-text px-2" style="padding-top:${padY};padding-bottom:${padY}" title="Volume: ${s.volume != null ? Number(s.volume).toLocaleString('en-IN') : '—'}">${formatVolume(s.volume)}</td>
           <td class="hidden xl:table-cell w-[64px] px-1" style="padding-top:${padY};padding-bottom:${padY}">${createSparklineSvg(s)}</td>
           <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px"><span class="inline-flex items-center gap-0.5 opacity-0 translate-x-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0"><a class="stock-details-link w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">↗</a></span></td>
         </tr>`;
@@ -319,8 +346,29 @@
     if (append) tbody.insertAdjacentHTML('beforeend', html);
     else tbody.innerHTML = html;
   }
-  function renderSkeletons(count = 6) {
-    if (tbody) tbody.innerHTML = Array.from({length:count}, () => '<tr aria-hidden="true" class="border-b border-ink-rule animate-pulse"><td colspan="12" class="px-4 py-3"><div class="h-3 rounded bg-ink-well" style="width:62%"></div></td></tr>').join('');
+  function renderSkeletons(count = 7) {
+    if (!tbody) return;
+    tbody.innerHTML = Array.from({length:count}, () => `
+      <tr aria-hidden="true" class="border-b border-ink-rule animate-pulse h-[70px] min-h-[70px]">
+        <td colspan="12" class="px-3 py-3 h-[70px]">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 min-w-[32px] rounded-full bg-ink-well shrink-0"></div>
+            <div class="space-y-1.5 flex-1 max-w-[200px]">
+              <div class="h-3.5 bg-ink-well rounded w-20"></div>
+              <div class="h-2.5 bg-ink-well/60 rounded w-36"></div>
+            </div>
+            <div class="hidden lg:block w-20 h-4 bg-ink-well rounded"></div>
+            <div class="ml-auto w-24 h-4 bg-ink-well rounded"></div>
+            <div class="w-16 h-4 bg-ink-well rounded"></div>
+            <div class="w-20 h-4 bg-ink-well rounded"></div>
+            <div class="hidden xl:block w-14 h-4 bg-ink-well rounded"></div>
+            <div class="hidden xl:block w-14 h-4 bg-ink-well rounded"></div>
+            <div class="hidden xl:block w-14 h-4 bg-ink-well rounded"></div>
+            <div class="hidden xl:block w-12 h-4 bg-ink-well rounded"></div>
+          </div>
+        </td>
+      </tr>
+    `).join('');
   }
   function updateInfiniteStatus() {
     if (!infiniteStatus) return;
@@ -349,7 +397,8 @@
       marketStats = data.stats || marketStats; resultTotal = Number(data.total)||0; hasMore = Boolean(data.hasMore);
       const unique = data.stocks.filter(stock => stock.isin && !loadedIsins.has(String(stock.isin).toUpperCase()));
       unique.forEach(stock => loadedIsins.add(String(stock.isin).toUpperCase()));
-      if (unique.length) { loadedStocks.push(...unique); renderRows(unique,true); }
+      const isFirstBatch = loadedStocks.length === 0;
+      if (unique.length) { loadedStocks.push(...unique); renderRows(unique, !isFirstBatch); }
       else if (!loadedStocks.length && tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-ink-muted"><div class="font-display text-lg text-ink-ink mb-1">No stocks found</div><p class="text-sm">Try searching for a different company or reset the filter.</p></td></tr>';
       nextOffset = Number.isFinite(Number(data.nextOffset)) ? Number(data.nextOffset) : offset + data.stocks.length;
       if (!data.stocks.length || nextOffset <= offset) hasMore = false;
@@ -442,7 +491,7 @@
       '1W': 'return_1w',
       '1M': 'return_1m',
       '3M': 'return_3m',
-      'Vol': 'volume_ratio'
+      'Vol': 'volume'
     };
 
     document.querySelectorAll('th[data-sortable="true"]').forEach(th => {
