@@ -74,6 +74,12 @@
     const symbol = stock.nse_symbol || stock.symbol;
 
     document.title = `${valueOrNA(stock.company_name)} | Machii Bazzar`;
+    document.getElementById('stock-company-logo').innerHTML = window.CompanyLogo.render({
+      isin: stock.isin,
+      companyName: stock.company_name,
+      logoData: window.COMPANY_LOGO_MANIFEST?.[String(stock.isin || '').toUpperCase()],
+      size: 'lg'
+    });
     document.getElementById('stock-symbol').textContent = valueOrNA(symbol);
     document.getElementById('stock-name').textContent = valueOrNA(stock.company_name);
     document.getElementById('stock-price').textContent = formatPrice(latestPrice);

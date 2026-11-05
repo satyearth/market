@@ -24,40 +24,6 @@
   let isDense = false;
   let searchDebounceTimer = null;
 
-  // Base endpoint for India API company logos (free, open, CDN-backed)
-  const LOGO_API_BASE = 'https://api.dharun.dev/v1/logos/';
-
-  // Resolve optimal ticker symbol for India API company logo endpoint
-  function getLogoTicker(stock) {
-    if (!stock) return '';
-    const aliases = (typeof window !== 'undefined' && window.LOGO_ALIASES) ? window.LOGO_ALIASES : {};
-
-    // 1. Check verified alias map (renamed symbols, hyphen formats, partly-paid shares)
-    if (stock.nse_symbol && aliases[stock.nse_symbol]) {
-      return aliases[stock.nse_symbol];
-    }
-    if (stock.symbol && aliases[stock.symbol]) {
-      return aliases[stock.symbol];
-    }
-    if (stock.isin && aliases[stock.isin]) {
-      return aliases[stock.isin];
-    }
-
-    // 2. Prefer official NSE symbol
-    if (stock.nse_symbol && String(stock.nse_symbol).trim()) {
-      return String(stock.nse_symbol).trim();
-    }
-    // 3. Primary trading symbol
-    if (stock.symbol && String(stock.symbol).trim()) {
-      return String(stock.symbol).trim();
-    }
-    // 4. Fallback to ISIN for exchange-neutral lookup
-    if (stock.isin && String(stock.isin).trim()) {
-      return String(stock.isin).trim();
-    }
-    return '';
-  }
-
   // DOM Elements
   const tbody = document.getElementById('stocks-tbody');
   const searchInput = document.querySelector('input[data-stocks-search="true"]');
@@ -119,46 +85,13 @@
       : `background-color: rgba(196, 43, 43, ${opacity.toFixed(3)});`;
   }
 
-  // Dynamic company logo rendering using India API with double-fallback and seamless initials badge
   function getLogoHtml(stock, size = 'sm') {
-    const symbol = stock.symbol || '';
-    const ticker = getLogoTicker(stock);
-    const initials = escapeHtml((symbol || 'ST').slice(0, 2).toUpperCase());
-
-    if (!ticker) {
-      if (size === 'lg') {
-        return `
-          <div class="w-11 h-11 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center font-bold text-ink-muted text-xs uppercase flex-shrink-0">
-            ${initials}
-          </div>`;
-      }
-      return `
-        <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-inset text-ink-muted font-ui font-semibold h-6 w-6 text-[9px] uppercase">
-          ${initials}
-        </span>`;
-    }
-
-    const primaryUrl = `${LOGO_API_BASE}${encodeURIComponent(ticker)}`;
-    let fallbackAttr = '';
-    if (stock.isin && stock.isin !== ticker) {
-      fallbackAttr = ` data-fallback="${LOGO_API_BASE}${encodeURIComponent(stock.isin)}"`;
-    }
-
-    const errorHandler = "if(this.dataset.fallback){this.src=this.dataset.fallback;delete this.dataset.fallback;}else{this.style.display='none';if(this.nextElementSibling){this.nextElementSibling.style.display='inline-flex';}}";
-
-    if (size === 'lg') {
-      return `
-        <div class="w-11 h-11 rounded-lg border border-ink-rule bg-ink-paper p-1 flex items-center justify-center flex-shrink-0">
-          <img src="${primaryUrl}"${fallbackAttr} alt="${escapeHtml(stock.company_name || symbol)} logo" class="max-h-full max-w-full object-contain" decoding="async" onerror="${errorHandler}" />
-          <span style="display:none" class="items-center justify-center font-bold text-xs text-ink-muted uppercase">${initials}</span>
-        </div>`;
-    }
-
-    return `
-      <span class="stock-logo-wrap inline-flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-rule bg-ink-paper text-ink-muted font-ui font-semibold h-6 w-6 text-[10px]">
-        <img src="${primaryUrl}"${fallbackAttr} alt="${escapeHtml(stock.company_name || symbol)} logo" class="block h-full w-full object-contain" loading="lazy" decoding="async" onerror="${errorHandler}" />
-        <span style="display:none" class="items-center justify-center font-bold text-[9px] text-ink-muted uppercase">${initials}</span>
-      </span>`;
+    return window.CompanyLogo.render({
+      isin: stock.isin,
+      companyName: stock.company_name,
+      logoData: window.COMPANY_LOGO_MANIFEST?.[String(stock.isin || '').toUpperCase()],
+      size
+    });
   }
 
   // Exchange badges helper for NSE, BSE and SME

@@ -16,6 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 console.log('================================================================');
 console.log(' MACHLI BAZZAR — PHASE 2: FRONTEND FUNCTIONALITY & UI QA SUITE');
@@ -28,6 +29,8 @@ const indexPath = path.join(__dirname, '..', 'index.html');
 const detailPath = path.join(__dirname, '..', 'stock.html');
 const detailScriptPath = path.join(__dirname, '..', 'js', 'stock-details.js');
 const detailStylesPath = path.join(__dirname, '..', 'css', 'stock-details.css');
+const companyLogoPath = path.join(__dirname, '..', 'js', 'company-logo.js');
+const companyLogoManifestPath = path.join(__dirname, '..', 'js', 'company-logo-manifest.js');
 
 const dataContent = fs.readFileSync(dataPath, 'utf-8');
 const appContent = fs.readFileSync(appPath, 'utf-8');
@@ -35,6 +38,11 @@ const indexContent = fs.readFileSync(indexPath, 'utf-8');
 const detailContent = fs.readFileSync(detailPath, 'utf-8');
 const detailScriptContent = fs.readFileSync(detailScriptPath, 'utf-8');
 const detailStylesContent = fs.readFileSync(detailStylesPath, 'utf-8');
+const companyLogoContent = fs.readFileSync(companyLogoPath, 'utf-8');
+const companyLogoManifestContent = fs.readFileSync(companyLogoManifestPath, 'utf-8');
+const logoContext = { window: {} };
+vm.runInNewContext(companyLogoManifestContent, logoContext);
+const companyLogoManifest = logoContext.window.COMPANY_LOGO_MANIFEST;
 
 const matchData = dataContent.match(/const STOCKS_DATA = (\[[\s\S]*?\]);\s*$/);
 const matchStats = dataContent.match(/const MARKET_STATS = (\{[\s\S]*?\});/);
@@ -281,12 +289,17 @@ assert(!appContent.includes('seed %'), 'Zero pseudo-random seed equations in spa
 // -------------------------------------------------------------
 console.log('\n[Section 6: Assets & 404 Prevention]');
 
-assert(appContent.includes('https://api.dharun.dev/v1/logos/'), 'app.js uses free India API company-logo endpoint (api.dharun.dev)');
-assert(appContent.includes('loading="lazy"'), 'app.js implements lazy loading on logo images');
-assert(appContent.includes('decoding="async"'), 'app.js implements asynchronous image decoding for 60fps performance');
-assert(appContent.includes('onerror='), 'app.js implements bulletproof onerror fallback to initials');
-assert(appContent.includes('data-fallback'), 'app.js implements double-fallback via data-fallback attribute');
-assert(indexContent.includes('js/logo-aliases.js'), 'index.html includes verified logo aliases script');
+assert(indexContent.includes('js/company-logo-manifest.js') && indexContent.includes('js/company-logo.js'), 'index.html loads local ISIN-keyed logo manifest and shared component');
+assert(appContent.includes('window.CompanyLogo.render'), 'listing rows use the shared company logo component');
+assert(detailScriptContent.includes('window.CompanyLogo.render'), 'stock details page uses the shared company logo component');
+assert(companyLogoContent.includes("loading=\"${size === 'lg' ? 'eager' : 'lazy'}\""), 'company logo component lazy-loads list logos and eagerly loads detail logos');
+assert(companyLogoContent.includes('decoding="async"'), 'company logo component decodes images asynchronously');
+assert(companyLogoContent.includes('handleFailure') && companyLogoContent.includes('rememberFailure'), 'company logo component falls back and caches runtime failures');
+assert(companyLogoContent.includes('LEGAL_SUFFIXES') && companyLogoContent.includes('initials(name)'), 'fallback initials derive from the company name');
+const logoTypes = Object.values(companyLogoManifest).reduce((counts, entry) => { counts[entry[0]] = (counts[entry[0]] || 0) + 1; return counts; }, {});
+assert(Object.keys(companyLogoManifest).length === 5389, 'local logo manifest contains all unique ISIN records');
+assert(logoTypes[1] === 5096 && logoTypes[2] === 239 && logoTypes[0] === 54, 'manifest preserves 5,096 logos, 239 monograms and 54 missing cases');
+assert(indexContent.includes('js/company-logo-manifest.js') && detailContent.includes('js/company-logo-manifest.js'), 'listing and details pages share the same local logo cache');
 
 // Check that no HTML hardcodes old 4,965 stock counts
 assert(!indexContent.includes('4,965'), 'index.html contains zero outdated 4,965 stock count references');
