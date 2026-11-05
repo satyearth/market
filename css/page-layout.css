@@ -1,0 +1,10 @@
+.site-wide-shell {
+  width: min(calc(100% - 3rem), 112rem);
+  margin-inline: auto;
+}
+
+@media (max-width: 640px) {
+  .site-wide-shell {
+    width: calc(100% - 1.5rem);
+  }
+}

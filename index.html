@@ -22,6 +22,7 @@
 
   <!-- Stylesheet -->
   <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/page-layout.css">
 </head>
 <body class="bg-ink-bg text-ink-text font-ui antialiased selection:bg-ink-sienna selection:text-white min-h-screen flex flex-col">
   <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-ink-sienna focus:text-white focus:text-sm focus:font-medium">Skip to main content</a>
@@ -29,7 +30,7 @@
   <div class="relative min-h-screen flex flex-col">
     <!-- Header & Navigation -->
     <header class="sticky top-0 z-50 w-full border-b border-ink-rule bg-ink-bg/[0.94] backdrop-blur-[16px] supports-[backdrop-filter]:bg-ink-bg/[0.94]">
-      <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
+      <div class="site-wide-shell mx-auto flex items-center justify-between py-3">
         <!-- Brand Logo -->
         <a class="flex items-baseline whitespace-nowrap group" href="/" aria-label="Machii Bazzar Home">
           <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-ink lg:text-[28px] transition-colors group-hover:text-ink-sienna">machii</span>
@@ -37,13 +38,8 @@
           <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-sienna lg:text-[28px]">bazzar</span>
         </a>
 
-        <!-- Active Section Indicator & EOD Auto-Refresh Status -->
-        <div class="flex items-center gap-2.5">
-          <div id="eod-sync-indicator" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[11px] text-ink-muted bg-ink-well border border-ink-rule shadow-soft" role="status" aria-live="polite">
-            <span id="eod-sync-dot" class="relative inline-block size-[7px] shrink-0 rounded-full bg-emerald-500"></span>
-            <span id="eod-sync-text">Latest EOD data</span>
-            <span id="eod-sync-time" class="hidden sm:inline text-ink-faint">· 04 Nov 2026, 22:33 IST</span>
-          </div>
+        <!-- Active Section Indicator -->
+        <div>
           <span class="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-ui text-[12px] uppercase tracking-[0.06em] font-semibold bg-ink-well text-ink-sienna border border-ink-rule shadow-soft">
             STOCKS
           </span>
@@ -53,7 +49,7 @@
 
     <!-- Main Content Area -->
     <main id="main-content" class="flex-1">
-      <div class="container mx-auto px-4 max-w-7xl">
+      <div class="site-wide-shell">
         <!-- Hero Section -->
         <div class="pt-5 pb-2">
           <div class="mb-2 inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.05em] text-ink-muted">

@@ -1,39 +1,37 @@
-# Machii Bazzar · Indian Market Intelligence Platform
+# Machii Bazzar
 
-A high-performance stock screening and intelligence platform tracking 4,800+ NSE & BSE listed companies ranked by market capitalisation.
+An EOD stock directory for NSE and BSE listed companies, with search, filters, sorting, pagination, and dedicated stock detail pages.
 
-## Features
+## Run locally
 
-- **Ranked Universe**: Real-time ranking of Indian equities by market cap, sector, returns, and valuation.
-- **Market Pulse**: Real-time India VIX, Market Breadth (Advancers vs Decliners), Near 52W High stats, and Market Cap segment breakdown.
-- **Stock Filters**: Focused filters for All Stocks, Top Gainers, Top Losers, and Near 52W High.
-- **Live Search**: Instant client-side search across ticker symbols, company names, sectors, and industries (Press `/` to focus).
-- **Dynamic Multi-Column Sorting**: Sort across Rank, Stock, Price, Change %, Market Cap, 1W, 1M, 3M returns, and Volume.
-- **Mini 7D Sparklines**: Vector SVG sparklines displaying 7-day trendlines.
-- **AI Stock Intelligence (✦)**: Interactive insights modal with valuation multiples, return breakdown, and automated commentary.
-- **Dark Luxury Aesthetic**: Fine-tuned warm dark typography powered by Google Fonts *Fraunces* and *Instrument Sans*.
-
-## Getting Started
-
-Open `index.html` directly in any modern browser, or serve it with any local HTTP server:
+Install dependencies once, then start the app server:
 
 ```bash
-# Using Python
-python -m http.server 3000
-
-# Using Node / npx
-npx serve .
+npm install
+npm start
 ```
 
-## Structure
+Open `http://localhost:8080`. The stock list and detail pages can also be served as static files, but automatic data refresh requires the Node server.
 
+## Data refresh
+
+The site displays the latest available end-of-day exchange data; it does not provide live prices. When a newer trading session is expected, the server can run `scripts/sync-stock-universe.js`. That script uses the local MCP service at `127.0.0.1:3000` for exchange files and supported market metrics, validates inputs, then updates `js/stocks-data.js`. If fresh verified files are unavailable, it preserves the previous dataset.
+
+## Project structure
+
+```text
+index.html                 Main stock listing page
+stock.html                 Stock details page (ISIN URL parameter)
+css/                       Shared theme and page layout styles
+js/app.js                  Listing interactions and refresh flow
+js/stock-details.js        Stock details page rendering
+js/stocks-data.js          Current generated EOD stock dataset
+js/stocks-data.backup.js   Previous dataset backup for sync recovery
+scripts/                   MCP sync, validation, audits, and browser checks
+downloads/                 Exchange source files and sync inputs/outputs
+docs/reports/              Project audit and data coverage reports
+test-results/screenshots/  Browser test screenshot outputs
+server.js                  Static server and EOD refresh API
 ```
-├── index.html            # Main application interface
-├── css/
-│   └── style.css         # Complete design system & Tailwind styling
-├── js/
-│   ├── stocks-data.js    # Stock market dataset & snapshot metrics
-│   └── app.js            # Core interactive application logic
-└── assets/
-    └── logos/            # High-resolution stock brand logos
-```
+
+Run checks with the scripts listed in `package.json`, for example `npm run test:verify` and `npm run test:browser`.

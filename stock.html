@@ -10,13 +10,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/page-layout.css">
   <link rel="stylesheet" href="./css/stock-details.css">
 </head>
 <body class="bg-ink-bg text-ink-text font-ui antialiased selection:bg-ink-sienna selection:text-white min-h-screen flex flex-col">
   <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-ink-sienna focus:text-white focus:text-sm focus:font-medium">Skip to main content</a>
 
   <header class="sticky top-0 z-50 w-full border-b border-ink-rule bg-ink-bg/[0.94] backdrop-blur-[16px] supports-[backdrop-filter]:bg-ink-bg/[0.94]">
-    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
+    <div class="site-wide-shell mx-auto flex items-center justify-between py-3">
       <a class="flex items-baseline whitespace-nowrap group" href="./index.html" aria-label="Machii Bazzar Home">
         <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-ink lg:text-[28px] transition-colors group-hover:text-ink-sienna">machii</span>
         <span class="font-display text-[26px] font-extrabold leading-none text-ink-sienna lg:text-[28px]">·</span>
@@ -56,18 +57,20 @@
           <p id="market-data-status" class="mt-4 border-t border-ink-rule pt-3 text-[10px] leading-relaxed text-ink-faint" role="status" aria-live="polite">Checking market data status…</p>
         </section>
 
-        <section class="mt-4 rounded-xl border border-ink-rule bg-ink-card p-5 shadow-soft md:p-6" aria-labelledby="company-info-title">
-          <div class="mb-4 flex items-center justify-between gap-3">
-            <h2 id="company-info-title" class="font-display text-lg font-semibold text-ink-ink">Company information</h2>
-            <span id="stock-listing-status" class="rounded-full border border-ink-rule bg-ink-well px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-ink-muted">N/A</span>
-          </div>
-          <dl id="company-info-grid" class="stock-detail-grid"></dl>
-        </section>
+        <div class="stock-detail-sections">
+          <section class="rounded-xl border border-ink-rule bg-ink-card p-5 shadow-soft md:p-6" aria-labelledby="company-info-title">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <h2 id="company-info-title" class="font-display text-lg font-semibold text-ink-ink">Company information</h2>
+              <span id="stock-listing-status" class="rounded-full border border-ink-rule bg-ink-well px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-ink-muted">N/A</span>
+            </div>
+            <dl id="company-info-grid" class="stock-detail-grid"></dl>
+          </section>
 
-        <section class="mt-4 rounded-xl border border-ink-rule bg-ink-card p-5 shadow-soft md:p-6" aria-labelledby="exchange-info-title">
-          <h2 id="exchange-info-title" class="font-display text-lg font-semibold text-ink-ink">Exchange listings</h2>
-          <div id="exchange-listings" class="mt-3"></div>
-        </section>
+          <section class="rounded-xl border border-ink-rule bg-ink-card p-5 shadow-soft md:p-6" aria-labelledby="exchange-info-title">
+            <h2 id="exchange-info-title" class="font-display text-lg font-semibold text-ink-ink">Exchange listings</h2>
+            <div id="exchange-listings" class="mt-3"></div>
+          </section>
+        </div>
       </article>
     </div>
   </main>

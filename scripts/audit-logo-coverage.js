@@ -10,7 +10,7 @@ const https = require('https');
 const API_BASE = 'https://api.dharun.dev/v1';
 const CATALOG_CACHE_PATH = path.join(__dirname, '..', 'downloads', 'api-companies-catalog.json');
 const STOCKS_DATA_PATH = path.join(__dirname, '..', 'js', 'stocks-data.js');
-const AUDIT_REPORT_PATH = path.join(__dirname, '..', 'LOGO_COVERAGE_AUDIT.md');
+const AUDIT_REPORT_PATH = path.join(__dirname, '..', 'docs', 'reports', 'LOGO_COVERAGE_AUDIT.md');
 const ALIASES_OUTPUT_PATH = path.join(__dirname, '..', 'js', 'logo-aliases.js');
 
 function sleep(ms) {
