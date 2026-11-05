@@ -8,10 +8,10 @@
  *  3. Search & Debounce (Symbol, Name, BSE Code, ISIN, Clear)
  *  4. Filter Buttons (ALL, TOP GAINERS, TOP LOSERS, NEAR 52W HIGH)
  *  5. Pagination & Page Boundaries (Next, Prev, Direct Page Jump)
- *  6. Stock Detail Modal (Open, Content, 6-session Chart, Null Multi-period Returns, Close Button, Escape, Backdrop)
+ *  6. Stock Details Page (ISIN navigation, detail content, refresh, browser back)
  *  7. Keyboard Shortcuts ('/' focus)
  *  8. Multi-Viewport Responsive Tests & Screenshots (Desktop 1440x900, Tablet 768x1024, Mobile 390x844)
- *  9. Horizontal Overflow & Responsive Modal Scrolling
+ *  9. Horizontal Overflow & Responsive Layout
  * 10. Console Errors & Network Failures (404-free verification)
  */
 
@@ -21,6 +21,7 @@ const { chromium } = require('playwright');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const FILE_URL = 'file:///' + path.join(ROOT_DIR, 'index.html').replace(/\\/g, '/');
+const STOCK_DETAIL_FILE_URL = 'file:///' + path.join(ROOT_DIR, 'stock.html').replace(/\\/g, '/');
 const SCREENSHOT_DIR = path.join(ROOT_DIR, 'test-results', 'screenshots');
 
 let passCount = 0;
@@ -110,7 +111,7 @@ async function runBrowserTests() {
     recordTest('Initial table page renders 50 rows', rowCount === 50, `Rendered ${rowCount} rows`);
 
     const title = await page.title();
-    recordTest('Page title is branded Machli Bazzar', title.toLowerCase().includes('machli bazarr') || title.toLowerCase().includes('machli bazzar'), title);
+    recordTest('Page title is branded Machii Bazzar', title.toLowerCase().includes('machii bazzar'), title);
 
     const statusBadge = await page.locator('#market-status-badge').innerText();
     recordTest('Status badge shows 5,389 listed companies', statusBadge.toLowerCase().includes('5,389 listed companies'), statusBadge);
@@ -263,58 +264,64 @@ async function runBrowserTests() {
     await page.waitForTimeout(100);
 
     // -------------------------------------------------------------
-    // Test 6: Stock Detail Modal Interaction & Multi-Period Returns
+    // Test 6: Stock row navigation to the full-page stock details view
     // -------------------------------------------------------------
-    console.log('\n[7/10] Testing Stock Detail Modal...');
-    // Click on the first stock row
+    console.log('\n[7/10] Testing Stock Details Page...');
     const firstRow = page.locator('#stocks-tbody tr:first-child');
+    const firstIsin = await firstRow.getAttribute('data-row-isin');
     await firstRow.click();
-    await page.waitForTimeout(150);
+    await page.waitForURL(url => url.href.includes('stock.html?isin='), { timeout: 5000 });
+    const detailIsin = new URL(page.url()).searchParams.get('isin');
+    const detailVisible = await page.locator('#stock-detail').isVisible();
+    recordTest('Stock row opens the dedicated page with its ISIN', detailVisible && detailIsin === firstIsin, `ISIN: ${detailIsin}`);
+    recordTest('Dedicated page shows stock identity, price, and no chart', await page.locator('#stock-name').isVisible() && await page.locator('#stock-price').isVisible() && await page.locator('#stock-detail svg').count() === 0, 'Detail page has compact data only');
 
-    const modal = page.locator('#ai-modal');
-    const isModalVisible = await modal.isVisible();
-    recordTest('Modal opens on stock row click', isModalVisible, 'Modal is visible');
+    await page.goBack();
+    await page.waitForSelector('#stocks-tbody tr', { timeout: 5000 });
+    recordTest('Browser back returns to the stock list', page.url().includes('index.html') || page.url() === FILE_URL, await page.title());
 
-    // Verify modal content
-    const modalContent = page.locator('#ai-modal-content');
-    const modalText = await modalContent.innerText();
-    recordTest('Modal shows stock details and trading date', modalText.includes('2026-11-04') || modalText.includes('04-Nov-2026') || modalText.includes('BSE') || modalText.includes('NSE'), 'Modal populated');
+    const namedStocks = [
+      { name: 'Reliance Industries Ltd', isin: 'INE002A01018' },
+      { name: 'Tata Consultancy Services Ltd', isin: 'INE467B01029' },
+      { name: 'Infosys Limited', isin: 'INE009A01021' }
+    ];
+    for (const target of namedStocks) {
+      await page.goto(`${STOCK_DETAIL_FILE_URL}?isin=${target.isin}`, { waitUntil: 'load' });
+      await page.waitForSelector('#stock-detail:not(.hidden)', { timeout: 5000 });
+      const actualName = await page.locator('#stock-name').innerText();
+      const actualIsin = await page.locator('#exchange-listings').innerText();
+      recordTest(`Direct URL loads ${target.name} by ISIN`, actualName === target.name && actualIsin.includes(target.isin), `${actualName} · ${target.isin}`);
+      if (target.isin === 'INE002A01018') {
+        await page.reload({ waitUntil: 'load' });
+        await page.waitForSelector('#stock-detail:not(.hidden)', { timeout: 5000 });
+        recordTest('Refreshing a direct stock URL preserves the selected stock', await page.locator('#stock-name').innerText() === target.name, page.url());
+      }
+    }
 
-    // Verify multi-period returns grid: 1 Month, 3 Months, 1 Year must display '—'
-    const returns1M = await modalContent.locator('text=1 Month').locator('..').innerText();
-    const returns3M = await modalContent.locator('text=3 Months').locator('..').innerText();
-    const returns1Y = await modalContent.locator('text=1 Year').locator('..').innerText();
-    recordTest('Modal: 1 Month return displays em-dash "—" (no unverified data)', returns1M.includes('—'), `1M block: ${returns1M.replace(/\n/g, ' ')}`);
-    recordTest('Modal: 3 Months return displays em-dash "—" (no unverified data)', returns3M.includes('—'), `3M block: ${returns3M.replace(/\n/g, ' ')}`);
-    recordTest('Modal: 1 Year return displays em-dash "—" (no unverified data)', returns1Y.includes('—'), `1Y block: ${returns1Y.replace(/\n/g, ' ')}`);
+    const randomStock = await page.evaluate(() => {
+      const stock = STOCKS_DATA.find(item => !['RELIANCE', 'TCS', 'INFY'].includes(item.symbol));
+      return stock ? { name: stock.company_name, isin: stock.isin } : null;
+    });
+    if (randomStock) {
+      await page.goto(`${STOCK_DETAIL_FILE_URL}?isin=${encodeURIComponent(randomStock.isin)}`, { waitUntil: 'load' });
+      await page.waitForSelector('#stock-detail:not(.hidden)', { timeout: 5000 });
+      recordTest('A random stock opens with the matching ISIN', await page.locator('#stock-name').innerText() === randomStock.name, `${randomStock.name} · ${randomStock.isin}`);
+    } else {
+      recordTest('Random stock fixture is available', false, 'No non-target stock found in STOCKS_DATA');
+    }
 
-    // Verify historical sparkline / chart SVG
-    const chartSvg = await modalContent.locator('svg').count();
-    recordTest('Modal contains historical price chart SVG', chartSvg > 0, `Found ${chartSvg} SVG elements`);
+    await page.goto(`${STOCK_DETAIL_FILE_URL}?isin=NOT-A-VALID-ISIN`, { waitUntil: 'load' });
+    recordTest('Invalid direct URL displays a clear error state', await page.locator('#stock-error').isVisible(), await page.locator('#stock-error-message').innerText());
 
-    // Test close button
-    const closeBtn = page.locator('#ai-modal-close');
-    await closeBtn.click();
-    await page.waitForTimeout(100);
-    let modalHidden = await modal.evaluate(el => el.classList.contains('hidden'));
-    recordTest('Modal closes via close button (#ai-modal-close)', modalHidden, 'Modal has "hidden" class');
-
-    // Test Escape key shortcut to close
-    await firstRow.click();
-    await page.waitForTimeout(100);
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
-    modalHidden = await modal.evaluate(el => el.classList.contains('hidden'));
-    recordTest('Modal closes via Escape key', modalHidden, 'Modal closed on Esc');
-
-    // Test backdrop click to close
-    await firstRow.click();
-    await page.waitForTimeout(100);
-    // Click on top left backdrop outside card
-    await modal.click({ position: { x: 10, y: 10 } });
-    await page.waitForTimeout(100);
-    modalHidden = await modal.evaluate(el => el.classList.contains('hidden'));
-    recordTest('Modal closes via backdrop click', modalHidden, 'Modal closed on backdrop click');
+    await page.goto(FILE_URL, { waitUntil: 'load' });
+    await page.waitForSelector('#stocks-tbody tr', { timeout: 5000 });
+    await page.locator('input[data-stocks-search="true"]').fill('RELIANCE');
+    await page.waitForTimeout(180);
+    await page.locator('#stocks-tbody tr[data-row-isin="INE002A01018"]').click();
+    await page.waitForURL(url => url.href.includes('stock.html?isin=INE002A01018'), { timeout: 5000 });
+    recordTest('Clicking the Reliance row opens the Reliance details page', await page.locator('#stock-name').innerText() === 'Reliance Industries Ltd', page.url());
+    await page.goBack();
+    await page.waitForSelector('#stocks-tbody tr', { timeout: 5000 });
 
     // -------------------------------------------------------------
     // Test 7: Keyboard Shortcut ('/' focus search)
@@ -348,13 +355,6 @@ async function runBrowserTests() {
     let tabletOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
     recordTest('Tablet (768x1024): No horizontal overflow', !tabletOverflow, `scrollWidth: ${await page.evaluate(() => document.documentElement.scrollWidth)}px`);
 
-    // Test modal scrolling on tablet
-    await firstRow.click();
-    await page.waitForTimeout(150);
-    let modalTabletCard = page.locator('#ai-modal > div');
-    let modalHasScroll = await modalTabletCard.evaluate(el => el.classList.contains('overflow-y-auto') && el.classList.contains('max-h-[90vh]'));
-    recordTest('Tablet: Modal has max-h-[90vh] and overflow-y-auto', modalHasScroll, 'Responsive modal classes active');
-
     const tabletPath = path.join(SCREENSHOT_DIR, 'tablet-768x1024.png');
     await page.screenshot({ path: tabletPath, fullPage: false });
     recordTest('Tablet screenshot captured', fs.existsSync(tabletPath), tabletPath);
@@ -367,14 +367,15 @@ async function runBrowserTests() {
     let mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
     recordTest('Mobile (390x844): No horizontal overflow', !mobileOverflow, `scrollWidth: ${await page.evaluate(() => document.documentElement.scrollWidth)}px`);
 
-    // Test modal on mobile
-    await firstRow.click();
-    await page.waitForTimeout(150);
     const mobilePath = path.join(SCREENSHOT_DIR, 'mobile-390x844.png');
     await page.screenshot({ path: mobilePath, fullPage: false });
     recordTest('Mobile screenshot captured', fs.existsSync(mobilePath), mobilePath);
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
+
+    await page.goto(`${STOCK_DETAIL_FILE_URL}?isin=INE002A01018`, { waitUntil: 'load' });
+    await page.waitForSelector('#stock-detail:not(.hidden)', { timeout: 5000 });
+    const detailMobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+    recordTest('Stock details page fits mobile width without horizontal overflow', !detailMobileOverflow, `scrollWidth: ${await page.evaluate(() => document.documentElement.scrollWidth)}px`);
+    recordTest('Mobile stock details remain visible and chart-free', await page.locator('#company-info-grid').isVisible() && await page.locator('#stock-detail svg').count() === 0, 'Company and exchange details visible');
 
     // -------------------------------------------------------------
     // Test 9: Console Errors & Network Failures

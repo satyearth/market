@@ -195,7 +195,7 @@ async function runAutoRefreshTestSuite() {
   await testAsync('Static file server serves index.html at root "/"', async () => {
     const res = await invokeMockHandler('/', 'GET');
     assert.strictEqual(res.status, 200);
-    assert(typeof res.body === 'string' && res.body.includes('Machli Bazzar'));
+    assert(typeof res.body === 'string' && res.body.includes('Machii Bazzar'));
     assert.strictEqual(res.headers['content-type'], 'text/html; charset=utf-8');
   });
 

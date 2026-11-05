@@ -1,4 +1,4 @@
-# Machli Bazzar · Indian Market Intelligence Platform
+# Machii Bazzar · Indian Market Intelligence Platform
 
 A high-performance stock screening and intelligence platform tracking 4,800+ NSE & BSE listed companies ranked by market capitalisation.
 
