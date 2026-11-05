@@ -455,7 +455,7 @@
           
           <!-- Stock Info -->
           <td class="px-2" style="padding-top:${padY};padding-bottom:${padY}">
-            <div class="flex items-center gap-2.5 min-w-0 group/link">
+            <a class="flex items-center gap-2.5 min-w-0 group/link rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}">
               ${getLogoHtml(s, 'sm')}
               <div class="min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
@@ -464,7 +464,7 @@
                 </div>
                 <div class="text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${escapeHtml(s.company_name)}">${escapeHtml(s.company_name)}</div>
               </div>
-            </div>
+            </a>
           </td>
 
           <!-- Sector -->
