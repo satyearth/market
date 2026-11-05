@@ -59,10 +59,22 @@ tr.pulse-stocks-rise {
   align-items: center !important;
   justify-content: center !important;
   flex-shrink: 0 !important;
+  background-color: var(--ink-inset, #24211c) !important;
+}
+
+.stock-logo-wrap img.company-logo-image {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 9999px !important;
+  display: block !important;
 }
 
 .stock-logo-wrap.company-logo-fallback-lg,
-.stock-logo-wrap[data-company-logo] img[width="48"] {
+.stock-logo-wrap:has(img[width="48"]),
+.stock-logo-wrap.w-\[48px\] {
   width: 48px !important;
   height: 48px !important;
   min-width: 48px !important;
