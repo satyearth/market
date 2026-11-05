@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node scripts/verify-dataset.js && node scripts/qa-frontend-audit.js && node scripts/missing-stock-audit.js && node scripts/test-new-listing-discovery.js && node scripts/test-auto-refresh.js && node scripts/test-infinite-scroll.js",
+    "test": "node scripts/build-company-logo-manifest.js && node scripts/verify-dataset.js && node scripts/qa-frontend-audit.js && node scripts/missing-stock-audit.js && node scripts/test-new-listing-discovery.js && node scripts/test-auto-refresh.js && node scripts/test-infinite-scroll.js",
     "test:verify": "node scripts/verify-dataset.js",
     "test:qa": "node scripts/qa-frontend-audit.js",
     "test:audit": "node scripts/missing-stock-audit.js",
@@ -15,9 +15,14 @@
     "test:browser": "node scripts/test-infinite-scroll.js",
     "test:logos": "node scripts/audit-logo-coverage.js",
     "sync": "node scripts/sync-stock-universe.js",
-    "test:infinite-scroll": "node scripts/test-infinite-scroll.js"
+    "test:infinite-scroll": "node scripts/test-infinite-scroll.js",
+    "lint": "eslint .",
+    "build:logos": "node scripts/build-company-logo-manifest.js"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
     "playwright": "^1.64.1"
   }
 }

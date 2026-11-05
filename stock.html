@@ -42,10 +42,13 @@
       <article id="stock-detail" class="hidden" aria-live="polite">
         <section class="rounded-xl border border-ink-rule bg-ink-card p-5 shadow-soft md:p-6">
           <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-            <div class="min-w-0">
-              <p id="stock-symbol" class="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-ink-sienna">N/A</p>
-              <h1 id="stock-name" class="mt-1 font-display text-[clamp(24px,4vw,34px)] font-semibold leading-tight tracking-[-0.02em] text-ink-ink">N/A</h1>
-              <div id="stock-exchange-badges" class="mt-3 flex flex-wrap gap-1.5"></div>
+            <div class="flex min-w-0 items-start gap-3">
+              <div id="stock-company-logo" class="pt-1"></div>
+              <div class="min-w-0">
+                <p id="stock-symbol" class="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-ink-sienna">N/A</p>
+                <h1 id="stock-name" class="mt-1 font-display text-[clamp(24px,4vw,34px)] font-semibold leading-tight tracking-[-0.02em] text-ink-ink">N/A</h1>
+                <div id="stock-exchange-badges" class="mt-3 flex flex-wrap gap-1.5"></div>
+              </div>
             </div>
             <div class="sm:min-w-[190px] sm:text-right">
               <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Latest available price</p>
@@ -76,6 +79,8 @@
   </main>
 
   <script src="./js/stocks-data.js"></script>
+  <script src="./js/company-logo-manifest.js"></script>
+  <script src="./js/company-logo.js"></script>
   <script src="./js/stock-details.js"></script>
 </body>
 </html>
