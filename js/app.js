@@ -1,4 +1,4 @@
-/* machli bazarr - Client Application Logic */
+/* machii bazzar - Client Application Logic */
 
 (function () {
   'use strict';
@@ -56,9 +56,6 @@
   const paginationControls = document.getElementById('pagination-controls');
   const filterButtons = document.querySelectorAll('.filter-pill-btn');
   const densityToggleBtn = document.getElementById('density-toggle-btn');
-  const aiModal = document.getElementById('ai-modal');
-  const aiModalContent = document.getElementById('ai-modal-content');
-  const aiModalClose = document.getElementById('ai-modal-close');
 
   // Security Helper: HTML Entity Escaping against XSS
   function escapeHtml(str) {
@@ -154,7 +151,7 @@
   }
 
   // Exchange badges helper for NSE, BSE and SME
-  function getExchangeBadgesHtml(stock, isModal = false) {
+  function getExchangeBadgesHtml(stock) {
     const badges = [];
     const exchanges = stock.exchanges || [];
     const isDual = exchanges.includes('NSE') && exchanges.includes('BSE');
@@ -162,9 +159,7 @@
     const isBseOnly = exchanges.includes('BSE') && !exchanges.includes('NSE');
     const isSme = stock.segment === 'SME';
 
-    const pillClass = isModal
-      ? 'px-1.5 py-0.5 rounded text-[10px] font-mono font-bold leading-none'
-      : 'px-1 py-0.5 rounded text-[8.5px] font-mono font-medium leading-none';
+    const pillClass = 'px-1 py-0.5 rounded text-[8.5px] font-mono font-medium leading-none';
 
     if (isDual) {
       badges.push(`<span class="${pillClass} bg-ink-inset text-ink-muted border border-ink-rule" title="Listed on NSE and BSE">NSE</span>`);
@@ -342,99 +337,6 @@
     `;
   }
 
-  // Generate genuine 6-session chronological price chart for Stock Details Modal
-  function createModalHistoricalChart(stock) {
-    const history = stock.historical_prices;
-    if (!history || !Array.isArray(history) || history.length < 2) {
-      return `
-        <div class="border border-ink-rule rounded-xl p-4 mb-3.5 bg-ink-paper">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Historical Daily Trend</span>
-            <span class="text-[10px] font-mono text-ink-faint">6 Consecutive Sessions</span>
-          </div>
-          <div class="py-6 text-center text-xs text-ink-muted">
-            Historical daily session closes are not available for this newly listed or inactive security.
-          </div>
-        </div>
-      `;
-    }
-
-    const prices = history.map(h => typeof h === 'object' && h !== null ? h.close : h);
-    const dates = history.map(h => typeof h === 'object' && h !== null ? h.date : '');
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const first = prices[0];
-    const last = prices[prices.length - 1];
-    const isPositive = last >= first;
-    const strokeColor = isPositive ? '#1a8a4a' : '#c42b2b';
-    const fillColor = isPositive ? 'rgba(26, 138, 74, 0.12)' : 'rgba(196, 43, 43, 0.12)';
-
-    const w = 460;
-    const h = 110;
-    const padTop = 18;
-    const padBottom = 22;
-    const padLeft = 24;
-    const padRight = 24;
-    const drawW = w - padLeft - padRight;
-    const drawH = h - padTop - padBottom;
-
-    const coords = prices.map((p, i) => {
-      const x = (padLeft + (i / (prices.length - 1)) * drawW).toFixed(1);
-      const y = max === min
-        ? (h / 2).toFixed(1)
-        : (padTop + ((max - p) / (max - min)) * drawH).toFixed(1);
-      return { x, y, price: p, date: dates[i] };
-    });
-
-    const pointsStr = coords.map(c => `${c.x},${c.y}`).join(' ');
-    const fillStr = `${coords[0].x},${h - padBottom} ${pointsStr} ${coords[coords.length - 1].x},${h - padBottom}`;
-
-    // SVG Points and Labels
-    const markers = coords.map((c, i) => {
-      const displayDt = c.date ? c.date.slice(5) : `S${i + 1}`;
-      const showPriceLabel = i === 0 || i === coords.length - 1 || c.price === max || c.price === min;
-      const labelY = Number(c.y) < 32 ? Number(c.y) + 12 : Number(c.y) - 6;
-      return `
-        <g class="chart-point-group">
-          <circle cx="${c.x}" cy="${c.y}" r="3.5" fill="${strokeColor}" stroke="#171614" stroke-width="1.5" />
-          ${showPriceLabel ? `<text x="${c.x}" y="${labelY}" fill="#d1cfc7" font-size="9" font-family="monospace" text-anchor="middle" font-weight="600">₹${c.price.toLocaleString('en-IN')}</text>` : ''}
-          <text x="${c.x}" y="${h - 4}" fill="#78756d" font-size="8.5" font-family="monospace" text-anchor="middle">${displayDt}</text>
-        </g>
-      `;
-    }).join('');
-
-    const ret1wStr = stock.return_1w != null
-      ? `${stock.return_1w > 0 ? '+' : ''}${stock.return_1w.toFixed(2)}%`
-      : '—';
-
-    return `
-      <div class="border border-ink-rule rounded-xl p-3.5 mb-3.5 bg-ink-paper">
-        <div class="flex items-center justify-between mb-1.5">
-          <div>
-            <span class="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Historical Daily Trend (${history.length} Sessions)</span>
-            <span class="text-[10px] text-ink-faint block mt-0.5">${dates[0]} → ${dates[dates.length - 1]}</span>
-          </div>
-          <div class="text-right">
-            <span class="font-mono text-xs font-semibold ${isPositive ? 'text-ink-bullish' : 'text-ink-bearish'}">${ret1wStr}</span>
-            <span class="text-[10px] text-ink-muted block">1W Session Return</span>
-          </div>
-        </div>
-        <div class="w-full overflow-hidden flex justify-center pt-1">
-          <svg class="w-full max-w-[480px] h-[110px] overflow-visible" viewBox="0 0 460 110">
-            <!-- Grid baseline -->
-            <line x1="${padLeft}" y1="${h - padBottom}" x2="${w - padRight}" y2="${h - padBottom}" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
-            <!-- Area fill -->
-            <polygon points="${fillStr}" fill="${fillColor}" />
-            <!-- Line path -->
-            <polyline fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pointsStr}" />
-            <!-- Data markers and date labels -->
-            ${markers}
-          </svg>
-        </div>
-      </div>
-    `;
-  }
-
   // Filter & Search Logic
   function applyFilters() {
     let result = [...STOCKS_DATA];
@@ -548,7 +450,7 @@
       const volWidth = Math.min(100, Math.max(10, ((s.volume_ratio || 1) / 2.5) * 100));
 
       return `
-        <tr data-row-isin="${escapeHtml(s.isin)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
+        <tr data-row-isin="${escapeHtml(s.isin)}" tabindex="0" aria-label="Open details for ${escapeHtml(s.company_name || s.symbol)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna focus-visible:outline-offset-[-1px] pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
           <td class="text-right text-[13px] text-ink-muted px-2 tabular-nums" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
           
           <!-- Stock Info -->
@@ -558,7 +460,7 @@
               <div class="min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <span class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>
-                  ${getExchangeBadgesHtml(s, false)}
+                  ${getExchangeBadgesHtml(s)}
                 </div>
                 <div class="text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${escapeHtml(s.company_name)}">${escapeHtml(s.company_name)}</div>
               </div>
@@ -617,9 +519,9 @@
           <!-- Action Button -->
           <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px">
             <span class="inline-flex items-center gap-0.5 opacity-0 translate-x-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0">
-              <button class="ai-insight-btn w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" data-isin="${escapeHtml(s.isin)}" title="View intelligence and details for ${escapeHtml(s.symbol)}">
-                ✦
-              </button>
+              <a class="stock-details-link w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">
+                ↗
+              </a>
             </span>
           </td>
         </tr>
@@ -710,157 +612,6 @@
     }
   }
 
-  // Open Stock Intelligence Modal (Keyed on ISIN to prevent collisions across duplicate symbols)
-  function openStockModal(isin) {
-    const stock = STOCKS_DATA.find(s => s.isin === isin);
-    if (!stock || !aiModal || !aiModalContent) return;
-
-    const isPos = (stock.change_percent || 0) >= 0;
-    const chgClass = isPos ? 'text-ink-bullish' : 'text-ink-bearish';
-    const chgArrow = isPos ? '▲' : '▼';
-
-    aiModalContent.innerHTML = `
-      <!-- Modal Header -->
-      <div class="flex items-start justify-between pb-3.5 border-b border-ink-rule pr-8">
-        <div class="flex items-center gap-3">
-          ${getLogoHtml(stock, 'lg')}
-          <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <h2 class="font-display text-xl font-bold text-ink-ink">${escapeHtml(stock.symbol)}</h2>
-              ${getExchangeBadgesHtml(stock, true)}
-              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-ink-inset text-ink-muted uppercase">${escapeHtml(stock.sector || 'GENERAL')}</span>
-            </div>
-            <p class="text-xs text-ink-muted mt-0.5 max-w-[340px] truncate" title="${escapeHtml(stock.company_name)}">${escapeHtml(stock.company_name)}</p>
-          </div>
-        </div>
-        <div class="text-right flex-shrink-0">
-          <div class="font-mono text-lg font-bold text-ink-ink">${formatCurrency(stock.current_price)}</div>
-          <div class="font-mono text-xs font-semibold ${chgClass}">${chgArrow} ${formatPercent(stock.change_percent)}</div>
-          <div class="font-mono text-[10px] text-ink-muted mt-0.5">Prev: ${stock.prev_close != null ? '₹' + Number(stock.prev_close).toFixed(2) : '—'}</div>
-        </div>
-      </div>
-
-      <!-- Security Identifiers Strip -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 py-2.5 px-3 my-3 bg-ink-inset rounded-lg border border-ink-rule/60 text-[11px] font-mono">
-        <div>
-          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">ISIN</span>
-          <span class="text-ink-ink select-all font-semibold">${escapeHtml(stock.isin)}</span>
-        </div>
-        <div>
-          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">BSE Scrip Code</span>
-          <span class="text-ink-ink select-all font-semibold">${escapeHtml(stock.bse_scrip_code || '—')}</span>
-        </div>
-        <div>
-          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">NSE Symbol</span>
-          <span class="text-ink-ink select-all font-semibold">${escapeHtml(stock.nse_symbol || '—')}</span>
-        </div>
-        <div>
-          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Segment / Series</span>
-          <span class="text-ink-ink font-semibold">${escapeHtml(stock.series ? stock.series + ' · ' : '')}${escapeHtml(stock.segment || 'Mainboard')}</span>
-        </div>
-      </div>
-
-      <!-- Day EOD Range Strip -->
-      <div class="grid grid-cols-3 gap-2 py-2 px-3 my-2.5 bg-ink-paper rounded-lg border border-ink-rule/50 text-[11px] font-mono">
-        <div>
-          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Day Open</span>
-          <span class="text-ink-ink font-semibold">${stock.open_price != null ? '₹' + Number(stock.open_price).toLocaleString('en-IN') : '—'}</span>
-        </div>
-        <div>
-          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Day High</span>
-          <span class="text-ink-bullish font-semibold">${stock.high_price != null ? '₹' + Number(stock.high_price).toLocaleString('en-IN') : '—'}</span>
-        </div>
-        <div>
-          <span class="text-[9px] uppercase tracking-wider text-ink-muted block">Day Low</span>
-          <span class="text-ink-bearish font-semibold">${stock.low_price != null ? '₹' + Number(stock.low_price).toLocaleString('en-IN') : '—'}</span>
-        </div>
-      </div>
-
-      <!-- Quick Metrics Grid -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 my-3">
-        <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
-          <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">Market Cap</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink block">${formatMarketCap(stock.market_cap_cr)}</span>
-          <span class="text-[10px] text-ink-muted truncate block mt-0.5" title="${escapeHtml(stock.verified_rank_tier || 'Unranked')}">${stock.rank != null ? '#' + stock.rank + ' · ' + escapeHtml(stock.verified_rank_tier) : escapeHtml(stock.verified_rank_tier || 'Unranked')}</span>
-        </div>
-        <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
-          <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">Traded Volume</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink block">${stock.volume != null ? stock.volume.toLocaleString('en-IN') : '—'}</span>
-          <span class="text-[10px] text-ink-muted block mt-0.5">Ratio: ${stock.volume_ratio != null ? stock.volume_ratio + 'x avg' : '—'}</span>
-        </div>
-        <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
-          <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">52W High / Low</span>
-          <span class="font-mono text-xs font-semibold text-ink-ink block truncate">${stock.week52_high != null ? 'H: ₹' + stock.week52_high.toLocaleString('en-IN') : '—'}</span>
-          <span class="font-mono text-[10px] text-ink-muted block truncate mt-0.5">${stock.week52_low != null ? 'L: ₹' + stock.week52_low.toLocaleString('en-IN') : '—'}</span>
-        </div>
-        <div class="bg-ink-well border border-ink-rule rounded-xl p-3">
-          <span class="text-[10px] uppercase font-bold tracking-wider text-ink-muted block">P/E Ratio</span>
-          <span class="font-mono text-sm font-semibold text-ink-ink block">${stock.pe_ratio != null ? stock.pe_ratio : '—'}</span>
-          <span class="text-[10px] text-ink-muted block mt-0.5">ROCE: ${stock.roce != null ? stock.roce + '%' : '—'}</span>
-        </div>
-      </div>
-
-      <!-- Historical Price Chart (Section 5) -->
-      ${createModalHistoricalChart(stock)}
-
-      <!-- Multi-Period Performance Returns -->
-      <div class="border border-ink-rule rounded-xl p-3 mb-3 bg-ink-well">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">Multi-Period Performance Returns</span>
-          <span class="text-[9px] font-mono text-ink-faint">EOD Bhavcopy Verified</span>
-        </div>
-        <div class="grid grid-cols-4 gap-2 text-center">
-          <div class="p-2 rounded bg-ink-paper border border-ink-rule/50">
-            <span class="text-[9.5px] text-ink-muted block font-medium">1 Week (6D)</span>
-            <span class="font-mono text-xs font-semibold ${getReturnColorClass(stock.return_1w)}">${formatPercent(stock.return_1w)}</span>
-            <span class="text-[8px] text-ink-faint block mt-0.5">${stock.return_1w_session_start ? stock.return_1w_session_start.slice(5) + ' → ' + stock.return_1w_session_end.slice(5) : 'Verified'}</span>
-          </div>
-          <div class="p-2 rounded bg-ink-paper border border-ink-rule/50">
-            <span class="text-[9.5px] text-ink-muted block font-medium">1 Month</span>
-            <span class="font-mono text-xs font-semibold text-ink-muted">—</span>
-            <span class="text-[8px] text-ink-faint block mt-0.5">Archive unavail.</span>
-          </div>
-          <div class="p-2 rounded bg-ink-paper border border-ink-rule/50">
-            <span class="text-[9.5px] text-ink-muted block font-medium">3 Months</span>
-            <span class="font-mono text-xs font-semibold text-ink-muted">—</span>
-            <span class="text-[8px] text-ink-faint block mt-0.5">Archive unavail.</span>
-          </div>
-          <div class="p-2 rounded bg-ink-paper border border-ink-rule/50">
-            <span class="text-[9.5px] text-ink-muted block font-medium">1 Year</span>
-            <span class="font-mono text-xs font-semibold text-ink-muted">—</span>
-            <span class="text-[8px] text-ink-faint block mt-0.5">Archive unavail.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- AI Analysis Summary -->
-      <div class="bg-ink-paper border border-ink-rule rounded-xl p-3.5">
-        <div class="flex items-center gap-1.5 text-ink-sienna text-xs font-bold uppercase tracking-wider mb-1.5">
-          <span>✦</span>
-          <span>machli bazarr Market Intelligence</span>
-        </div>
-        <p class="text-xs text-ink-text leading-relaxed">
-          <strong>${escapeHtml(stock.symbol)}</strong> (${escapeHtml(stock.company_name)}) is currently positioned at 
-          ${stock.rank != null ? `Rank #${stock.rank} (${escapeHtml(stock.verified_rank_tier)})` : escapeHtml(stock.verified_rank_tier || 'Unranked')} 
-          in the Indian equity universe. Traded at <span class="font-mono font-bold text-ink-ink">${formatCurrency(stock.current_price)}</span> 
-          with a 1-week return of <span class="${getReturnColorClass(stock.return_1w)} font-mono font-bold">${formatPercent(stock.return_1w)}</span> 
-          and volume tracking at <span class="font-mono font-bold text-ink-ink">${stock.volume_ratio != null ? stock.volume_ratio + 'x' : '—'}</span> 
-          average. The security is listed on <strong>${escapeHtml(stock.exchanges ? stock.exchanges.join(' and ') : 'NSE/BSE')}</strong> 
-          under the <strong>${escapeHtml(stock.sector || stock.segment || 'General')}</strong> sector.
-        </p>
-      </div>
-    `;
-
-    aiModal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeAiModal() {
-    if (!aiModal) return;
-    aiModal.classList.add('hidden');
-    document.body.style.overflow = '';
-  }
-
   // Setup Event Listeners
   function setupEvents() {
     // Search input with debounce
@@ -883,8 +634,6 @@
           searchInput.focus();
           searchInput.select();
         }
-      } else if (e.key === 'Escape') {
-        closeAiModal();
       }
     });
 
@@ -953,33 +702,24 @@
       });
     });
 
-    // Event delegation on tbody for row clicks and AI insight button
+    // Event delegation keeps stock navigation working as rows are re-rendered.
     if (tbody) {
       tbody.addEventListener('click', (e) => {
-        const btn = e.target.closest('.ai-insight-btn');
-        if (btn) {
-          e.stopPropagation();
-          const isin = btn.getAttribute('data-isin');
-          if (isin) openStockModal(isin);
-          return;
-        }
-
         const row = e.target.closest('tr[data-row-isin]');
         if (row) {
           if (e.target.closest('button') || e.target.closest('a')) return;
           const isin = row.getAttribute('data-row-isin');
-          if (isin) openStockModal(isin);
+          if (isin) window.location.href = `./stock.html?isin=${encodeURIComponent(isin)}`;
         }
       });
-    }
 
-    // Modal Close
-    if (aiModalClose) {
-      aiModalClose.addEventListener('click', closeAiModal);
-    }
-    if (aiModal) {
-      aiModal.addEventListener('click', (e) => {
-        if (e.target === aiModal) closeAiModal();
+      tbody.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const row = e.target.closest('tr[data-row-isin]');
+        if (!row || e.target.closest('button, a')) return;
+        e.preventDefault();
+        const isin = row.getAttribute('data-row-isin');
+        if (isin) window.location.href = `./stock.html?isin=${encodeURIComponent(isin)}`;
       });
     }
   }

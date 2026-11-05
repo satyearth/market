@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stock Details | Machii Bazzar</title>
+  <meta name="application-name" content="Machii Bazzar">
+  <meta name="theme-color" content="#171614">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/stock-details.css">
+</head>
+<body class="bg-ink-bg text-ink-text font-ui antialiased selection:bg-ink-sienna selection:text-white min-h-screen flex flex-col">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-ink-sienna focus:text-white focus:text-sm focus:font-medium">Skip to main content</a>
+
+  <header class="sticky top-0 z-50 w-full border-b border-ink-rule bg-ink-bg/[0.94] backdrop-blur-[16px] supports-[backdrop-filter]:bg-ink-bg/[0.94]">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
+      <a class="flex items-baseline whitespace-nowrap group" href="./index.html" aria-label="Machii Bazzar Home">
+        <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-ink lg:text-[28px] transition-colors group-hover:text-ink-sienna">machii</span>
+        <span class="font-display text-[26px] font-extrabold leading-none text-ink-sienna lg:text-[28px]">·</span>
+        <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-sienna lg:text-[28px]">bazzar</span>
+      </a>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-ui text-[11px] uppercase tracking-[0.06em] font-semibold bg-ink-well text-ink-sienna border border-ink-rule shadow-soft">Stock Details</span>
+    </div>
+  </header>
+
+  <main id="main-content" class="flex-1 py-7 md:py-10">
+    <div class="stock-detail-shell">
+      <a href="./index.html" class="inline-flex items-center gap-2 text-xs font-semibold text-ink-muted hover:text-ink-sienna transition-colors mb-5">← <span>All stocks</span></a>
+
+      <div id="stock-loading" class="rounded-xl border border-ink-rule bg-ink-card px-4 py-5 text-sm text-ink-muted" role="status">Loading stock details…</div>
+
+      <section id="stock-error" class="hidden rounded-xl border border-ink-rule bg-ink-card px-5 py-6" role="alert" aria-live="assertive">
+        <h1 class="font-display text-xl font-semibold text-ink-ink">Stock details unavailable</h1>
+        <p id="stock-error-message" class="mt-2 text-sm text-ink-muted">The requested stock could not be found in the available dataset.</p>
+        <a href="./index.html" class="mt-4 inline-flex rounded-full border border-ink-rule bg-ink-well px-3.5 py-2 text-xs font-semibold text-ink-sienna hover:border-ink-sienna">Return to all stocks</a>
+      </section>
+
+      <article id="stock-detail" class="hidden" aria-live="polite">
+        <section class="rounded-xl border border-ink-rule bg-ink-card p-5 shadow-soft md:p-6">
+          <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <p id="stock-symbol" class="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-ink-sienna">N/A</p>
+              <h1 id="stock-name" class="mt-1 font-display text-[clamp(24px,4vw,34px)] font-semibold leading-tight tracking-[-0.02em] text-ink-ink">N/A</h1>
+              <div id="stock-exchange-badges" class="mt-3 flex flex-wrap gap-1.5"></div>
+            </div>
+            <div class="sm:min-w-[190px] sm:text-right">
+              <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Latest available price</p>
+              <p id="stock-price" class="mt-1 font-mono text-[25px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">N/A</p>
+              <p id="stock-change" class="mt-1 font-mono text-xs font-semibold tabular-nums">N/A</p>
+              <p id="stock-price-date" class="mt-2 text-[10px] text-ink-muted">EOD close · N/A</p>
+            </div>
+          </div>
+          <p id="market-data-status" class="mt-4 border-t border-ink-rule pt-3 text-[10px] leading-relaxed text-ink-faint" role="status" aria-live="polite">Checking market data status…</p>
+        </section>
+
+        <section class="mt-4 rounded-xl border border-ink-rule bg-ink-card p-5 shadow-soft md:p-6" aria-labelledby="company-info-title">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 id="company-info-title" class="font-display text-lg font-semibold text-ink-ink">Company information</h2>
+            <span id="stock-listing-status" class="rounded-full border border-ink-rule bg-ink-well px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-ink-muted">N/A</span>
+          </div>
+          <dl id="company-info-grid" class="stock-detail-grid"></dl>
+        </section>
+
+        <section class="mt-4 rounded-xl border border-ink-rule bg-ink-card p-5 shadow-soft md:p-6" aria-labelledby="exchange-info-title">
+          <h2 id="exchange-info-title" class="font-display text-lg font-semibold text-ink-ink">Exchange listings</h2>
+          <div id="exchange-listings" class="mt-3"></div>
+        </section>
+      </article>
+    </div>
+  </main>
+
+  <script src="./js/stocks-data.js"></script>
+  <script src="./js/stock-details.js"></script>
+</body>
+</html>

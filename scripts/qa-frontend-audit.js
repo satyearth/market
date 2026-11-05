@@ -8,8 +8,8 @@
  * 4. Pagination Windowing & Bounds
  * 5. Market Pulse Data Binding
  * 6. Exchange Badges & Deduplication (Zero Collisions on Duplicate Symbols)
- * 7. Stock Details Modal & Identifiers (Dual, NSE-only, BSE-only, SME, Unranked, Incomplete History)
- * 8. Genuine Historical Price Chart Verification (Date-to-Price Mapping, Chronological, No Synthetic Waves)
+ * 7. Stock Details Page & Identifiers (ISIN routing, dual, NSE-only, BSE-only, SME)
+ * 8. Historical Price Data Integrity (Date-to-Price Mapping, Chronological, No Synthetic Data)
  * 9. Asset 404 Prevention (Zero Missing Logo Requests)
  * 10. Performance & Memory Management (Event Delegation & Sub-5ms Filter Execution)
  */
@@ -25,10 +25,16 @@ console.log('================================================================\n'
 const dataPath = path.join(__dirname, '..', 'js', 'stocks-data.js');
 const appPath = path.join(__dirname, '..', 'js', 'app.js');
 const indexPath = path.join(__dirname, '..', 'index.html');
+const detailPath = path.join(__dirname, '..', 'stock.html');
+const detailScriptPath = path.join(__dirname, '..', 'js', 'stock-details.js');
+const detailStylesPath = path.join(__dirname, '..', 'css', 'stock-details.css');
 
 const dataContent = fs.readFileSync(dataPath, 'utf-8');
 const appContent = fs.readFileSync(appPath, 'utf-8');
 const indexContent = fs.readFileSync(indexPath, 'utf-8');
+const detailContent = fs.readFileSync(detailPath, 'utf-8');
+const detailScriptContent = fs.readFileSync(detailScriptPath, 'utf-8');
+const detailStylesContent = fs.readFileSync(detailStylesPath, 'utf-8');
 
 const matchData = dataContent.match(/const STOCKS_DATA = (\[[\s\S]*?\]);\s*$/);
 const matchStats = dataContent.match(/const MARKET_STATS = (\{[\s\S]*?\});/);
@@ -173,7 +179,13 @@ const gstlMatches = STOCKS_DATA.filter(s => s.symbol === dupeSym);
 assert(gstlMatches.length === 2, 'GSTL exists on both NSE and BSE as two distinct companies', `Count: ${gstlMatches.length}`);
 assert(gstlMatches[0].isin !== gstlMatches[1].isin, 'Duplicate symbol scrips have completely distinct ISINs', `${gstlMatches[0].isin} vs ${gstlMatches[1].isin}`);
 assert(appContent.includes('data-row-isin="${escapeHtml(s.isin)}"'), 'Table rows in app.js are keyed on ISIN, preventing symbol collisions');
-assert(appContent.includes('openStockModal(isin)'), 'Modal opener in app.js is keyed on ISIN, preventing symbol collisions');
+assert(appContent.includes('./stock.html?isin='), 'Stock rows link to the dedicated page by ISIN');
+assert(appContent.includes('window.location.href = `./stock.html?isin=${encodeURIComponent(isin)}`'), 'Clicking a stock row navigates using its canonical ISIN');
+assert(appContent.includes("tbody.addEventListener('keydown'"), 'Stock rows support keyboard navigation');
+assert(!appContent.includes('openStockModal'), 'The modal-based stock opener has been removed');
+assert(detailScriptContent.includes("item.isin || '').toUpperCase() === isin.trim().toUpperCase()"), 'Detail page resolves records by ISIN, case-insensitively');
+assert(STOCKS_DATA.every(s => s.isin && s.isin.length === 12), 'Every dataset stock has a canonical 12-character ISIN');
+assert(STOCKS_DATA.filter(s => s.symbol === 'GSTL').every(s => detailScriptContent.includes('item.isin')), 'Detail lookup uses ISIN to disambiguate duplicate symbols');
 
 // -------------------------------------------------------------
 // SECTION 3: STOCK DATA DISPLAY & NULL INTEGRITY
@@ -247,9 +259,9 @@ assert(MARKET_STATS.near52WeekHighPct === 0.7, 'Card: Near 52W high percentage i
 assert(MARKET_STATS.near52WeekHighStatus && MARKET_STATS.near52WeekHighStatus.includes('2026-11-04'), 'Card: Near 52W high status verifies 2026-11-04 session match');
 
 // -------------------------------------------------------------
-// SECTION 5: HISTORICAL PRICE CHART & DATES
+// SECTION 5: HISTORICAL PRICE DATA PRESERVATION
 // -------------------------------------------------------------
-console.log('\n[Section 5: Historical Price Chart & Dates]');
+console.log('\n[Section 5: Historical Price Data Preservation]');
 
 const reliance = STOCKS_DATA.find(s => s.symbol === 'RELIANCE');
 assert(reliance.historical_prices.length === 6, 'RELIANCE has 6 historical session records');
@@ -258,9 +270,9 @@ const dates = reliance.historical_prices.map(p => p.date);
 const expectedDates = ['2026-10-28', '2026-10-29', '2026-10-30', '2026-11-02', '2026-11-03', '2026-11-04'];
 assert(JSON.stringify(dates) === JSON.stringify(expectedDates), 'Dates are strictly chronological 6 sessions', dates.join(', '));
 
-// Verify that app.js modal chart uses genuine prices and dates
-assert(appContent.includes('createModalHistoricalChart'), 'app.js includes dedicated createModalHistoricalChart generator');
-assert(appContent.includes('Historical daily session closes are not available'), 'app.js handles missing historical sessions gracefully');
+// The new details page intentionally has no historical chart.
+assert(!detailContent.includes('<svg'), 'Dedicated stock details page contains no chart SVG');
+assert(!detailScriptContent.includes('<svg'), 'Stock detail renderer does not generate charts');
 assert(!appContent.includes('Math.sin'), 'Zero synthetic sine waves in sparklines or charts');
 assert(!appContent.includes('seed %'), 'Zero pseudo-random seed equations in sparklines or charts');
 
@@ -289,10 +301,15 @@ assert(indexContent.includes('Browse 5,389 Indian equities'), 'index.html meta d
 // -------------------------------------------------------------
 console.log('\n[Section 7: Responsive Layout, Security & Performance]');
 
-assert(indexContent.includes('max-h-[90vh] overflow-y-auto'), 'Modal has max-h-[90vh] overflow-y-auto to guarantee responsive scrolling');
-assert(indexContent.includes('aria-label="Close stock details modal"'), 'Modal close button has explicit aria-label for accessibility');
+assert(!indexContent.includes('ai-modal'), 'Homepage no longer contains the stock details modal');
+assert(detailContent.includes('id="stock-detail"'), 'Dedicated details page includes its content region');
+assert(detailContent.includes('id="stock-error"'), 'Dedicated details page includes an error state');
+assert(detailContent.includes('id="stock-loading"'), 'Dedicated details page includes a loading state');
+assert(detailContent.includes('EOD close'), 'Dedicated details page labels prices as EOD');
+assert(detailScriptContent.includes('/api/market/status'), 'Dedicated details page reuses the existing market status API');
+assert(detailStylesContent.includes('@media (max-width: 520px)'), 'Details layout collapses to one column on mobile');
 assert(appContent.includes('function escapeHtml('), 'app.js implements escapeHtml() for bulletproof XSS protection');
-assert(appContent.includes('tbody.addEventListener(\'click\''), 'tbody uses event delegation for row and button clicks');
+assert(appContent.includes('tbody.addEventListener(\'click\''), 'tbody uses event delegation for stock row navigation');
 assert(appContent.includes('searchDebounceTimer'), 'Search input uses debouncing for smooth UI performance');
 
 // Benchmark search filtering execution time
