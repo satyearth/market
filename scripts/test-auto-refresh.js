@@ -176,7 +176,15 @@ async function runAutoRefreshTestSuite() {
   });
 
   await testAsync('POST /api/market/refresh returns up_to_date without running redundant sync', async () => {
-    const res = await invokeMockHandler('/api/market/refresh', 'POST');
+    const NativeDate = Date;
+    const fixedNow = new NativeDate('2026-11-05T04:00:00+05:30').getTime();
+    global.Date = class FixedDate extends NativeDate {
+      constructor(...args) { super(...(args.length ? args : [fixedNow])); }
+      static now() { return fixedNow; }
+    };
+    let res;
+    try { res = await invokeMockHandler('/api/market/refresh', 'POST'); }
+    finally { global.Date = NativeDate; }
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.ok, true);
     assert.strictEqual(res.body.status, 'up_to_date');
@@ -210,20 +218,8 @@ async function runAutoRefreshTestSuite() {
 
   const htmlContent = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf-8');
 
-  test('index.html contains #eod-sync-indicator container', () => {
-    assert(htmlContent.includes('id="eod-sync-indicator"'), 'Must have #eod-sync-indicator');
-  });
-
-  test('index.html contains #eod-sync-dot element', () => {
-    assert(htmlContent.includes('id="eod-sync-dot"'), 'Must have #eod-sync-dot');
-  });
-
-  test('index.html contains #eod-sync-text element', () => {
-    assert(htmlContent.includes('id="eod-sync-text"'), 'Must have #eod-sync-text');
-  });
-
-  test('index.html contains #eod-sync-time element', () => {
-    assert(htmlContent.includes('id="eod-sync-time"'), 'Must have #eod-sync-time');
+  test('index.html keeps the requested EOD status badge removed from the listing header', () => {
+    assert(!htmlContent.includes('id="eod-sync-indicator"'), 'The status badge was removed from the homepage header');
   });
 
   test('index.html status indicator conforms to ink theme classes', () => {
