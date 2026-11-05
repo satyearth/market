@@ -37,9 +37,12 @@
     return `${Array.from(words[0])[0]}${Array.from(words[1])[0]}`.toUpperCase();
   }
 
-  function fallbackMarkup(name, size, label) {
+  function fallbackMarkup(name, size, label, isin) {
     const isLarge = size === 'lg';
-    return `<span class="stock-logo-wrap ${label} inline-flex ${isLarge ? 'h-11 w-11 rounded-lg text-[13px]' : 'h-6 w-6 rounded-md text-[9px]'} shrink-0 items-center justify-center overflow-hidden border border-ink-rule bg-ink-inset font-ui font-semibold uppercase leading-none tracking-[0.01em] text-ink-muted" aria-hidden="true">${escapeHtml(initials(name))}</span>`;
+    const dims = isLarge
+      ? 'w-[48px] h-[48px] min-w-[48px] min-h-[48px] text-[14px]'
+      : 'w-[32px] h-[32px] min-w-[32px] min-h-[32px] text-[11px]';
+    return `<span class="stock-logo-wrap company-logo-fallback ${label} relative inline-flex ${dims} shrink-0 items-center justify-center overflow-hidden rounded-full border border-ink-rule bg-ink-inset font-ui font-semibold uppercase leading-none tracking-[0.01em] text-ink-muted select-none" data-company-logo="${escapeHtml(isin || '')}" aria-hidden="true">${escapeHtml(initials(name))}</span>`;
   }
 
   function render(options) {
@@ -54,26 +57,40 @@
       ? suppliedRecord
       : auditedRecord;
     const url = record && record[0] > 0 ? record[1] : '';
-    if (!url || failedIsins.has(isin)) return fallbackMarkup(name, size, label);
+    if (!url || failedIsins.has(isin)) return fallbackMarkup(name, size, label, isin);
 
-    const box = size === 'lg'
-      ? 'h-11 w-11 rounded-lg border-ink-rule bg-ink-paper'
-      : 'h-6 w-6 rounded-md border-ink-rule bg-ink-paper';
+    const dims = size === 'lg'
+      ? 'w-[48px] h-[48px] min-w-[48px] min-h-[48px]'
+      : 'w-[32px] h-[32px] min-w-[32px] min-h-[32px]';
     const alt = escapeHtml(name ? `${name} logo` : 'Company logo');
-    return `<span class="stock-logo-wrap relative inline-flex ${box} shrink-0 items-center justify-center overflow-hidden border" data-company-logo="${escapeHtml(isin)}"><img class="company-logo-image block h-full w-full object-contain" src="${escapeHtml(url)}" alt="${alt}" data-logo-isin="${escapeHtml(isin)}" loading="${size === 'lg' ? 'eager' : 'lazy'}" decoding="async" width="${size === 'lg' ? 44 : 24}" height="${size === 'lg' ? 44 : 24}">${fallbackMarkup(name, size, `${label} hidden`)}</span>`;
+    const imgSize = size === 'lg' ? 48 : 32;
+
+    return `<span class="stock-logo-wrap relative inline-flex ${dims} shrink-0 items-center justify-center overflow-hidden rounded-full border border-ink-rule bg-white" data-company-logo="${escapeHtml(isin)}"><img class="company-logo-image block size-full object-contain p-1 bg-white" src="${escapeHtml(url)}" alt="${alt}" data-logo-isin="${escapeHtml(isin)}" loading="${size === 'lg' ? 'eager' : 'lazy'}" decoding="async" width="${imgSize}" height="${imgSize}" onload="var f=this.nextElementSibling;if(f){f.remove();}" onerror="if(window.CompanyLogo&&window.CompanyLogo.handleFailure){window.CompanyLogo.handleFailure({target:this});}"><span class="${label} hidden absolute inset-0 flex size-full items-center justify-center rounded-full bg-ink-inset font-ui ${size === 'lg' ? 'text-[14px]' : 'text-[11px]'} font-semibold uppercase leading-none tracking-[0.01em] text-ink-muted select-none" aria-hidden="true">${escapeHtml(initials(name))}</span></span>`;
   }
 
   function handleFailure(event) {
-    const image = event.target;
+    const image = event && event.target;
     if (!image || !image.matches || !image.matches('img[data-logo-isin]')) return;
     const isin = image.getAttribute('data-logo-isin');
     rememberFailure(isin);
-    image.hidden = true;
-    const fallback = image.nextElementSibling;
-    if (fallback) fallback.classList.remove('hidden');
+    const parent = image.parentElement;
+    image.remove();
+    if (parent) {
+      parent.classList.remove('bg-white');
+      let fallback = parent.querySelector('.company-logo-fallback');
+      if (!fallback) {
+        const name = image.getAttribute('alt') || '';
+        fallback = document.createElement('span');
+        fallback.className = 'company-logo-fallback flex size-full items-center justify-center rounded-full bg-ink-inset font-ui text-[11px] font-semibold uppercase leading-none tracking-[0.01em] text-ink-muted select-none';
+        fallback.textContent = initials(name);
+        parent.appendChild(fallback);
+      }
+      fallback.classList.remove('hidden');
+      fallback.style.display = '';
+    }
   }
 
   readFailures();
   if (global.document) global.document.addEventListener('error', handleFailure, true);
-  global.CompanyLogo = Object.freeze({ render, initials, handleFailure, verifiedCount: Object.keys(manifest).length });
+  global.CompanyLogo = Object.freeze({ render, initials, handleFailure, rememberFailure, verifiedCount: Object.keys(manifest).length });
 })(typeof window !== 'undefined' ? window : globalThis);

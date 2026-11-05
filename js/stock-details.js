@@ -102,9 +102,10 @@
       : '<span class="text-[10px] text-ink-muted">N/A</span>';
     document.getElementById('stock-listing-status').textContent = valueOrNA(stock.listing_status);
 
+    const sectorVal = (!stock.sector || String(stock.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : stock.sector;
     document.getElementById('company-info-grid').innerHTML = [
       field('Market capitalization', stock.market_cap_cr == null ? null : formatMarketCap(stock.market_cap_cr)),
-      field('Sector', stock.sector),
+      field('Sector', sectorVal),
       field('Industry', stock.industry),
       field('52-week high', stock.week52_high == null ? null : formatPrice(stock.week52_high)),
       field('52-week low', stock.week52_low == null ? null : formatPrice(stock.week52_low)),

@@ -31,12 +31,15 @@
     <!-- Header & Navigation -->
     <header class="sticky top-0 z-50 w-full border-b border-ink-rule bg-ink-bg/[0.94] backdrop-blur-[16px] supports-[backdrop-filter]:bg-ink-bg/[0.94]">
       <div class="site-wide-shell mx-auto flex items-center justify-between py-3">
-        <!-- Brand Logo -->
-        <a class="flex items-baseline whitespace-nowrap group" href="/" aria-label="Machii Bazzar Home">
-          <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-ink lg:text-[28px] transition-colors group-hover:text-ink-sienna">machii</span>
-          <span class="font-display text-[26px] font-extrabold leading-none text-ink-sienna lg:text-[28px]">·</span>
-          <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-sienna lg:text-[28px]">bazzar</span>
-        </a>
+        <!-- Brand Logo with Soft Radial Glow -->
+        <div class="relative overflow-hidden py-1">
+          <div class="pointer-events-none absolute -left-4 top-1/2 -translate-y-1/2 h-16 w-52 rounded-full bg-[radial-gradient(ellipse_at_center,_rgba(200,75,49,0.24)_0%,_transparent_72%)] [mask-image:radial-gradient(ellipse_at_center,black_35%,transparent_75%)] [-webkit-mask-image:radial-gradient(ellipse_at_center,black_35%,transparent_75%)]" aria-hidden="true"></div>
+          <a class="relative flex items-baseline whitespace-nowrap group" href="/" aria-label="Machii Bazzar Home">
+            <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-ink lg:text-[28px] transition-colors group-hover:text-ink-sienna">machii</span>
+            <span class="font-display text-[26px] font-extrabold leading-none text-ink-sienna lg:text-[28px]">·</span>
+            <span class="font-display text-[26px] font-extrabold leading-none tracking-[-0.01em] text-ink-sienna lg:text-[28px]">bazzar</span>
+          </a>
+        </div>
 
         <!-- Active Section Indicator -->
         <div>
@@ -101,7 +104,7 @@
               <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-ink-rule lg:border-b-0 lg:border-r xl:border-r">
                 <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Surveyed BSE Groups A & B via BSE MCP. NSE-only and other BSE groups not included.">Near 52W High</span>
                 <span id="card-near52-pct" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">36</span>
-                <span id="card-near52-sub" class="text-[11.5px] text-ink-muted leading-tight">36 verified BSE Group A/B equities<span class="block text-[10px] text-ink-faint">BSE MCP (04-Nov-2026)</span></span>
+                <span id="card-near52-sub" class="text-[11.5px] text-ink-muted leading-tight"><span class="block">36 verified BSE Group A/B equities</span><span class="block text-[10px] text-ink-faint mt-0.5">Source: BSE MCP (04-Nov-2026)</span></span>
               </div>
 
               <!-- Card 5: Verified Cap Ranks -->
@@ -109,19 +112,19 @@
                 <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Internal ranking of 343 verified market caps. Not official SEBI classification.">Verified Cap Ranks</span>
                 <div class="mt-0.5 flex items-end gap-[3px] h-[26px]">
                   <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Top 100 Verified Equities">
-                    <div id="card-seg-bar-lrg" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
+                    <div id="card-seg-bar-lrg" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-sienna transition-all duration-500" style="height:0%;min-height:6px"></div>
                   </div>
                   <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Rank 101–250 Verified Equities">
-                    <div id="card-seg-bar-mid" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
+                    <div id="card-seg-bar-mid" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-amber-500 transition-all duration-500" style="height:0%;min-height:6px"></div>
                   </div>
                   <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Remaining Verified Equities (Rank 251–343)">
-                    <div id="card-seg-bar-sml" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
+                    <div id="card-seg-bar-sml" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-bullish transition-all duration-500" style="height:0%;min-height:6px"></div>
                   </div>
-                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Unranked / Unverified Equities (4,000 scrips)">
-                    <div id="card-seg-bar-mic" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Unranked / Unverified Equities">
+                    <div id="card-seg-bar-mic" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60 transition-all duration-500" style="height:0%;min-height:6px"></div>
                   </div>
-                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="SME Platform Equities (1,046 scrips)">
-                    <div id="card-seg-bar-sme" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-muted/60" style="height:0%"></div>
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="SME Platform Equities">
+                    <div id="card-seg-bar-sme" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-violet-500 transition-all duration-500" style="height:0%;min-height:6px"></div>
                   </div>
                 </div>
                 <div class="flex gap-[3px]">
@@ -148,7 +151,7 @@
 
         <!-- Table Card Container -->
         <div class="pt-4 pb-12">
-          <div data-slot="pulse-card" class="pulse-card overflow-hidden rounded-xl border border-ink-rule bg-ink-card shadow-soft">
+          <div data-slot="pulse-card" class="pulse-card rounded-xl border border-ink-rule bg-ink-card shadow-soft">
             <!-- Search & Table Controls Toolbar -->
             <div class="flex flex-wrap items-center gap-3 p-[18px] border-b border-ink-rule">
               <!-- Search Input -->
@@ -179,22 +182,22 @@
             </div>
 
             <!-- Table View -->
-            <div class="overflow-x-auto px-1.5">
+            <div class="table-scroll-container overflow-x-auto lg:overflow-x-visible px-1.5">
               <table class="w-full border-collapse" role="grid" aria-rowcount="5389">
-                <thead>
+                <thead class="sticky top-[57px] z-20 bg-ink-card shadow-sm">
                   <tr>
-                    <th data-sortable="true" data-col="#" class="text-right w-[40px] text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">#</th>
-                    <th data-sortable="true" data-col="Stock" class="text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">Stock</th>
-                    <th class="hidden lg:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong sticky top-0 bg-ink-card">Sector</th>
-                    <th data-sortable="true" data-col="Price" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">Price</th>
-                    <th data-sortable="true" data-col="Chg %" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">Chg %</th>
-                    <th data-sortable="true" data-col="MCap" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">MCap <span class="text-ink-sienna text-[9px]">▼</span></th>
-                    <th data-sortable="true" data-col="1W" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">1W</th>
-                    <th data-sortable="true" data-col="1M" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">1M</th>
-                    <th data-sortable="true" data-col="3M" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">3M</th>
-                    <th data-sortable="true" data-col="Vol" class="hidden xl:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-0 bg-ink-card" tabindex="0">Vol</th>
-                    <th class="hidden xl:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted w-[64px] px-1 py-2 border-b border-ink-rule-strong sticky top-0 bg-ink-card">7D</th>
-                    <th class="w-[32px] px-1.5 py-2 border-b border-ink-rule-strong sticky top-0 bg-ink-card"></th>
+                    <th data-sortable="true" data-col="#" class="text-right w-[40px] text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">#</th>
+                    <th data-sortable="true" data-col="Stock" class="text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">Stock</th>
+                    <th class="hidden lg:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong sticky top-[57px] bg-ink-card z-20">Sector</th>
+                    <th data-sortable="true" data-col="Price" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">Price</th>
+                    <th data-sortable="true" data-col="Chg %" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">Chg %</th>
+                    <th data-sortable="true" data-col="MCap" class="text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">MCap <span class="text-ink-sienna text-[9px]">▼</span></th>
+                    <th data-sortable="true" data-col="1W" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">1W</th>
+                    <th data-sortable="true" data-col="1M" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0" title="Data not available yet">1M</th>
+                    <th data-sortable="true" data-col="3M" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0" title="Data not available yet">3M</th>
+                    <th data-sortable="true" data-col="Vol" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">Vol</th>
+                    <th class="hidden xl:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted w-[64px] px-1 py-2 border-b border-ink-rule-strong sticky top-[57px] bg-ink-card z-20">7D</th>
+                    <th class="w-[32px] px-1.5 py-2 border-b border-ink-rule-strong sticky top-[57px] bg-ink-card z-20"></th>
                   </tr>
                 </thead>
                 <tbody id="stocks-tbody">
