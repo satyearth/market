@@ -17,6 +17,7 @@
     "sync": "node scripts/sync-stock-universe.js",
     "test:infinite-scroll": "node scripts/test-infinite-scroll.js",
     "lint": "eslint .",
+    "test:responsive": "node scripts/audit-responsive-comprehensive.js",
     "build:logos": "node scripts/build-company-logo-manifest.js"
   },
   "devDependencies": {

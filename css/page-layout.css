@@ -1,10 +1,534 @@
-.site-wide-shell {
-  width: min(calc(100% - 3rem), 112rem);
-  margin-inline: auto;
+/* machii bazzar - Responsive Page Layout & Component Styles */
+
+/* -------------------------------------------------------------------------
+   1. Base Shell, Containers & Responsive Root
+   ------------------------------------------------------------------------- */
+:root {
+  --header-height: 57px;
+  --touch-target-min: 44px;
 }
 
-@media (max-width: 640px) {
+html {
+  -webkit-text-size-adjust: 100%;
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+body {
+  overflow-x: clip;
+  max-width: 100%;
+  width: 100%;
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+.site-wide-shell {
+  width: min(calc(100% - clamp(1rem, 4vw, 3rem)), 112rem);
+  margin-inline: auto;
+  min-width: 0;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+img {
+  height: auto;
+}
+
+/* -------------------------------------------------------------------------
+   2. Header & Navigation Bar (Exact Original Components)
+   ------------------------------------------------------------------------- */
+.site-header-bar {
+  min-height: var(--header-height);
+  min-width: 0;
+  gap: 0.5rem 1rem;
+}
+
+.site-header-bar > * {
+  min-width: 0;
+}
+
+.site-header-bar a {
+  min-height: var(--touch-target-min);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* -------------------------------------------------------------------------
+   3. Hero Section Typography & Spacing
+   ------------------------------------------------------------------------- */
+.hero-heading {
+  font-size: clamp(24px, 5vw, 36px);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+.hero-subtitle {
+  font-size: clamp(13px, 3.2vw, 14.5px);
+  line-height: 1.5;
+}
+
+#market-status-badge {
+  font-size: clamp(10.5px, 2.5vw, 12px);
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+}
+
+/* Pulse metrics card typography */
+#card-total-mcap,
+#card-vix-val,
+#card-near52-pct {
+  font-size: clamp(19px, 5vw, 21px);
+  overflow-wrap: anywhere;
+}
+
+/* -------------------------------------------------------------------------
+   4. Filter Buttons Bar (Swipeable on Mobile, Responsive Wrap)
+   ------------------------------------------------------------------------- */
+.filter-buttons-scroll-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  margin-inline: -2px;
+  padding-inline: 2px;
+}
+
+.filter-buttons-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-pill-btn {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 14px;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+/* -------------------------------------------------------------------------
+   5. Search & Table Controls Toolbar
+   ------------------------------------------------------------------------- */
+.table-toolbar {
+  min-width: 0;
+}
+
+[data-stocks-search="true"] {
+  min-height: var(--touch-target-min);
+  font-size: 16px; /* Prevents auto-zoom on iOS Safari */
+  touch-action: manipulation;
+}
+
+.table-toolbar-actions button {
+  min-height: var(--touch-target-min);
+  touch-action: manipulation;
+}
+
+#density-toggle-btn {
+  width: var(--touch-target-min) !important;
+  height: var(--touch-target-min) !important;
+  min-width: var(--touch-target-min) !important;
+  min-height: var(--touch-target-min) !important;
+  touch-action: manipulation;
+}
+
+/* -------------------------------------------------------------------------
+   6. Breakpoint: Mobile & Tablet Screens (<= 1023px)
+   ------------------------------------------------------------------------- */
+@media (max-width: 1023px) {
+  .site-header-bar a span {
+    font-size: clamp(20px, 6vw, 26px) !important;
+  }
+
+  .section-chip {
+    max-width: 100%;
+    padding-inline: 0.75rem;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  #card-breadth-sub {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.4;
+  }
+
+  .table-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .table-toolbar > .relative {
+    width: 100%;
+  }
+
+  [data-stocks-search="true"] {
+    width: 100% !important;
+  }
+
+  .table-toolbar-actions {
+    margin-left: 0 !important;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .table-toolbar-actions > div {
+    min-height: var(--touch-target-min);
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .table-toolbar-actions button {
+    min-height: var(--touch-target-min) !important;
+    min-width: var(--touch-target-min) !important;
+    padding-inline: 12px;
+  }
+
+  /* Table structure on mobile: convert table rows into mobile cards */
+  .table-scroll-container {
+    overflow-x: visible !important;
+    padding-inline: 0 !important;
+  }
+
+  .stocks-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .stocks-table thead {
+    display: block;
+    position: sticky;
+    top: var(--header-height);
+    z-index: 20;
+    background: var(--ink-card, #211e1a);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+
+  .stocks-table thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 12px;
+  }
+
+  .stocks-table thead th:not(.hidden) {
+    position: static !important;
+    top: auto !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: auto !important;
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+    border: 1px solid var(--ink-rule, #3a3730) !important;
+    border-radius: 9999px;
+    background: var(--ink-well, #1c1a17) !important;
+    box-shadow: none !important;
+    padding: 6px 14px !important;
+    text-align: center;
+    touch-action: manipulation;
+    user-select: none;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .stocks-table thead th:not(.hidden):active {
+    background: var(--ink-card) !important;
+    border-color: var(--ink-sienna) !important;
+  }
+
+  .stocks-table thead th.hidden,
+  .stocks-table thead th:last-child {
+    display: none !important;
+  }
+
+  .stocks-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  /* Row Card in Mobile/Tablet View */
+  .stocks-table tbody tr {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "rank name price"
+      "rank name change"
+      "rank cap action";
+    column-gap: 8px;
+    row-gap: 3px;
+    align-items: center;
+    width: 100%;
+    min-height: 76px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--ink-rule);
+    touch-action: manipulation;
+    transition: background-color 150ms ease;
+  }
+
+  .stocks-table tbody tr:active {
+    background-color: var(--ink-well) !important;
+  }
+
+  .stocks-table tbody td {
+    display: block;
+    width: auto !important;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0;
+    text-align: left;
+  }
+
+  .stocks-table tbody td.hidden {
+    display: none !important;
+  }
+
+  /* Rank */
+  .stocks-table tbody td:nth-child(1) {
+    grid-area: rank;
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--ink-muted);
+  }
+
+  /* Name & Logo */
+  .stocks-table tbody td:nth-child(2) {
+    grid-area: name;
+    min-width: 0;
+  }
+
+  .stocks-table tbody td:nth-child(2) a {
+    min-height: var(--touch-target-min);
+    display: flex;
+    align-items: center;
+  }
+
+  /* Price */
+  .stocks-table tbody td:nth-child(4) {
+    grid-area: price;
+    text-align: right;
+    white-space: nowrap;
+    font-size: 14.5px;
+    font-weight: 600;
+  }
+
+  /* Change % */
+  .stocks-table tbody td:nth-child(5) {
+    grid-area: change;
+    text-align: right;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  /* Market Cap */
+  .stocks-table tbody td:nth-child(6) {
+    grid-area: cap;
+    color: var(--ink-muted, #8a8478);
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .stocks-table tbody td:nth-child(6)::before {
+    content: "MCap ";
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Action button (arrow link) */
+  .stocks-table tbody td:nth-child(12) {
+    grid-area: action;
+    justify-self: end;
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .stocks-table tbody td:nth-child(12) > span {
+    opacity: 1 !important;
+    transform: none !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stocks-table tbody td:nth-child(12) .stock-details-link {
+    width: var(--touch-target-min) !important;
+    height: var(--touch-target-min) !important;
+    min-width: var(--touch-target-min) !important;
+    min-height: var(--touch-target-min) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 9999px !important;
+    background: var(--ink-well) !important;
+    border: 1px solid var(--ink-rule) !important;
+    color: var(--ink-sienna) !important;
+    font-size: 14px !important;
+    touch-action: manipulation;
+  }
+
+  .stocks-table tbody tr:has(td[colspan]) {
+    display: block;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .stocks-table tbody tr:has(td[colspan]) td {
+    width: 100% !important;
+    padding: 16px !important;
+  }
+
+  .stock-company-name {
+    max-width: 100% !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .table-status-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 16px;
+  }
+
+  #showing-status {
+    line-height: 1.45;
+    font-size: clamp(11px, 2.8vw, 12px);
+  }
+
+  #infinite-retry {
+    min-height: var(--touch-target-min);
+    display: inline-flex;
+    align-items: center;
+    touch-action: manipulation;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   7. Breakpoint: Small & Standard Mobile Phones (< 640px)
+   ------------------------------------------------------------------------- */
+@media (max-width: 639px) {
   .site-wide-shell {
-    width: calc(100% - 1.5rem);
+    width: calc(100% - clamp(1rem, 3.5vw, 1.5rem));
+  }
+
+  .pulse-metrics {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .pulse-metrics > div {
+    grid-column: 1 / -1 !important;
+    border-right-width: 0 !important;
+    border-bottom-width: 1px !important;
+    padding: 14px 16px !important;
+  }
+
+  .pulse-metrics > div:last-child {
+    border-bottom-width: 0 !important;
+  }
+
+  /* Cap ranks segment labels on narrow mobile */
+  #card-seg-cnt-lrg,
+  #card-seg-cnt-mid,
+  #card-seg-cnt-sml,
+  #card-seg-cnt-mic,
+  #card-seg-cnt-sme {
+    font-size: clamp(8.5px, 2.5vw, 9.5px);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   8. Breakpoint: Tablet Range (640px to 1023px)
+   ------------------------------------------------------------------------- */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .pulse-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .pulse-metrics > div:nth-child(1),
+  .pulse-metrics > div:nth-child(3) {
+    border-right-width: 1px !important;
+  }
+
+  .pulse-metrics > div:nth-child(2),
+  .pulse-metrics > div:nth-child(4) {
+    border-right-width: 0 !important;
+  }
+
+  .pulse-metrics > div:nth-child(5) {
+    grid-column: 1 / -1 !important;
+    border-bottom-width: 0 !important;
+  }
+
+  .table-toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .table-toolbar > .relative,
+  [data-stocks-search="true"] {
+    width: 220px !important;
+  }
+
+  .table-toolbar-actions {
+    width: auto;
+    margin-left: auto !important;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   9. Breakpoint: Small Laptops (1024px to 1279px)
+   ------------------------------------------------------------------------- */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .pulse-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .pulse-metrics > div:nth-child(1),
+  .pulse-metrics > div:nth-child(2) {
+    border-right-width: 1px !important;
+    border-bottom-width: 1px !important;
+  }
+
+  .pulse-metrics > div:nth-child(3) {
+    border-right-width: 0 !important;
+    border-bottom-width: 1px !important;
+  }
+
+  .pulse-metrics > div:nth-child(4) {
+    border-right-width: 1px !important;
+    border-bottom-width: 0 !important;
+  }
+
+  .pulse-metrics > div:nth-child(5) {
+    grid-column: span 2 / span 2 !important;
+    border-bottom-width: 0 !important;
   }
 }

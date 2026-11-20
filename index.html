@@ -2,7 +2,7 @@
 <html class="dark" lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>NSE &amp; BSE Listed Equities | Machii Bazzar</title>
   <meta name="description" content="Browse 5,389 Indian equities listed on NSE &amp; BSE. End-of-day closing prices, market breadth, and sector intelligence.">
   <meta name="application-name" content="Machii Bazzar">
@@ -22,7 +22,7 @@
 
   <!-- Stylesheet -->
   <link rel="stylesheet" href="./css/style.css">
-  <link rel="stylesheet" href="./css/page-layout.css">
+  <link rel="stylesheet" href="./css/page-layout.css?v=2">
 </head>
 <body class="bg-ink-bg text-ink-text font-ui antialiased selection:bg-ink-sienna selection:text-white min-h-screen flex flex-col">
   <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-ink-sienna focus:text-white focus:text-sm focus:font-medium">Skip to main content</a>
@@ -30,7 +30,7 @@
   <div class="relative min-h-screen flex flex-col">
     <!-- Header & Navigation -->
     <header class="sticky top-0 z-50 w-full border-b border-ink-rule bg-ink-bg/[0.94] backdrop-blur-[16px] supports-[backdrop-filter]:bg-ink-bg/[0.94]">
-      <div class="site-wide-shell mx-auto flex items-center justify-between py-3">
+      <div class="site-header-bar site-wide-shell mx-auto flex items-center justify-between py-3">
         <!-- Brand Logo with Soft Radial Glow -->
         <div class="relative overflow-hidden py-1">
           <div class="pointer-events-none absolute -left-4 top-1/2 -translate-y-1/2 h-16 w-52 rounded-full bg-[radial-gradient(ellipse_at_center,_rgba(200,75,49,0.24)_0%,_transparent_72%)] [mask-image:radial-gradient(ellipse_at_center,black_35%,transparent_75%)] [-webkit-mask-image:radial-gradient(ellipse_at_center,black_35%,transparent_75%)]" aria-hidden="true"></div>
@@ -43,7 +43,7 @@
 
         <!-- Active Section Indicator -->
         <div>
-          <span class="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-ui text-[12px] uppercase tracking-[0.06em] font-semibold bg-ink-well text-ink-sienna border border-ink-rule shadow-soft">
+          <span class="section-chip inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-ui text-[12px] uppercase tracking-[0.06em] font-semibold bg-ink-well text-ink-sienna border border-ink-rule shadow-soft">
             STOCKS
           </span>
         </div>
@@ -55,20 +55,20 @@
       <div class="site-wide-shell">
         <!-- Hero Section -->
         <div class="pt-5 pb-2">
-          <div class="mb-2 inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.05em] text-ink-muted">
-            <span class="relative inline-block size-[7px] shrink-0 rounded-full bg-ink-faint" aria-hidden="true"></span>
-            <span id="market-status-badge">Market closed · <span class="tabular-nums text-ink-text font-bold">5,389</span> listed companies (NSE + BSE)</span>
+          <div class="mb-2 flex max-w-full items-start gap-2 font-mono text-[12px] uppercase tracking-[0.05em] text-ink-muted">
+            <span class="relative mt-[0.35em] inline-block size-[7px] shrink-0 rounded-full bg-ink-faint" aria-hidden="true"></span>
+            <span id="market-status-badge" class="min-w-0">Market closed · <span class="tabular-nums text-ink-text font-bold">5,389</span> listed companies (NSE + BSE)</span>
           </div>
-          <h1 class="font-display text-[clamp(26px,3vw,36px)] font-[750] leading-[1.06] tracking-[-0.025em] text-ink-ink">
+          <h1 class="hero-heading font-display text-[clamp(24px,5.5vw,36px)] font-[750] leading-[1.12] tracking-[-0.025em] text-ink-ink">
             Every stock, <em class="not-italic text-ink-sienna">ranked</em>.
           </h1>
-          <p class="mt-2 text-sm text-ink-muted">Search Indian stocks. Compare returns, valuations and market size.</p>
+          <p class="hero-subtitle mt-2 text-sm text-ink-muted">Search Indian stocks. Compare returns, valuations and market size.</p>
         </div>
 
         <!-- Market Pulse Overview Cards -->
-        <div class="mt-3">
+        <div id="pulse-metrics" class="mt-3">
           <div data-slot="pulse-card" class="pulse-card overflow-hidden rounded-xl border border-ink-rule bg-ink-card shadow-soft">
-            <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.25fr_1fr_1fr_1fr_1.35fr]">
+            <div class="pulse-metrics grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.25fr_1fr_1fr_1fr_1.35fr]">
               <!-- Card 1: Verified Market Cap (Top 343 Equities) -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-r border-ink-rule xl:border-b-0">
                 <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Verified Market Cap</span>
@@ -140,8 +140,8 @@
         </div>
 
         <!-- Filter Buttons Bar -->
-        <div class="py-3">
-          <div class="flex flex-wrap gap-1.5">
+        <div id="market-filters" class="py-3">
+          <div class="filter-buttons-scroll-container flex flex-wrap gap-1.5">
             <button aria-pressed="true" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft">ALL</button>
             <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TOP GAINERS</button>
             <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TOP LOSERS</button>
@@ -151,17 +151,17 @@
 
         <!-- Table Card Container -->
         <div class="pt-4 pb-12">
-          <div data-slot="pulse-card" class="pulse-card rounded-xl border border-ink-rule bg-ink-card shadow-soft">
+          <div id="stocks-table-card" data-slot="pulse-card" class="pulse-card rounded-xl border border-ink-rule bg-ink-card shadow-soft">
             <!-- Search & Table Controls Toolbar -->
-            <div class="flex flex-wrap items-center gap-3 p-[18px] border-b border-ink-rule">
+            <div class="table-toolbar flex flex-wrap items-center gap-3 p-3 sm:p-[18px] border-b border-ink-rule">
               <!-- Search Input -->
-              <div class="relative">
-                <input data-stocks-search="true" type="text" placeholder="Search stocks..." class="bg-ink-well border border-ink-rule rounded-full text-ink-ink font-ui text-[13px] px-3.5 py-1.5 pr-7 w-[170px] md:w-[220px] outline-none transition-colors focus:border-ink-sienna placeholder:text-ink-faint" name="stocks-search" value="" />
-                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-faint bg-ink-inset rounded px-1">/</span>
+              <div class="relative w-full sm:w-auto flex-1 sm:flex-initial">
+                <input data-stocks-search="true" type="text" placeholder="Search stocks..." class="bg-ink-well border border-ink-rule rounded-full text-ink-ink font-ui text-[13px] px-3.5 py-1.5 pr-7 w-full sm:w-[170px] md:w-[220px] outline-none transition-colors focus:border-ink-sienna placeholder:text-ink-faint" name="stocks-search" value="" />
+                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-faint bg-ink-inset rounded px-1 hidden sm:inline-block">/</span>
               </div>
 
               <!-- Controls on the right -->
-              <div class="ml-auto flex items-center gap-2.5">
+              <div class="table-toolbar-actions ml-auto flex items-center gap-2.5">
                 <div class="inline-flex gap-[3px] rounded-full bg-ink-well border border-ink-rule p-[3px]">
                   <button aria-pressed="true" title="Sort only the rows on this page" class="rounded-full px-[11px] py-[3px] font-ui text-[10px] font-semibold whitespace-nowrap transition-all text-ink-ink bg-ink-card shadow-soft">This page</button>
                   <button aria-pressed="false" title="Sort all matching stocks before pagination" class="flex items-center gap-1 rounded-full px-[11px] py-[3px] font-ui text-[10px] font-semibold whitespace-nowrap transition-all text-ink-muted hover:text-ink-text">All results</button>
@@ -183,7 +183,7 @@
 
             <!-- Table View -->
             <div class="table-scroll-container overflow-x-auto lg:overflow-x-visible px-1.5">
-              <table class="w-full border-collapse" role="grid" aria-rowcount="5389">
+              <table class="stocks-table w-full border-collapse" role="grid" aria-rowcount="5389">
                 <thead class="sticky top-[57px] z-20 bg-ink-card shadow-sm">
                   <tr>
                     <th data-sortable="true" data-col="#" class="text-right w-[40px] text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">#</th>
@@ -207,7 +207,7 @@
             </div>
 
             <!-- Infinite scroll status -->
-            <div class="flex min-h-[44px] items-center justify-between px-[18px] py-3.5 border-t border-ink-rule">
+            <div class="table-status-bar flex min-h-[44px] items-center justify-between px-[18px] py-3.5 border-t border-ink-rule">
               <div id="showing-status" class="text-[12px] text-ink-muted">
                 Showing 1–50 of 5,389 stocks <span class="text-ink-faint">(of 5,389 total)</span>
               </div>
