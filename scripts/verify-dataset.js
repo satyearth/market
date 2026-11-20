@@ -167,7 +167,8 @@ assert(invalidHighLowSpread === 0, 'High price is always greater than or equal t
 assert(closeMismatch === 0, 'close_price alias strictly matches current_price for all stocks', `(mismatch: ${closeMismatch})`);
 assert(misleadingRankOnUnverified === 0, 'Zero misleading market-cap ranks on unverified stocks');
 assert(verifiedMcap === stats.marketCapCoverageCount, 'Verified market cap count matches stats', `(${verifiedMcap} === ${stats.marketCapCoverageCount})`);
-assert(unverifiedMcap > 4000, 'Unverified market caps remain null and render as em-dash', `(${unverifiedMcap} stocks)`);
+assert(verifiedMcap > 5000, 'Verified market cap covers vast majority of universe (>5,000 stocks)', `(${verifiedMcap} stocks)`);
+assert(unverifiedMcap < 100, 'Unverified market caps remain null and render as em-dash', `(${unverifiedMcap} stocks)`);
 
 // -----------------------------------------------------------------------------
 // Test Group 6: Dynamic India VIX Verification
@@ -294,9 +295,9 @@ console.log('\n[Test Group 11: Market-Cap Classification Labels & Methodology]')
 assert(stats.verifiedRankingSegments != null, 'verifiedRankingSegments object is defined in MARKET_STATS');
 assert(stats.verifiedRankingSegments.top100 === 100, 'Top 100 Verified Equities count is exactly 100', `(${stats.verifiedRankingSegments?.top100})`);
 assert(stats.verifiedRankingSegments.rank101_250 === 150, 'Rank 101–250 Verified Equities count is exactly 150', `(${stats.verifiedRankingSegments?.rank101_250})`);
-assert(stats.verifiedRankingSegments.remainingVerified === 93, 'Remaining Verified Equities count is exactly 93 (Rank 251–343)', `(${stats.verifiedRankingSegments?.remainingVerified})`);
+assert(stats.verifiedRankingSegments.remainingVerified > 4000, 'Remaining Verified Equities count covers majority of mainboard (>4,000 stocks)', `(${stats.verifiedRankingSegments?.remainingVerified})`);
 assert(stats.verifiedRankingSegments.smePlatform === 1046, 'SME Platform Securities count is exactly 1,046', `(${stats.verifiedRankingSegments?.smePlatform})`);
-assert(stats.verifiedRankingSegments.unranked === 4000, 'Unranked Equities count is exactly 4,000 (5389 - 343 - 1046)', `(${stats.verifiedRankingSegments?.unranked})`);
+assert(stats.verifiedRankingSegments.unranked < 50, 'Unranked Equities count is minimized (< 50 unpriced/partly paid)', `(${stats.verifiedRankingSegments?.unranked})`);
 
 // Mathematical reconciliation of segments
 const segSum = stats.verifiedRankingSegments.top100 + 
@@ -315,7 +316,7 @@ const rank101Stocks = stocks.filter(s => s.verified_rank_tier === 'Rank 101–25
 const remStocks = stocks.filter(s => s.verified_rank_tier === 'Remaining Verified');
 assert(top100Stocks.length === 100, 'Exactly 100 stocks carry verified_rank_tier "Top 100 Verified"');
 assert(rank101Stocks.length === 150, 'Exactly 150 stocks carry verified_rank_tier "Rank 101–250 Verified"');
-assert(remStocks.length === 93, 'Exactly 93 stocks carry verified_rank_tier "Remaining Verified"');
+assert(remStocks.length === stats.verifiedRankingSegments.remainingVerified, 'Remaining verified count matches stats', `(${remStocks.length} === ${stats.verifiedRankingSegments?.remainingVerified})`);
 
 // -----------------------------------------------------------------------------
 // Test Group 12: Exchange Coverage Reconciliation

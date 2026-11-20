@@ -150,7 +150,7 @@
       if (marketStats.verifiedMarketCapCr) {
         mcapEl.innerHTML = formatMarketCap(marketStats.verifiedMarketCapCr);
         if (mcapSub) {
-          mcapSub.innerText = marketStats.marketCapCoverageNote || 'Top 343 Equities (NSE + BSE)';
+          mcapSub.innerText = marketStats.marketCapCoverageNote || '5,375 Verified Equities (NSE + BSE)';
         }
       } else {
         mcapEl.innerText = '—';
@@ -237,7 +237,7 @@
       const segLabels = {
         lrg: 'Top 100 Verified',
         mid: 'Rank 101–250 Verified',
-        sml: 'Remaining Verified (Rank 251–343)',
+        sml: 'Remaining Verified',
         mic: 'Unranked / Unverified Equities',
         sme: 'SME Platform Equities'
       };

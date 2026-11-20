@@ -69,11 +69,11 @@
         <div id="pulse-metrics" class="mt-3">
           <div data-slot="pulse-card" class="pulse-card overflow-hidden rounded-xl border border-ink-rule bg-ink-card shadow-soft">
             <div class="pulse-metrics grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.25fr_1fr_1fr_1fr_1.35fr]">
-              <!-- Card 1: Verified Market Cap (Top 343 Equities) -->
+              <!-- Card 1: Verified Market Cap -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-r border-ink-rule xl:border-b-0">
                 <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Verified Market Cap</span>
                 <span id="card-total-mcap" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">—</span>
-                <span id="card-mcap-sub" class="text-[11.5px] text-ink-muted">Top 343 Equities (NSE + BSE)</span>
+                <span id="card-mcap-sub" class="text-[11.5px] text-ink-muted">5,375 Verified Equities (NSE + BSE)</span>
               </div>
 
               <!-- Card 2: India VIX -->
@@ -109,7 +109,7 @@
 
               <!-- Card 5: Verified Cap Ranks -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 col-span-2 lg:col-span-1">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Internal ranking of 343 verified market caps. Not official SEBI classification.">Verified Cap Ranks</span>
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Internal ranking of verified market caps. Not official SEBI classification.">Verified Cap Ranks</span>
                 <div class="mt-0.5 flex items-end gap-[3px] h-[26px]">
                   <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Top 100 Verified Equities">
                     <div id="card-seg-bar-lrg" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-sienna transition-all duration-500" style="height:0%;min-height:6px"></div>
@@ -117,7 +117,7 @@
                   <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Rank 101–250 Verified Equities">
                     <div id="card-seg-bar-mid" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-amber-500 transition-all duration-500" style="height:0%;min-height:6px"></div>
                   </div>
-                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Remaining Verified Equities (Rank 251–343)">
+                  <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Remaining Verified Equities">
                     <div id="card-seg-bar-sml" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-bullish transition-all duration-500" style="height:0%;min-height:6px"></div>
                   </div>
                   <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Unranked / Unverified Equities">
