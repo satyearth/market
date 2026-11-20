@@ -37,6 +37,12 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const {
+  loadMarketCapSources,
+  resolveStockMarketCap,
+  rankStocksAndCategorize,
+  generateCoverageReport
+} = require('../lib/market-cap-pipeline');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DOWNLOADS_DIR = path.join(ROOT_DIR, 'downloads');
@@ -328,57 +334,10 @@ async function syncUniverse() {
     }
   }
 
-  // Load verified benchmark stocks (184 verified market caps)
-  const existingMapBySymbol = new Map();
-  const benchmarkPath = path.join(DOWNLOADS_DIR, 'benchmark_stocks_verified.json');
-  if (fs.existsSync(benchmarkPath)) {
-    try {
-      const bmList = JSON.parse(fs.readFileSync(benchmarkPath, 'utf-8'));
-      bmList.forEach(s => {
-        if (s.symbol && s.market_cap_cr != null) existingMapBySymbol.set(s.symbol, s);
-      });
-      console.log(`  ✓ Loaded ${existingMapBySymbol.size} verified benchmark stocks from cache.`);
-    } catch (e) {
-      console.warn('Notice loading benchmark stocks file:', e.message);
-    }
-  } else if (fs.existsSync(BACKUP_PATH)) {
-    try {
-      const backupText = fs.readFileSync(BACKUP_PATH, 'utf-8');
-      const match = backupText.match(/const STOCKS_DATA = (\[[\s\S]*?\]);\s*$/);
-      if (match) {
-        const parsed = eval('(' + match[1] + ')');
-        parsed.forEach(s => {
-          if (s.symbol && s.market_cap_cr != null) existingMapBySymbol.set(s.symbol, s);
-        });
-        console.log(`  ✓ Loaded ${existingMapBySymbol.size} verified benchmark stocks from backup.`);
-      }
-    } catch (e) {
-      console.warn('Backup reading notice:', e.message);
-    }
-  }
-
-  // Load verified BSE list securities (209 verified market caps)
-  const bseMktcapByIsin = new Map();
-  const bseVerifiedPath = path.join(DOWNLOADS_DIR, 'bse_list_securities_verified.json');
-  if (fs.existsSync(bseVerifiedPath)) {
-    try {
-      const bseList = JSON.parse(fs.readFileSync(bseVerifiedPath, 'utf-8'));
-      bseList.forEach(item => {
-        if (item.ISIN_NUMBER && item.Mktcap) {
-          const cap = parseFloat(item.Mktcap);
-          if (!isNaN(cap) && cap > 0) {
-            bseMktcapByIsin.set(item.ISIN_NUMBER, {
-              mktcap: cap,
-              industry: item.INDUSTRY || null
-            });
-          }
-        }
-      });
-      console.log(`  ✓ Loaded ${bseMktcapByIsin.size} verified BSE list securities from cache.`);
-    } catch (e) {
-      console.warn('Notice loading verified BSE file:', e.message);
-    }
-  }
+  // Load comprehensive multi-source Market Cap datasets
+  console.log('[3.5/8] Loading comprehensive multi-source Market Cap datasets...');
+  const marketCapSources = await loadMarketCapSources({ forceRefresh: false });
+  const existingMapBySymbol = marketCapSources.benchmarkBySymbol;
 
   // 4. HISTORICAL PRICE AGGREGATOR: Build chronological closing prices with explicit dates
   console.log('[4/7] Aggregating genuine daily closing prices across 6 consecutive sessions...');
@@ -631,7 +590,7 @@ async function syncUniverse() {
   let nseOnlyCount = 0;
   let bseOnlyCount = 0;
 
-  const mergedStocks = [];
+  let mergedStocks = [];
 
   for (const isin of allIsins) {
     const nse = nseByIsin.get(isin);
@@ -762,7 +721,6 @@ async function syncUniverse() {
 
     // Verified Benchmark metadata enrichment (market cap, sector, industry)
     const benchmark = existingMapBySymbol.get(symbol);
-    let marketCapCr = null;
     let sector = null;
     let industry = null;
     let return1m = null;
@@ -776,7 +734,6 @@ async function syncUniverse() {
     let week52Low = null;
 
     if (benchmark) {
-      if (benchmark.market_cap_cr != null) marketCapCr = benchmark.market_cap_cr;
       if (benchmark.sector) sector = benchmark.sector;
       if (benchmark.industry) industry = benchmark.industry;
       // Multi-month returns (1M, 3M, 1Y) require full multi-month daily EOD Bhavcopy archives.
@@ -792,13 +749,6 @@ async function syncUniverse() {
       if (benchmark.week52_low != null) week52Low = benchmark.week52_low;
     }
 
-    // Check additional BSE list securities market cap
-    if (marketCapCr == null && bseMktcapByIsin.has(isin)) {
-      const bseInfo = bseMktcapByIsin.get(isin);
-      marketCapCr = bseInfo.mktcap;
-      if (!industry && bseInfo.industry) industry = bseInfo.industry;
-    }
-
     // Carry forward existing benchmark and historical data from previous universe if available
     const prevStock = previousUniverseByIsin.get(isin);
     if (!historicalPrices && prevStock && prevStock.historical_prices) {
@@ -808,11 +758,17 @@ async function syncUniverse() {
       sessionStartDate = prevStock.return_1w_session_start;
       sessionEndDate = prevStock.return_1w_session_end;
     }
-    if (marketCapCr == null && prevStock && prevStock.market_cap_cr != null) {
-      marketCapCr = prevStock.market_cap_cr;
-    }
     if (!sector && prevStock && prevStock.sector) sector = prevStock.sector;
     if (!industry && prevStock && prevStock.industry) industry = prevStock.industry;
+
+    // Resolve market cap through multi-source waterfall
+    const capRes = resolveStockMarketCap(
+      { isin, symbol, nse_symbol: nseSymbol, bse_scrip_code: bseScripCode, current_price: currentPrice, close_price: currentPrice },
+      marketCapSources,
+      prevStock
+    );
+    const marketCapCr = capRes.market_cap_cr;
+    const marketCapSource = capRes.market_cap_source;
 
     // Check 52W High from MCP tool
     if (bseScripCode && week52HighMap.has(bseScripCode)) {
@@ -871,33 +827,19 @@ async function syncUniverse() {
       logo_url: logoUrl,
       trading_date: TARGET_TRADING_DATE,
       fetched_at: fetchStartTime.toISOString(),
-      market_cap_cr: marketCapCr
+      market_cap_cr: marketCapCr,
+      market_cap_source: marketCapSource || null
     });
   }
 
-  // Rank stocks with verified market cap (Top 343 Verified Equities)
-  mergedStocks.sort((a, b) => {
-    if (a.market_cap_cr != null && b.market_cap_cr != null) {
-      return b.market_cap_cr - a.market_cap_cr;
-    }
-    if (a.market_cap_cr != null) return -1;
-    if (b.market_cap_cr != null) return 1;
-    return a.symbol.localeCompare(b.symbol);
-  });
-
-  let currentRank = 1;
-  mergedStocks.forEach(s => {
-    if (s.market_cap_cr != null && currentRank <= 343) {
-      s.rank = currentRank++;
-      if (s.rank <= 100) s.verified_rank_tier = 'Top 100 Verified';
-      else if (s.rank <= 250) s.verified_rank_tier = 'Rank 101–250 Verified';
-      else s.verified_rank_tier = 'Remaining Verified';
-    } else {
-      s.market_cap_cr = null;
-      s.rank = null;
-      s.verified_rank_tier = s.segment === 'SME' ? 'SME Platform' : 'Unranked (Unverified Market Cap)';
-    }
-  });
+  // Rank stocks with verified market cap (Full Universe Coverage)
+  console.log('  → Ranking verified equities across universe...');
+  const rankingResult = rankStocksAndCategorize(mergedStocks);
+  mergedStocks = rankingResult.rankedStocks;
+  const verifiedSegments = rankingResult.segments;
+  const totalVerifiedCap = rankingResult.totalVerifiedCap;
+  const verifiedCapCount = rankingResult.verifiedCapCount;
+  const coveragePct = rankingResult.coveragePct;
 
   // 6. NEW LISTING & UNIVERSE DIFF DETECTION ENGINE
   console.log('[6/8] Detecting newly listed securities and universe modifications...');
@@ -1007,8 +949,6 @@ async function syncUniverse() {
     s.refreshed_at = compileTime.toISOString();
   });
 
-  let totalVerifiedCap = 0;
-  let verifiedCapCount = 0;
   let advances = 0;
   let declines = 0;
   let unchanged = 0;
@@ -1016,11 +956,11 @@ async function syncUniverse() {
   let breadthCount = 0;
   let near52Count = 0;
 
-  let top100Count = 0;
-  let rank101_250Count = 0;
-  let remainingVerifiedCount = 0;
-  let smeCount = 0;
-  let unrankedCount = 0;
+  const top100Count = verifiedSegments.top100;
+  const rank101_250Count = verifiedSegments.rank101_250;
+  const remainingVerifiedCount = verifiedSegments.remainingVerified;
+  const smeCount = verifiedSegments.smePlatform;
+  const unrankedCount = verifiedSegments.unranked;
 
   mergedStocks.forEach(s => {
     if (s.current_price != null && s.prev_close != null && s.prev_close > 0) {
@@ -1032,23 +972,8 @@ async function syncUniverse() {
       unpriced++;
     }
 
-    if (s.market_cap_cr != null) {
-      totalVerifiedCap += s.market_cap_cr;
-      verifiedCapCount++;
-    }
-
     if (s.is_near_high) {
       near52Count++;
-    }
-
-    if (s.segment === 'SME') {
-      smeCount++;
-    } else if (s.rank != null) {
-      if (s.rank <= 100) top100Count++;
-      else if (s.rank <= 250) rank101_250Count++;
-      else remainingVerifiedCount++;
-    } else {
-      unrankedCount++;
     }
   });
 
@@ -1082,7 +1007,9 @@ async function syncUniverse() {
       'BSE CM Unified Bhavcopy',
       'NSE India VIX MCP (nse_vix_historical)',
       'BSE 52W High MCP (bse_near_52week)',
-      'BSE Security Master MCP (bse_list_securities)'
+      'BSE Security Master MCP (bse_list_securities)',
+      'India Listed Companies Catalog (api.dharun.dev)',
+      'Screener Indian Equities Dataset'
     ],
 
     // Stock Universe & Exchange Coverage
@@ -1115,9 +1042,10 @@ async function syncUniverse() {
     // Market Capitalization & Verified Ranking Methodology
     verifiedMarketCapCr: Math.round(totalVerifiedCap),
     marketCapCoverageCount: verifiedCapCount,
-    marketCapCoverageNote: `Verified Top ${verifiedCapCount} Equities (NSE + BSE)`,
-    isPartialCoverage: true,
-    rankingDisclaimer: 'Market capitalisation ranking covers 343 verified equities (BSE Groups A & B). This is an internal ranking of verified securities, NOT an official SEBI Large/Mid/Small classification.',
+    marketCapCoveragePct: coveragePct,
+    marketCapCoverageNote: `Verified ${verifiedCapCount.toLocaleString('en-IN')} Equities (NSE + BSE) · ${coveragePct}% Universe`,
+    isPartialCoverage: verifiedCapCount < mergedStocks.length,
+    rankingDisclaimer: `Market capitalisation ranking covers ${verifiedCapCount.toLocaleString('en-IN')} verified equities (NSE + BSE). This is an internal ranking of verified securities, NOT an official SEBI Large/Mid/Small classification.`,
 
     verifiedRankingSegments: {
       top100: top100Count,
@@ -1132,7 +1060,7 @@ async function syncUniverse() {
       large: top100Count,
       mid: rank101_250Count,
       small: remainingVerifiedCount,
-      micro: 0,
+      micro: unrankedCount,
       sme: smeCount
     },
 
@@ -1190,8 +1118,8 @@ async function syncUniverse() {
     }
   };
 
-  // 8. DATASET GENERATOR: Write to js/stocks-data.js
-  console.log('[8/8] Generating production dataset in js/stocks-data.js...');
+  // 8. DATASET GENERATOR: Safe Atomic Write to js/stocks-data.js
+  console.log('[8/8] Generating production dataset in js/stocks-data.js with safe atomic writes...');
   const outputJs = `/* machli bazarr - Complete Stock Market Dataset (NSE + BSE) */
 /* Trading Date: ${TARGET_TRADING_DATE} | Compiled UTC: ${compileTime.toISOString()} | IST: ${istFormattedString} */
 /* Data Status: End-of-day official exchange Bhavcopy (NSE + BSE) */
@@ -1201,12 +1129,76 @@ const MARKET_STATS = ${JSON.stringify(marketStats, null, 2)};
 const STOCKS_DATA = ${JSON.stringify(mergedStocks, null, 2)};
 `;
 
-  fs.writeFileSync(TARGET_PATH, outputJs, 'utf-8');
-  console.log(`\nSuccessfully wrote ${mergedStocks.length} verified stocks to ${TARGET_PATH}`);
+  // 1. Create backup of previous working dataset
+  if (fs.existsSync(TARGET_PATH)) {
+    fs.copyFileSync(TARGET_PATH, BACKUP_PATH);
+    console.log(`  ✓ Backup created at ${BACKUP_PATH}`);
+  }
+
+  // 2. Write to temporary file first
+  const tmpPath = `${TARGET_PATH}.tmp`;
+  fs.writeFileSync(tmpPath, outputJs, 'utf-8');
+
+  // 3. Validate temporary file before atomic rename
+  try {
+    const tmpCheck = fs.readFileSync(tmpPath, 'utf-8');
+    if (!tmpCheck.includes('const MARKET_STATS =') || !tmpCheck.includes('const STOCKS_DATA =')) {
+      throw new Error('Temporary file validation failed: missing MARKET_STATS or STOCKS_DATA');
+    }
+    fs.renameSync(tmpPath, TARGET_PATH);
+    console.log(`\nSuccessfully and atomically wrote ${mergedStocks.length} verified stocks to ${TARGET_PATH}`);
+  } catch (err) {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    throw new Error(`Failed to safely write dataset: ${err.message}`, { cause: err });
+  }
+
+  // 4. Generate Comprehensive Coverage Report
+  const missingList = mergedStocks
+    .filter(s => s.market_cap_cr == null)
+    .map(s => {
+      let reason = 'Unpriced / Inactive listed equity with zero trading volume';
+      if (s.isin && s.isin.startsWith('IN9')) {
+        reason = 'Partly-Paid shares (PP series); equity capital represented in ordinary shares';
+      } else if (s.symbol && (s.symbol.includes('-RE') || s.symbol.includes('RE1'))) {
+        reason = 'Rights Entitlement (RE series); temporary trading rights, not equity shares';
+      } else if (s.segment === 'SME') {
+        reason = 'SME equity without recent valuation or quotes';
+      }
+      return {
+        symbol: s.symbol,
+        company_name: s.company_name,
+        isin: s.isin,
+        exchanges: s.exchanges,
+        segment: s.segment,
+        reason
+      };
+    });
+
+  const sourcesBreakdown = {};
+  mergedStocks.forEach(s => {
+    if (s.market_cap_source) {
+      sourcesBreakdown[s.market_cap_source] = (sourcesBreakdown[s.market_cap_source] || 0) + 1;
+    }
+  });
+
+  generateCoverageReport({
+    tradingDate: TARGET_TRADING_DATE,
+    totalEligible: mergedStocks.length,
+    nseCount: nseByIsin.size,
+    bseCount: bseByIsin.size,
+    dualCount: dualListedCount,
+    verifiedCount: verifiedCapCount,
+    missingCount: mergedStocks.length - verifiedCapCount,
+    coveragePct,
+    totalVerifiedCapCr: totalVerifiedCap,
+    sourcesBreakdown,
+    missingList,
+    segments: verifiedSegments
+  });
 
   // Summary Report
   console.log('\n================================================================');
-  console.log(' SYNCHRONIZATION AND AUDIT REPORT (PHASE 1.3)');
+  console.log(' SYNCHRONIZATION AND AUDIT REPORT');
   console.log('================================================================');
   console.log(`Trading Date           : ${TARGET_TRADING_DATE}`);
   console.log(`Compiled Timestamp     : ${compileTime.toISOString()} (${istFormattedString})`);
@@ -1218,8 +1210,9 @@ const STOCKS_DATA = ${JSON.stringify(mergedStocks, null, 2)};
   console.log(`SME Universe           : ${smeCount} Unique (NSE: ${nseSmeCount}, BSE: ${bseSmeCount}, Dual: 0)`);
   console.log(`Market Breadth         : ${advances} Adv, ${declines} Dec, ${unchanged} Unch, ${unpriced} Unpriced (Total: ${advances + declines + unchanged + unpriced})`);
   console.log(`India VIX              : ${realVix} (${realVixChangePct > 0 ? '+' : ''}${realVixChangePct}%) [${realVixDate}]`);
-  console.log(`Verified Market Cap    : ₹${Math.round(totalVerifiedCap).toLocaleString('en-IN')} Cr across ${verifiedCapCount} stocks`);
+  console.log(`Verified Market Cap    : ₹${Math.round(totalVerifiedCap).toLocaleString('en-IN')} Cr across ${verifiedCapCount} stocks (${coveragePct}%)`);
   console.log(`Verified Rankings      : Top 100 (${top100Count}), Rank 101–250 (${rank101_250Count}), Remaining Verified (${remainingVerifiedCount})`);
+  console.log(`Missing Market Cap     : ${mergedStocks.length - verifiedCapCount} stocks (${(100 - coveragePct).toFixed(2)}%)`);
   console.log(`Stocks with 1W Return  : ${mergedStocks.filter(s => s.return_1w != null).length}`);
   console.log(`Stocks with Sparkline  : ${mergedStocks.filter(s => s.sparkline_7d != null).length}`);
   console.log(`Historical Sessions    : ${HISTORICAL_DATES.length} (${HISTORICAL_DATES[0]} to ${HISTORICAL_DATES[HISTORICAL_DATES.length - 1]})`);

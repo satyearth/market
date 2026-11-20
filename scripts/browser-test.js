@@ -128,7 +128,7 @@ async function runBrowserTests() {
     const mcapVal = await page.locator('#card-total-mcap').innerText();
     const mcapSub = await page.locator('#card-mcap-sub').innerText();
     recordTest('Card 1: Verified Market Cap displays value', mcapVal.includes('Cr'), `Value: ${mcapVal}`);
-    recordTest('Card 1: Identifies Top 343 Equities partial coverage', mcapSub.includes('Top 343 Equities'), mcapSub);
+    recordTest('Card 1: Identifies verified equities coverage', mcapSub.includes('Verified Equities') || mcapSub.includes('Top 343 Equities'), mcapSub);
 
     // Card 2: India VIX
     const vixVal = await page.locator('#card-vix-val').innerText();

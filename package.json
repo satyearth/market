@@ -15,6 +15,7 @@
     "test:browser": "node scripts/test-infinite-scroll.js",
     "test:logos": "node scripts/audit-logo-coverage.js",
     "sync": "node scripts/sync-stock-universe.js",
+    "test:mcap": "node scripts/test-market-cap-coverage.js",
     "test:infinite-scroll": "node scripts/test-infinite-scroll.js",
     "lint": "eslint .",
     "test:responsive": "node scripts/audit-responsive-comprehensive.js",
