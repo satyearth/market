@@ -1,10 +1,30 @@
+/* machii bazzar - Stock Details Page Styles */
+
+:root {
+  --touch-target-min: 44px;
+}
+
 .stock-detail-shell {
   margin-inline: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Back Link Pill Button */
+.stock-detail-shell > a,
+#stock-error a {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  user-select: none;
 }
 
 .stock-detail-sections {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(20rem, .85fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr);
   gap: 1rem;
   margin-top: 1rem;
   align-items: start;
@@ -15,19 +35,20 @@
   margin-top: 0;
 }
 
+/* Responsive Grid for Company Information */
 .stock-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border-top: 1px solid var(--ink-rule);
 }
 
-@media (min-width: 1100px) {
+@media (min-width: 900px) and (max-width: 1399px) {
   .stock-detail-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (min-width: 1600px) {
+@media (min-width: 1400px) {
   .stock-detail-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -35,7 +56,7 @@
 
 .stock-detail-field {
   min-width: 0;
-  padding: .8rem .25rem;
+  padding: 0.85rem 0.5rem;
   border-bottom: 1px solid var(--ink-rule);
 }
 
@@ -51,30 +72,31 @@
 .stock-detail-label {
   display: block;
   color: var(--ink-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: .12em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .stock-detail-value {
   display: block;
-  margin-top: .28rem;
+  margin-top: 0.28rem;
   overflow-wrap: anywhere;
+  word-break: break-word;
   color: var(--ink-ink);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.45;
 }
 
 .stock-listing-row {
   display: grid;
-  grid-template-columns: minmax(5.5rem, .55fr) minmax(0, 1fr);
-  gap: .75rem;
-  padding: .7rem 0;
+  grid-template-columns: minmax(5.5rem, 0.55fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.75rem 0;
   border-top: 1px solid var(--ink-rule);
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
 .stock-listing-label {
@@ -85,30 +107,58 @@
 .stock-listing-value {
   min-width: 0;
   overflow-wrap: anywhere;
+  word-break: break-word;
   color: var(--ink-ink);
   font-family: var(--font-mono);
   font-weight: 600;
 }
 
-@media (max-width: 520px) {
+#stock-name {
+  font-size: clamp(20px, 5.5vw, 32px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#stock-price {
+  font-size: clamp(24px, 6.5vw, 28px);
+  overflow-wrap: anywhere;
+}
+
+.stock-detail-value,
+.stock-listing-value {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* -------------------------------------------------------------------------
+   Mobile & Tablet Responsiveness (< 900px)
+   ------------------------------------------------------------------------- */
+@media (max-width: 899px) {
   .stock-detail-sections {
     grid-template-columns: minmax(0, 1fr);
   }
+}
 
+@media (max-width: 767px) {
+  .stock-detail-shell section {
+    padding: 16px;
+  }
+
+  #stock-price {
+    font-size: clamp(22px, 7vw, 26px);
+  }
+}
+
+/* Single column stack for small mobile screens (< 520px) */
+@media (max-width: 520px) {
   .stock-detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .stock-detail-field:nth-child(odd),
   .stock-detail-field:nth-child(even) {
-    padding-inline: .25rem;
+    padding-inline: 0.25rem;
     border-left: 0;
-  }
-
-}
-
-@media (min-width: 521px) and (max-width: 900px) {
-  .stock-detail-sections {
-    grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -1,6 +1,6 @@
 # Machli Bazzar — Company Logo Coverage Audit
 
-**Date:** 2026-11-04  
+**Date:** 2026-11-20  
 **Provider:** India Company Logo API ([api.dharun.dev](https://api.dharun.dev/docs/logos))  
 **Catalog Size:** 5575 listed companies  
 **Stock Universe Checked:** 5389 active Indian equities  
