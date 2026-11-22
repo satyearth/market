@@ -127,6 +127,90 @@
     listingMarkup.push(`<div class="rounded-lg border border-ink-rule bg-ink-well px-3.5"><dl>${listingRow('ISIN', stock.isin)}${listingRow('Listing status', stock.listing_status)}</dl></div>`);
     document.getElementById('exchange-listings').innerHTML = `<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">${listingMarkup.join('')}</div>`;
 
+    // ── OHLC Today's Trading Data ──
+    const fmtOhlc = v => { const n = asNumber(v); return n == null ? '—' : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
+    const ohlcOpen  = document.getElementById('stock-ohlc-open');
+    const ohlcHigh  = document.getElementById('stock-ohlc-high');
+    const ohlcLow   = document.getElementById('stock-ohlc-low');
+    const ohlcClose = document.getElementById('stock-ohlc-close');
+    if (ohlcOpen) ohlcOpen.textContent   = fmtOhlc(stock.open_price);
+    if (ohlcHigh) ohlcHigh.textContent   = fmtOhlc(stock.high_price);
+    if (ohlcLow)  ohlcLow.textContent    = fmtOhlc(stock.low_price);
+    if (ohlcClose) ohlcClose.textContent = fmtOhlc(stock.close_price ?? stock.current_price);
+
+    // Day range fill bar
+    const dayHigh  = asNumber(stock.high_price);
+    const dayLow   = asNumber(stock.low_price);
+    const dayClose = asNumber(stock.close_price ?? stock.current_price);
+    const ohlcFill  = document.getElementById('stock-ohlc-range-fill');
+    const ohlcLabel = document.getElementById('stock-ohlc-range-label');
+    if (dayHigh != null && dayLow != null && dayHigh > dayLow && dayClose != null) {
+      const pctDay = Math.max(0, Math.min(100, ((dayClose - dayLow) / (dayHigh - dayLow)) * 100));
+      if (ohlcFill) { ohlcFill.style.left = '0%'; ohlcFill.style.width = `${pctDay.toFixed(1)}%`; }
+      if (ohlcLabel) ohlcLabel.textContent = `Close at ${pctDay.toFixed(0)}% of day range`;
+    } else {
+      if (ohlcLabel) ohlcLabel.textContent = '';
+    }
+
+    // Volume
+    const volEl = document.getElementById('stock-volume-val');
+    const volRatioEl = document.getElementById('stock-volume-ratio');
+    if (volEl && stock.volume != null) {
+      const vol = Number(stock.volume);
+      volEl.textContent = vol >= 1e7 ? `${(vol/1e7).toFixed(2)} Cr` : vol >= 1e5 ? `${(vol/1e5).toFixed(2)} L` : vol.toLocaleString('en-IN');
+    }
+    if (volRatioEl && stock.volume_ratio != null) {
+      const vr = Number(stock.volume_ratio);
+      volRatioEl.textContent = `(${vr.toFixed(2)}x avg)`;
+      volRatioEl.className = `ml-2 text-[10px] ${vr >= 2 ? 'text-ink-sienna font-semibold' : 'text-ink-muted'}`;
+    }
+
+    // ── Fundamentals (PE, PB, ROCE, D/E) ──
+    const fundSection = document.getElementById('stock-fundamentals-section');
+    const fundFields = [
+      { boxId: 'fund-pe-box',   valId: 'fund-pe-val',   val: stock.pe_ratio,       fmt: v => v.toFixed(1)+'x' },
+      { boxId: 'fund-pb-box',   valId: 'fund-pb-val',   val: stock.pb_ratio,       fmt: v => v.toFixed(2)+'x' },
+      { boxId: 'fund-roce-box', valId: 'fund-roce-val', val: stock.roce,            fmt: v => v.toFixed(2)+'%' },
+      { boxId: 'fund-de-box',   valId: 'fund-de-val',   val: stock.debt_to_equity, fmt: v => v.toFixed(2)+'x' },
+    ];
+    let visibleFunds = 0;
+    fundFields.forEach(({ boxId, valId, val, fmt }) => {
+      const box = document.getElementById(boxId);
+      const valEl = document.getElementById(valId);
+      const n = asNumber(val);
+      if (n != null && box && valEl) {
+        valEl.textContent = fmt(n);
+        box.classList.remove('hidden');
+        visibleFunds++;
+      }
+    });
+    if (fundSection && visibleFunds > 0) fundSection.classList.remove('hidden');
+
+    // ── Historical Price Table (last 6 sessions) ──
+    const histSection = document.getElementById('stock-history-section');
+    const histTbody = document.getElementById('stock-history-tbody');
+    const histPrices = Array.isArray(stock.historical_prices) ? stock.historical_prices : [];
+    if (histSection && histTbody && histPrices.length >= 2) {
+      histSection.classList.remove('hidden');
+      // Reverse for most-recent-first display
+      const rows = [...histPrices].reverse();
+      histTbody.innerHTML = rows.map((entry, i) => {
+        const prev = rows[i + 1];
+        const change = prev ? entry.close - prev.close : null;
+        const pctChange = prev && prev.close ? ((entry.close - prev.close) / prev.close) * 100 : null;
+        const isPos = change != null ? change >= 0 : null;
+        const chgClass = isPos === true ? 'text-ink-bullish' : isPos === false ? 'text-ink-bearish' : 'text-ink-muted';
+        const chgText = pctChange != null
+          ? `${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(2)}%`
+          : '—';
+        return `<tr class="border-b border-ink-rule/50 hover:bg-ink-well/40 transition-colors">
+          <td class="py-2 pr-4 text-[12px] text-ink-muted font-ui">${escapeHtml(formatDate(entry.date))}</td>
+          <td class="py-2 px-4 text-right text-[12px] text-ink-ink">₹${Number(entry.close).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td class="py-2 pl-4 text-right text-[11px] ${chgClass}">${chgText}</td>
+        </tr>`;
+      }).join('');
+    }
+
     // 52-Week Range Bar
     const lowVal = document.getElementById('stock-52w-low-val');
     const highVal = document.getElementById('stock-52w-high-val');

@@ -18,6 +18,7 @@
   let sortOverride = false;
   const pageSize = 50;
   let activeFilter = 'ALL';
+  let activeSector = '';  // sector filter — empty means no sector filter
   let sortColumn = 'market_cap_cr';
   let sortDirection = 'desc'; // 'asc' or 'desc'
   let searchQuery = '';
@@ -343,6 +344,9 @@
     if (activeFilter === 'WATCHLIST') {
       params.set('isins', Array.from(getWatchlist()).join(','));
     }
+    if (activeSector) {
+      params.set('sector', activeSector);
+    }
     return params;
   }
   function renderRows(rows, append) {
@@ -577,15 +581,29 @@
     // Filter pills
     filterButtons.forEach(btn => {
       btn.addEventListener('click', () => {
+        // Visual reset — all pills to inactive state
         filterButtons.forEach(b => {
-          b.className = 'filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text';
+          const base = 'filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text';
+          b.className = b.classList.contains('sector-pill') ? base + ' sector-pill' : base;
           b.setAttribute('aria-pressed', 'false');
         });
-        btn.className = 'filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft';
+        // Activate clicked pill
+        const activeBase = 'inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft';
+        btn.className = btn.classList.contains('sector-pill')
+          ? 'filter-pill-btn sector-pill ' + activeBase
+          : 'filter-pill-btn ' + activeBase;
         btn.setAttribute('aria-pressed', 'true');
 
-        const rawText = btn.innerText.trim();
-        activeFilter = rawText.includes('WATCHLIST') ? 'WATCHLIST' : rawText;
+        if (btn.classList.contains('sector-pill')) {
+          // Sector filter: set sector param, reset standard filter to ALL
+          activeSector = btn.getAttribute('data-sector') || '';
+          activeFilter = 'ALL';
+        } else {
+          // Standard filter: clear sector
+          activeSector = '';
+          const rawText = btn.innerText.trim();
+          activeFilter = rawText.includes('WATCHLIST') ? 'WATCHLIST' : rawText;
+        }
         applyFilters();
       });
     });
