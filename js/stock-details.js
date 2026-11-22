@@ -127,6 +127,85 @@
     listingMarkup.push(`<div class="rounded-lg border border-ink-rule bg-ink-well px-3.5"><dl>${listingRow('ISIN', stock.isin)}${listingRow('Listing status', stock.listing_status)}</dl></div>`);
     document.getElementById('exchange-listings').innerHTML = `<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">${listingMarkup.join('')}</div>`;
 
+    // 52-Week Range Bar
+    const lowVal = document.getElementById('stock-52w-low-val');
+    const highVal = document.getElementById('stock-52w-high-val');
+    const pin = document.getElementById('stock-52w-pin');
+    const fill = document.getElementById('stock-52w-fill');
+    const posText = document.getElementById('stock-52w-position-text');
+
+    const high52 = asNumber(stock.week52_high);
+    const low52 = asNumber(stock.week52_low);
+    const currPrice = asNumber(stock.current_price);
+
+    if (high52 != null && low52 != null && high52 > low52 && currPrice != null) {
+      const pct = Math.max(0, Math.min(100, ((currPrice - low52) / (high52 - low52)) * 100));
+      if (lowVal) lowVal.textContent = formatPrice(low52).replace('₹', '');
+      if (highVal) highVal.textContent = formatPrice(high52).replace('₹', '');
+      if (pin) {
+        pin.style.display = '';
+        pin.style.left = `${pct.toFixed(1)}%`;
+      }
+      if (fill) fill.style.width = `${pct.toFixed(1)}%`;
+      if (posText) posText.textContent = `${pct.toFixed(0)}% of range (${pct >= 90 ? 'Near 52W High' : pct <= 10 ? 'Near 52W Low' : 'Mid range'})`;
+    } else {
+      if (lowVal) lowVal.textContent = stock.week52_low != null ? formatPrice(stock.week52_low).replace('₹', '') : '—';
+      if (highVal) highVal.textContent = stock.week52_high != null ? formatPrice(stock.week52_high).replace('₹', '') : '—';
+      if (pin) pin.style.display = 'none';
+      if (posText) posText.textContent = '';
+    }
+
+    // Watchlist Toggle
+    const watchlistBtn = document.getElementById('stock-watchlist-btn');
+    const watchlistStar = document.getElementById('stock-watchlist-star');
+    const watchlistLabel = document.getElementById('stock-watchlist-label');
+
+    const WATCHLIST_STORAGE_KEY = 'machii_watchlist';
+    function getWatchlist() {
+      try {
+        const raw = localStorage.getItem(WATCHLIST_STORAGE_KEY);
+        if (!raw) return new Set();
+        const arr = JSON.parse(raw);
+        return new Set(Array.isArray(arr) ? arr.map(i => String(i).toUpperCase()) : []);
+      } catch (_) {
+        return new Set();
+      }
+    }
+    function saveWatchlist(set) {
+      try {
+        localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(Array.from(set)));
+      } catch (_) {}
+    }
+
+    if (watchlistBtn && stock.isin) {
+      const stockIsin = String(stock.isin).toUpperCase();
+      const updateWatchlistUi = () => {
+        const wl = getWatchlist();
+        const isStarred = wl.has(stockIsin);
+        if (watchlistStar) {
+          watchlistStar.className = isStarred ? 'text-amber-400 font-bold' : 'text-ink-muted';
+        }
+        if (watchlistLabel) {
+          watchlistLabel.textContent = isStarred ? 'In Watchlist' : 'Watchlist';
+        }
+        if (isStarred) {
+          watchlistBtn.className = 'inline-flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400 transition-colors shadow-soft';
+        } else {
+          watchlistBtn.className = 'inline-flex items-center gap-1 rounded-full border border-ink-rule bg-ink-well px-2.5 py-0.5 text-[11px] font-semibold text-ink-muted hover:text-amber-400 hover:border-amber-400/40 transition-colors shadow-soft';
+        }
+      };
+
+      updateWatchlistUi();
+
+      watchlistBtn.onclick = () => {
+        const wl = getWatchlist();
+        if (wl.has(stockIsin)) wl.delete(stockIsin);
+        else wl.add(stockIsin);
+        saveWatchlist(wl);
+        updateWatchlistUi();
+      };
+    }
+
     loading.classList.add('hidden');
     detail.classList.remove('hidden');
     updateMarketStatus(dateLabel);

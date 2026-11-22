@@ -55,10 +55,33 @@
               </div>
             </div>
             <div class="sm:min-w-[190px] sm:text-right">
-              <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Latest available price</p>
+              <div class="flex items-center justify-between sm:justify-end gap-2">
+                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Latest available price</p>
+                <button id="stock-watchlist-btn" type="button" class="inline-flex items-center gap-1 rounded-full border border-ink-rule bg-ink-well px-2.5 py-0.5 text-[11px] font-semibold text-ink-muted hover:text-amber-400 hover:border-amber-400/40 transition-colors shadow-soft" title="Toggle Watchlist">
+                  <span id="stock-watchlist-star">★</span>
+                  <span id="stock-watchlist-label">Watchlist</span>
+                </button>
+              </div>
               <p id="stock-price" class="mt-1 font-mono text-[25px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">N/A</p>
               <p id="stock-change" class="mt-1 font-mono text-xs font-semibold tabular-nums">N/A</p>
               <p id="stock-price-date" class="mt-2 text-[10px] text-ink-muted">EOD close · N/A</p>
+            </div>
+          </div>
+          <!-- 52-Week Range Visualizer -->
+          <div id="stock-52w-range-section" class="mt-5 border-t border-ink-rule pt-4">
+            <div class="flex items-center justify-between text-[11px]">
+              <span class="text-ink-muted font-ui font-medium">52-Week Range</span>
+              <span id="stock-52w-position-text" class="font-mono text-[10px] text-ink-muted"></span>
+            </div>
+            <div class="mt-2 relative">
+              <div class="h-2 w-full rounded-full bg-ink-well border border-ink-rule overflow-hidden flex">
+                <div id="stock-52w-fill" class="h-full bg-gradient-to-r from-ink-bearish via-ink-sienna to-ink-bullish opacity-70 transition-all duration-300" style="width: 50%"></div>
+              </div>
+              <div id="stock-52w-pin" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 size-3.5 rounded-full border-2 border-ink-ink bg-ink-sienna shadow-sm transition-all duration-300" style="left: 50%" title="Current price position"></div>
+            </div>
+            <div class="mt-1.5 flex items-center justify-between font-mono text-[11px] tabular-nums text-ink-muted">
+              <span>L: ₹<span id="stock-52w-low-val">—</span></span>
+              <span>H: ₹<span id="stock-52w-high-val">—</span></span>
             </div>
           </div>
           <p id="market-data-status" class="mt-4 border-t border-ink-rule pt-3 text-[10px] leading-relaxed text-ink-faint" role="status" aria-live="polite">Checking market data status…</p>

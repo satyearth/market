@@ -146,6 +146,7 @@
             <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TOP GAINERS</button>
             <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TOP LOSERS</button>
             <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">NEAR 52W HIGH</button>
+            <button aria-pressed="false" id="filter-watchlist-btn" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-amber-400"><span class="text-amber-400">★</span> WATCHLIST</button>
           </div>
         </div>
 
@@ -166,6 +167,12 @@
                   <button aria-pressed="true" title="Sort only the rows on this page" class="rounded-full px-[11px] py-[3px] font-ui text-[10px] font-semibold whitespace-nowrap transition-all text-ink-ink bg-ink-card shadow-soft">This page</button>
                   <button aria-pressed="false" title="Sort all matching stocks before pagination" class="flex items-center gap-1 rounded-full px-[11px] py-[3px] font-ui text-[10px] font-semibold whitespace-nowrap transition-all text-ink-muted hover:text-ink-text">All results</button>
                 </div>
+
+                <!-- Export CSV -->
+                <button id="export-csv-btn" class="inline-flex items-center gap-1.5 rounded-full border border-ink-rule bg-ink-well px-3 py-1 font-ui text-[11px] font-semibold text-ink-muted hover:text-ink-sienna hover:border-ink-sienna transition-colors shadow-soft" title="Export currently loaded stocks as CSV">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span class="hidden sm:inline">Export CSV</span>
+                </button>
 
                 <!-- Density Toggle -->
                 <button id="density-toggle-btn" class="w-[28px] h-[28px] flex items-center justify-center rounded-full border border-ink-rule bg-ink-well text-ink-muted transition-colors hover:text-ink-sienna hover:border-ink-sienna" title="Switch between default and dense rows">

@@ -308,20 +308,53 @@
     `;
   }
 
+  const WATCHLIST_STORAGE_KEY = 'machii_watchlist';
+  function getWatchlist() {
+    try {
+      const raw = localStorage.getItem(WATCHLIST_STORAGE_KEY);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr.map(i => String(i).toUpperCase()) : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+  function saveWatchlist(set) {
+    try {
+      localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(Array.from(set)));
+    } catch (_) {}
+  }
+  function toggleWatchlist(isin) {
+    if (!isin) return false;
+    const norm = String(isin).toUpperCase();
+    const set = getWatchlist();
+    const added = !set.has(norm);
+    if (added) set.add(norm);
+    else set.delete(norm);
+    saveWatchlist(set);
+    return added;
+  }
+
   // Server-side filtering keeps search and sorting complete across all listed stocks.
   function queryParameters(offset) {
     const defaultColumn = activeFilter === 'TOP GAINERS' || activeFilter === 'TOP LOSERS' ? 'change_percent' : sortColumn;
     const defaultDirection = activeFilter === 'TOP GAINERS' ? 'desc' : activeFilter === 'TOP LOSERS' ? 'asc' : sortDirection;
-    return new URLSearchParams({ limit: String(pageSize), offset: String(offset), search: searchQuery, filter: activeFilter, sort: sortOverride ? sortColumn : defaultColumn, direction: sortOverride ? sortDirection : defaultDirection, sortOverride: String(sortOverride) });
+    const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset), search: searchQuery, filter: activeFilter, sort: sortOverride ? sortColumn : defaultColumn, direction: sortOverride ? sortDirection : defaultDirection, sortOverride: String(sortOverride) });
+    if (activeFilter === 'WATCHLIST') {
+      params.set('isins', Array.from(getWatchlist()).join(','));
+    }
+    return params;
   }
   function renderRows(rows, append) {
     if (!tbody || !rows.length) return;
     const padY = isDense ? '4px' : '9px';
+    const watchlist = getWatchlist();
     const html = rows.map((s, idx) => {
       const isChgPositive = (s.change_percent || 0) >= 0;
       const chgColor = isChgPositive ? 'text-ink-bullish' : 'text-ink-bearish';
       const chgArrow = isChgPositive ? '▴' : '▾';
       const sectorText = (!s.sector || String(s.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : s.sector;
+      const isStarred = s.isin && watchlist.has(String(s.isin).toUpperCase());
       return `
         <tr data-row-isin="${escapeHtml(s.isin)}" tabindex="0" aria-label="Open details for ${escapeHtml(s.company_name || s.symbol)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna focus-visible:outline-offset-[-1px] pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
           <td class="text-right font-mono tabular-nums text-[13px] text-ink-muted px-2" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
@@ -340,7 +373,12 @@
           <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}" title="Data not available yet">${formatPercent(s.return_3m)}</td>
           <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] text-ink-text px-2" style="padding-top:${padY};padding-bottom:${padY}" title="Volume: ${s.volume != null ? Number(s.volume).toLocaleString('en-IN') : '—'}">${formatVolume(s.volume)}</td>
           <td class="hidden xl:table-cell w-[64px] px-1" style="padding-top:${padY};padding-bottom:${padY}">${createSparklineSvg(s)}</td>
-          <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px"><span class="inline-flex items-center gap-0.5 opacity-0 translate-x-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0"><a class="stock-details-link w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">↗</a></span></td>
+          <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px">
+            <span class="inline-flex items-center gap-0.5 ${isStarred ? 'opacity-100' : 'opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0'} transition-all duration-150">
+              <button type="button" class="watchlist-toggle-btn w-6 h-6 flex items-center justify-center rounded-full text-[13px] transition-colors ${isStarred ? 'text-amber-400' : 'text-ink-muted/50 hover:text-amber-400'}" data-isin="${escapeHtml(s.isin)}" title="${isStarred ? 'Remove from Watchlist' : 'Add to Watchlist'}" aria-label="Toggle watchlist for ${escapeHtml(s.symbol)}">★</button>
+              <a class="stock-details-link w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">↗</a>
+            </span>
+          </td>
         </tr>`;
     }).join('');
     if (append) tbody.insertAdjacentHTML('beforeend', html);
@@ -384,6 +422,12 @@
   }
   async function fetchNextBatch(retry = false) {
     if (loading || !hasMore || (loadError && !retry)) return;
+    if (activeFilter === 'WATCHLIST' && getWatchlist().size === 0) {
+      loading = false; hasMore = false; resultTotal = 0; loadedStocks = []; loadedIsins = new Set();
+      if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-ink-muted"><div class="font-display text-lg text-ink-ink mb-1">Your Watchlist is empty</div><p class="text-sm">Click the <span class="text-amber-400">★</span> icon on any stock row to add it to your personal watchlist.</p></td></tr>';
+      updateInfiniteStatus();
+      return;
+    }
     loading = true; loadError = false;
     const version = queryVersion, offset = nextOffset;
     updateInfiniteStatus(); if (!loadedStocks.length) renderSkeletons();
@@ -442,16 +486,93 @@
       });
     }
 
-    // Keyboard shortcut '/' to search
+    // Keyboard shortcut '/' to search, 'Escape' to clear and blur
     window.addEventListener('keydown', (e) => {
-      if (e.key === '/' && document.activeElement !== searchInput) {
+      if (e.key === '/' && document.activeElement !== searchInput && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
         e.preventDefault();
         if (searchInput) {
           searchInput.focus();
           searchInput.select();
         }
+      } else if (e.key === 'Escape' && document.activeElement === searchInput) {
+        if (searchInput.value) {
+          searchInput.value = '';
+          searchQuery = '';
+          applyFilters();
+        }
+        searchInput.blur();
       }
     });
+
+    // Export CSV
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+    if (exportCsvBtn) {
+      exportCsvBtn.addEventListener('click', () => {
+        if (!loadedStocks || !loadedStocks.length) {
+          return;
+        }
+        const headers = [
+          'Rank',
+          'Symbol',
+          'Company Name',
+          'ISIN',
+          'Exchanges',
+          'Segment',
+          'Sector',
+          'Price (INR)',
+          'Change (INR)',
+          'Change (%)',
+          'Market Cap (Cr)',
+          '1W Return (%)',
+          '1M Return (%)',
+          '3M Return (%)',
+          'Volume',
+          '52W High (INR)',
+          '52W Low (INR)'
+        ];
+
+        const escapeCsv = (val) => {
+          if (val == null) return '';
+          const str = String(val);
+          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        };
+
+        const rows = loadedStocks.map(s => [
+          escapeCsv(s.rank != null ? s.rank : ''),
+          escapeCsv(s.symbol || ''),
+          escapeCsv(s.company_name || ''),
+          escapeCsv(s.isin || ''),
+          escapeCsv(Array.isArray(s.exchanges) ? s.exchanges.join('/') : (s.exchanges || '')),
+          escapeCsv(s.segment || 'MAINBOARD'),
+          escapeCsv(s.sector || 'Unclassified'),
+          escapeCsv(s.current_price != null ? s.current_price : ''),
+          escapeCsv(s.change != null ? s.change : ''),
+          escapeCsv(s.change_percent != null ? s.change_percent : ''),
+          escapeCsv(s.market_cap_cr != null ? s.market_cap_cr : ''),
+          escapeCsv(s.return_1w != null ? s.return_1w : ''),
+          escapeCsv(s.return_1m != null ? s.return_1m : ''),
+          escapeCsv(s.return_3m != null ? s.return_3m : ''),
+          escapeCsv(s.volume != null ? s.volume : ''),
+          escapeCsv(s.week52_high != null ? s.week52_high : ''),
+          escapeCsv(s.week52_low != null ? s.week52_low : '')
+        ].join(','));
+
+        const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const tradingDate = marketStats?.tradingDate || new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `machii-bazzar-stocks-${tradingDate}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
 
     // Filter pills
     filterButtons.forEach(btn => {
@@ -463,7 +584,8 @@
         btn.className = 'filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft';
         btn.setAttribute('aria-pressed', 'true');
 
-        activeFilter = btn.innerText.trim();
+        const rawText = btn.innerText.trim();
+        activeFilter = rawText.includes('WATCHLIST') ? 'WATCHLIST' : rawText;
         applyFilters();
       });
     });
@@ -524,6 +646,24 @@
     // Event delegation keeps stock navigation working as rows are re-rendered.
     if (tbody) {
       tbody.addEventListener('click', (e) => {
+        const starBtn = e.target.closest('.watchlist-toggle-btn');
+        if (starBtn) {
+          e.stopPropagation();
+          const isin = starBtn.getAttribute('data-isin');
+          const isNowStarred = toggleWatchlist(isin);
+          starBtn.classList.toggle('text-amber-400', isNowStarred);
+          starBtn.classList.toggle('text-ink-muted/50', !isNowStarred);
+          starBtn.setAttribute('title', isNowStarred ? 'Remove from Watchlist' : 'Add to Watchlist');
+          const parentSpan = starBtn.closest('span');
+          if (parentSpan) {
+            parentSpan.classList.toggle('opacity-100', isNowStarred);
+          }
+          if (activeFilter === 'WATCHLIST' && !isNowStarred) {
+            applyFilters();
+          }
+          return;
+        }
+
         const row = e.target.closest('tr[data-row-isin]');
         if (row) {
           if (e.target.closest('button') || e.target.closest('a')) return;
