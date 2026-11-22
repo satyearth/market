@@ -1,6 +1,6 @@
 # Machii Bazzar — Market Capitalization Coverage & Synchronization Report
 
-**Report Generated:** Friday, 20 November 2026 at 4:53:13 pm  
+**Report Generated:** Monday, 23 November 2026 at 2:13:28 am  
 **Exchange Session Date:** 2026-11-04  
 **Primary Identifier:** International Securities Identification Number (ISIN)
 

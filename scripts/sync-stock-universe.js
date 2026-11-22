@@ -43,6 +43,10 @@ const {
   rankStocksAndCategorize,
   generateCoverageReport
 } = require('../lib/market-cap-pipeline');
+const {
+  getLatestExpectedTradingDate,
+  getPreviousTradingDay
+} = require('./exchange-calendar');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DOWNLOADS_DIR = path.join(ROOT_DIR, 'downloads');
@@ -50,16 +54,48 @@ const JS_DIR = path.join(ROOT_DIR, 'js');
 const BACKUP_PATH = path.join(JS_DIR, 'stocks-data.backup.js');
 const TARGET_PATH = path.join(JS_DIR, 'stocks-data.js');
 
-// Current and verified historical trading dates (YYYY-MM-DD)
-const TARGET_TRADING_DATE = '2026-11-04';
-const HISTORICAL_DATES = [
-  '2026-10-28', // Session 1 (Wednesday)
-  '2026-10-29', // Session 2 (Thursday)
-  '2026-10-30', // Session 3 (Friday)
-  '2026-11-02', // Session 4 (Monday)
-  '2026-11-03', // Session 5 (Tuesday)
-  '2026-11-04'  // Session 6 (Wednesday - Latest EOD)
-];
+// Dynamically resolve target trading date and historical sessions
+function resolveTargetTradingDate() {
+  // 1. Check CLI argument: --date=YYYY-MM-DD or positional argument YYYY-MM-DD
+  const cliDate = process.argv.find(a => a.startsWith('--date='))?.split('=')[1] ||
+                  process.argv.slice(2).find(a => /^\d{4}-\d{2}-\d{2}$/.test(a));
+  if (cliDate && /^\d{4}-\d{2}-\d{2}$/.test(cliDate)) {
+    return cliDate;
+  }
+
+  // 2. If --latest flag passed, use calendar's latest expected trading date
+  if (process.argv.includes('--latest') || cliDate === 'latest') {
+    return getLatestExpectedTradingDate().latestExpectedDate;
+  }
+
+  // 3. Auto-detect: if latest expected session files exist in downloads/, use them
+  try {
+    const expected = getLatestExpectedTradingDate().latestExpectedDate;
+    const expectedCompact = expected.replace(/-/g, '');
+    const nseExpected = path.join(DOWNLOADS_DIR, `BhavCopy_NSE_CM_0_0_0_${expectedCompact}_F_0000.csv`);
+    const bseExpected = path.join(DOWNLOADS_DIR, `BhavCopy_BSE_CM_0_0_0_${expectedCompact}_F_0000.CSV`);
+    if (fs.existsSync(nseExpected) && fs.existsSync(bseExpected)) {
+      return expected;
+    }
+  } catch (_) {}
+
+  // 4. Default fallback: verified working session in repository
+  return '2026-11-04';
+}
+
+function resolveHistoricalDates(targetDate, sessionCount = 6) {
+  const sessions = [targetDate];
+  let curr = targetDate;
+  while (sessions.length < sessionCount) {
+    curr = getPreviousTradingDay(curr);
+    sessions.unshift(curr);
+  }
+  return sessions;
+}
+
+// Current and verified historical trading dates (dynamically resolved)
+const TARGET_TRADING_DATE = resolveTargetTradingDate();
+const HISTORICAL_DATES = resolveHistoricalDates(TARGET_TRADING_DATE, 6);
 
 // Eligible NSE equity series:
 // Mainboard: EQ, BE, BZ, BL | SME: SM, ST
@@ -207,7 +243,7 @@ async function syncUniverse() {
 
   let mcpConnected = false;
   try {
-    const testPing = await callMcpTool('nse_download_equity_bhavcopy', { date: TARGET_TRADING_DATE }, 5000);
+    const testPing = await callMcpTool('nse_download_equity_bhavcopy', { date: TARGET_TRADING_DATE }, 1000);
     if (testPing.ok) mcpConnected = true;
   } catch (e) {
     mcpConnected = false;

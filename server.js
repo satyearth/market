@@ -60,8 +60,9 @@ function readMarketStatsFromDataset() {
 
 /**
  * Executes scripts/sync-stock-universe.js with mutex lock protection
+ * @param {string} [customDate] Optional target trading date (YYYY-MM-DD)
  */
-function triggerSyncJob() {
+function triggerSyncJob(customDate = null) {
   return new Promise((resolve) => {
     if (isSyncing) {
       return resolve({
@@ -77,7 +78,12 @@ function triggerSyncJob() {
     console.log(`[Auto-Refresh Engine] Sync job triggered at ${syncStartedAt}...`);
 
     const syncScript = path.join(ROOT_DIR, 'scripts', 'sync-stock-universe.js');
-    const child = spawn(process.execPath, [syncScript], {
+    const spawnArgs = [syncScript];
+    if (customDate && /^\d{4}-\d{2}-\d{2}$/.test(customDate)) {
+      spawnArgs.push(`--date=${customDate}`);
+    }
+
+    const child = spawn(process.execPath, spawnArgs, {
       cwd: ROOT_DIR,
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -222,8 +228,9 @@ async function handleRequest(req, res) {
       }));
     }
 
-    // A newer exchange session is expected: trigger sync engine
-    const syncOutcome = await triggerSyncJob();
+    // A newer exchange session is expected (or explicit date requested): trigger sync engine
+    const requestedDate = parsedUrl.searchParams.get('date');
+    const syncOutcome = await triggerSyncJob(requestedDate);
     res.writeHead(syncOutcome.ok ? 200 : 500, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(syncOutcome));
   }
@@ -285,6 +292,21 @@ if (require.main === module) {
     console.log(' - Refresh Endpoint     : http://localhost:' + PORT + '/api/market/refresh');
     console.log('================================================================');
   });
+
+  // Scheduled background sync check (every 10 minutes)
+  setInterval(() => {
+    try {
+      const stats = readMarketStatsFromDataset();
+      const currentTradingDate = stats?.tradingDate || '2026-11-04';
+      const freshness = checkSessionFreshness(currentTradingDate);
+      if (freshness.needsSync && !isSyncing) {
+        console.log(`[Auto-Sync Scheduler] New exchange session detected. Triggering automated EOD sync...`);
+        triggerSyncJob();
+      }
+    } catch (err) {
+      console.warn('[Auto-Sync Scheduler] Session freshness check notice:', err.message);
+    }
+  }, 10 * 60 * 1000);
 }
 
 module.exports = server;
