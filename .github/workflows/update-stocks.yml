@@ -15,9 +15,9 @@
 name: Update Stock Universe (NSE + BSE)
 
 on:
-  schedule:
-    # Run every weekday Monday to Friday at 18:30 IST (13:00 UTC) after Indian market close
-    - cron: '0 13 * * 1-5'
+  # Scheduled daily commits disabled to keep repository commit log clean (Solution A: Dynamic Vercel API)
+  # schedule:
+  #   - cron: '0 13 * * 1-5'
   workflow_dispatch:
     inputs:
       force_sync:
