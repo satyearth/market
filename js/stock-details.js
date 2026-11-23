@@ -127,7 +127,7 @@
     listingMarkup.push(`<div class="rounded-lg border border-ink-rule bg-ink-well px-3.5"><dl>${listingRow('ISIN', stock.isin)}${listingRow('Listing status', stock.listing_status)}</dl></div>`);
     document.getElementById('exchange-listings').innerHTML = `<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">${listingMarkup.join('')}</div>`;
 
-    // ── OHLC Today's Trading Data ──
+    // ── Latest session OHLC data ──
     const fmtOhlc = v => { const n = asNumber(v); return n == null ? '—' : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
     const ohlcOpen  = document.getElementById('stock-ohlc-open');
     const ohlcHigh  = document.getElementById('stock-ohlc-high');

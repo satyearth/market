@@ -59,6 +59,11 @@
             <span class="relative mt-[0.35em] inline-block size-[7px] shrink-0 rounded-full bg-ink-faint" aria-hidden="true"></span>
             <span id="market-status-badge" class="min-w-0">Market closed · <span class="tabular-nums text-ink-text font-bold">5,389</span> listed companies (NSE + BSE)</span>
           </div>
+          <div id="eod-sync-indicator" class="mb-2 inline-flex items-center gap-1.5 rounded-full border border-ink-rule bg-ink-well px-2.5 py-1 font-mono text-[10px] text-ink-muted" role="status" aria-live="polite">
+            <span id="eod-sync-dot" class="relative inline-block size-[7px] shrink-0 rounded-full bg-amber-500" aria-hidden="true"></span>
+            <span id="eod-sync-text">Checking EOD data date…</span>
+            <span id="eod-sync-time" class="text-ink-faint"></span>
+          </div>
           <h1 class="hero-heading font-display text-[clamp(24px,5.5vw,36px)] font-[750] leading-[1.12] tracking-[-0.025em] text-ink-ink">
             Every stock, <em class="not-italic text-ink-sienna">ranked</em>.
           </h1>
@@ -97,14 +102,14 @@
                   <span id="card-breadth-adv" class="text-ink-bullish">— ▴</span>
                   <span id="card-breadth-dec" class="text-ink-bearish">— ▾</span>
                 </div>
-                <span id="card-breadth-sub" class="text-[11px] text-ink-muted truncate">A/D: — · 620 Unch · 2 Unpriced</span>
+                <span id="card-breadth-sub" class="text-[11px] text-ink-muted truncate">Breadth data unavailable</span>
               </div>
 
               <!-- Card 4: Near 52W High -->
               <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-ink-rule lg:border-b-0 lg:border-r xl:border-r">
                 <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Surveyed BSE Groups A & B via BSE MCP. NSE-only and other BSE groups not included.">Near 52W High</span>
-                <span id="card-near52-pct" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">36</span>
-                <span id="card-near52-sub" class="text-[11.5px] text-ink-muted leading-tight"><span class="block">36 verified BSE Group A/B equities</span><span class="block text-[10px] text-ink-faint mt-0.5">Source: BSE MCP (04-Nov-2026)</span></span>
+                <span id="card-near52-pct" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">—</span>
+                <span id="card-near52-sub" class="text-[11.5px] text-ink-muted leading-tight">No verified session data</span>
               </div>
 
               <!-- Card 5: Verified Cap Ranks -->

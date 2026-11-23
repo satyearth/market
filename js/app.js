@@ -141,8 +141,8 @@
     // Header Market Status Badge
     const badge = document.getElementById('market-status-badge');
     if (badge && marketStats.stockCount) {
-      const dt = marketStats.tradingDate || '2026-11-04';
-      const istInfo = marketStats.istDisplayTime ? ` · <span class="text-ink-muted text-[11px] font-normal">Refreshed ${escapeHtml(marketStats.istDisplayTime)}</span>` : '';
+      const dt = marketStats.tradingDate || 'date unavailable';
+      const istInfo = marketStats.istDisplayTime ? ` · <span class="text-ink-muted text-[11px] font-normal">Dataset built ${escapeHtml(marketStats.istDisplayTime)}</span>` : '';
       badge.innerHTML = `Market closed · EOD (${dt})${istInfo} · <span class="tabular-nums text-ink-text font-bold">${marketStats.stockCount.toLocaleString('en-IN')}</span> listed companies (NSE + BSE)`;
     }
 
@@ -214,15 +214,15 @@
       if (marketStats.near52WeekHighCount != null) {
         nearPct.innerText = String(marketStats.near52WeekHighCount);
         if (nearSub) {
-          const tradingDate = marketStats.tradingDate || '2026-11-04';
-          nearSub.innerHTML = `<span class="block">${marketStats.near52WeekHighCount.toLocaleString('en-IN')} verified BSE Group A/B equities</span><span class="block text-[10px] text-ink-faint mt-0.5">Source: BSE MCP (${tradingDate})</span>`;
-          nearSub.title = `Surveyed BSE Groups A & B (40 matched equities, ${marketStats.near52WeekHighCount} within 8% of 52W high). NSE-only and other BSE groups not included.`;
+          const tradingDate = marketStats.tradingDate || 'date unavailable';
+          nearSub.innerHTML = `<span class="block">${marketStats.near52WeekHighCount.toLocaleString('en-IN')} verified BSE Group A/B equities</span><span class="block text-[10px] text-ink-faint mt-0.5">Source: BSE data (${escapeHtml(marketStats.near52WeekHighTradingDate || tradingDate)})</span>`;
+          nearSub.title = `Surveyed BSE Groups A & B; ${marketStats.near52WeekHighCount} within 8% of 52W high. NSE-only and other BSE groups not included.`;
         }
       } else {
         nearPct.innerText = '—';
         if (nearSub) {
-          nearSub.innerHTML = 'Session data unavailable<span class="block text-[10px] text-ink-faint">BSE MCP offline</span>';
-          nearSub.title = '52-week high data unavailable from BSE MCP for this session.';
+          nearSub.innerHTML = 'No verified data for this session';
+          nearSub.title = '52-week high data was not verified for this trading session.';
         }
       }
     }
@@ -792,9 +792,7 @@
     // Reset animation classes
     dot.className = 'relative inline-block size-[7px] shrink-0 rounded-full';
 
-    const defaultTime = (marketStats && marketStats.istDisplayTime)
-      ? marketStats.istDisplayTime
-      : '04 Nov 2026, 22:33 IST';
+    const defaultTime = marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '';
 
     switch (state) {
       case 'updating':
@@ -807,6 +805,12 @@
         dot.classList.add('bg-amber-500');
         textEl.textContent = message || 'Update failed — showing previous data';
         if (timeEl) timeEl.textContent = ` · ${timeText || defaultTime}`;
+        break;
+
+      case 'stale':
+        dot.classList.add('bg-amber-500');
+        textEl.textContent = message || 'Showing previous verified EOD data';
+        if (timeEl) timeEl.textContent = timeText ? ` · ${timeText}` : (defaultTime ? ` · ${defaultTime}` : '');
         break;
 
       case 'closed':
@@ -826,11 +830,12 @@
 
   // Automatic EOD Data Refresh on Website Open
   async function checkEodAutoRefresh() {
-    // Stale-while-revalidate initial display
-    updateSyncIndicator('latest');
+    // Do not claim freshness until the backend has checked the dataset date.
+    updateSyncIndicator('stale', 'Checking EOD data date...');
 
     // In static file mode (e.g. file:///), no backend HTTP server is available
     if (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.host)) {
+      updateSyncIndicator('stale', 'Showing bundled EOD dataset', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : 'freshness unverified');
       return;
     }
 
@@ -840,7 +845,8 @@
     try {
       const lastCheck = Number(sessionStorage.getItem(CACHE_KEY) || 0);
       if (Date.now() - lastCheck < CACHE_TTL_MS) {
-        return; // Cache valid, keep showing latest verified EOD data
+        updateSyncIndicator('latest', 'EOD data checked recently', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '');
+        return;
       }
     } catch (_) {
       // Ignore storage access errors in restricted iframe/browser modes
@@ -853,12 +859,16 @@
         cache: 'no-cache'
       });
 
-      if (!res.ok) return; // Non-200 response: static hosting fallback
+      if (!res.ok) {
+        updateSyncIndicator('stale', 'EOD freshness could not be checked', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '');
+        return;
+      }
       const data = await res.json();
 
-      if (!data || !data.ok) return;
-
-      const displayTime = data.istDisplayTime || (marketStats && marketStats.istDisplayTime);
+      if (!data || !data.ok) {
+        updateSyncIndicator('stale', 'EOD freshness could not be checked', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '');
+        return;
+      }
 
       if (data.isSyncing) {
         // Sync is actively running in background
@@ -880,32 +890,34 @@
           if (refreshData.ok && refreshData.status === 'updated') {
             // Hot-reload fresh dataset without full page reload
             await reloadDatasetHot();
-            updateSyncIndicator('latest', 'Latest EOD data', refreshData.istDisplayTime || displayTime);
+            updateSyncIndicator('latest', 'Latest EOD data', `EOD ${refreshData.tradingDate || data.tradingDate}`);
             try { sessionStorage.setItem(CACHE_KEY, String(Date.now())); } catch (_) {}
           } else if (refreshData.status === 'in_progress') {
             pollSyncCompletion();
           } else {
-            // Update failed: keep displaying previous valid dataset
-            updateSyncIndicator('failed', 'Update failed — showing previous data', displayTime);
+            // Vercel cannot rebuild the checked-in dataset from this function.
+            const sourceDate = refreshData.tradingDate || data.tradingDate;
+            const expectedDate = refreshData.latestExpectedDate || data.marketCalendar?.latestExpectedDate;
+            updateSyncIndicator('stale', 'Showing previous verified EOD data', `EOD ${sourceDate || 'unknown'} · expected ${expectedDate || 'newer session'}`);
           }
         } catch (err) {
-          updateSyncIndicator('failed', 'Update failed — showing previous data', displayTime);
+          updateSyncIndicator('stale', 'Showing previous verified EOD data', `EOD ${data.tradingDate || 'unknown'} · expected ${data.marketCalendar?.latestExpectedDate || 'newer session'}`);
         }
         return;
       }
 
       // Already up-to-date
       if (data.marketCalendar && (data.marketCalendar.isWeekend || data.marketCalendar.isHoliday)) {
-        updateSyncIndicator('latest', 'Latest EOD data (Market closed)', displayTime);
+        updateSyncIndicator('latest', 'Latest EOD data (Market closed)', `EOD ${data.tradingDate || 'date unavailable'}`);
       } else {
-        updateSyncIndicator('latest', 'Latest EOD data', displayTime);
+        updateSyncIndicator('latest', 'Latest EOD data', `EOD ${data.tradingDate || 'date unavailable'}`);
       }
       try { sessionStorage.setItem(CACHE_KEY, String(Date.now())); } catch (_) {}
 
     } catch (err) {
       // In static deployment (e.g. GitHub Pages or file:///), /api/market/status will fail
       // Stale-while-revalidate guarantees the loaded EOD dataset remains active and clean
-      updateSyncIndicator('latest');
+      updateSyncIndicator('stale', 'EOD freshness could not be checked', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '');
     }
   }
 
@@ -923,15 +935,15 @@
           clearInterval(pollInterval);
           if (data.isUpToDate) {
             await reloadDatasetHot();
-            updateSyncIndicator('latest', 'Latest EOD data', data.istDisplayTime);
+            updateSyncIndicator('latest', 'Latest EOD data', `EOD ${data.tradingDate || 'date unavailable'}`);
             try { sessionStorage.setItem('mb_last_sync_check', String(Date.now())); } catch (_) {}
           } else {
-            updateSyncIndicator('failed', 'Update failed — showing previous data', data.istDisplayTime);
+            updateSyncIndicator('stale', 'Showing previous verified EOD data', `EOD ${data.tradingDate || 'unknown'} · expected ${data.marketCalendar?.latestExpectedDate || 'newer session'}`);
           }
         }
       } catch (_) {
         clearInterval(pollInterval);
-        updateSyncIndicator('failed', 'Update failed — showing previous data');
+        updateSyncIndicator('stale', 'EOD freshness could not be checked');
       }
     }, 3000);
   }

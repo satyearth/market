@@ -6,14 +6,12 @@
  *
  * Guarantees & Methodology:
  * 1. Fresh Exchange Data: Downloads and validates official daily Bhavcopy files.
- * 2. Real India VIX: Fetches genuine EOD VIX and percentage change from nse_vix_historical MCP tool.
- * 3. Genuine 52W Proximity: Uses bse_near_52week MCP tool and verified 52W historical records.
+ * 2. India VIX: Uses verified MCP data when available; otherwise leaves the field unavailable.
+ * 3. 52W Proximity: Uses session-matched verified exchange data when available.
  * 4. Genuine Historical Sparklines & 1W Returns:
  *    - Records exact trading dates alongside every historical close.
- *    - Chronologically ordered across 6 verified historical trading sessions:
- *      [2026-10-28, 2026-10-29, 2026-10-30, 2026-11-02, 2026-11-03, 2026-11-04].
- *    - 1-Week return is computed strictly across documented session boundaries:
- *      ((Close[2026-11-04] - Close[2026-10-28]) / Close[2026-10-28]) * 100.
+ *    - Chronologically ordered across six verified historical trading sessions.
+ *    - 1-Week return is computed strictly across the selected session boundaries.
  * 5. Methodologically Sound Market Cap Ranks:
  *    - Ranks 343 verified equities (BSE Groups A & B).
  *    - Explicitly designated as "Top 100 Verified", "Rank 101–250 Verified", and "Remaining Verified".
@@ -29,7 +27,7 @@
  *    - refreshed_at: UTC ISO timestamp when dataset normalization completed
  *    - ist_display_time: Asia/Kolkata formatted time for UI display
  * 8. Mathematically Reconciled Market Breadth:
- *    - Advances (3,228) + Declines (1,539) + Unchanged (620) + Unpriced (2) = 5,389.
+ *    - Advances + declines + unchanged + unpriced reconcile to the generated universe.
  * 9. Explicit Cloud Automation Status:
  *    - Documented as LOCAL ONLY / CLOUD NOT CONFIGURED.
  */
@@ -79,8 +77,9 @@ function resolveTargetTradingDate() {
     }
   } catch (_) {}
 
-  // 4. Default fallback: verified working session in repository
-  return '2026-11-04';
+  // Never rebuild from an old bundled session when the expected files are missing.
+  // Return the expected date so the input-file validation below fails closed.
+  return getLatestExpectedTradingDate().latestExpectedDate;
 }
 
 function resolveHistoricalDates(targetDate, sessionCount = 6) {
@@ -197,6 +196,21 @@ function cleanCompanyName(name) {
     .trim();
 }
 
+function normalizeSourceDate(value) {
+  const text = String(value || '').trim();
+  const iso = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  const named = text.match(/^(\d{1,2})[-/ ]([A-Za-z]{3})[-/ ](\d{4})/);
+  if (named) {
+    const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+    const month = months.indexOf(named[2].toLowerCase());
+    if (month >= 0) return `${named[3]}-${String(month + 1).padStart(2, '0')}-${String(named[1]).padStart(2, '0')}`;
+  }
+  const numeric = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (numeric) return `${numeric[3]}-${String(Number(numeric[2])).padStart(2, '0')}-${String(Number(numeric[1])).padStart(2, '0')}`;
+  return null;
+}
+
 async function syncUniverse() {
   const fetchStartTime = new Date();
   console.log('================================================================');
@@ -244,7 +258,10 @@ async function syncUniverse() {
   let mcpConnected = false;
   try {
     const testPing = await callMcpTool('nse_download_equity_bhavcopy', { date: TARGET_TRADING_DATE }, 1000);
-    if (testPing.ok) mcpConnected = true;
+    const result = testPing.data?.result;
+    mcpConnected = Boolean(testPing.ok && (
+      result?.status === 'success' || (Array.isArray(result?.content) && result.content.length > 0)
+    ));
   } catch (e) {
     mcpConnected = false;
   }
@@ -291,9 +308,9 @@ async function syncUniverse() {
 
   // 3. MCP METRICS: Fetch Real India VIX & 52-Week High Proximity
   console.log('[3/7] Retrieving India VIX & 52-Week High metrics from MCP...');
-  let realVix = 15.19;
-  let realVixChangePct = -3.39;
-  let realVixDate = '04-NOV-2026';
+  let realVix = null;
+  let realVixChangePct = null;
+  let realVixDate = null;
 
   if (mcpConnected) {
     try {
@@ -303,10 +320,15 @@ async function syncUniverse() {
         const vixArr = JSON.parse(vixText);
         if (Array.isArray(vixArr) && vixArr.length > 0) {
           const latestVix = vixArr[vixArr.length - 1];
-          realVix = latestVix.EOD_CLOSE_INDEX_VAL;
-          realVixChangePct = latestVix.VIX_PERC_CHG;
-          realVixDate = latestVix.EOD_TIMESTAMP;
-          console.log(`  ✓ Real India VIX fetched: ${realVix} (${realVixChangePct > 0 ? '+' : ''}${realVixChangePct}%) on ${realVixDate}`);
+          const sourceDate = normalizeSourceDate(latestVix.EOD_TIMESTAMP);
+          if (sourceDate === TARGET_TRADING_DATE && latestVix.EOD_CLOSE_INDEX_VAL != null && Number.isFinite(Number(latestVix.EOD_CLOSE_INDEX_VAL)) && Number(latestVix.EOD_CLOSE_INDEX_VAL) > 0) {
+            realVix = Number(latestVix.EOD_CLOSE_INDEX_VAL);
+            realVixChangePct = Number.isFinite(Number(latestVix.VIX_PERC_CHG)) ? Number(latestVix.VIX_PERC_CHG) : null;
+            realVixDate = latestVix.EOD_TIMESTAMP;
+            console.log(`  ✓ India VIX fetched for ${TARGET_TRADING_DATE}: ${realVix}`);
+          } else {
+            console.warn(`  ! India VIX source date did not match ${TARGET_TRADING_DATE}; leaving VIX unavailable.`);
+          }
         }
       }
     } catch (e) {
@@ -326,12 +348,13 @@ async function syncUniverse() {
         if (nearText) {
           const nearObj = JSON.parse(nearText);
           if (nearObj.highs && Array.isArray(nearObj.highs)) {
-            nearObj.highs.forEach(h => {
+            nearObj.highs.filter(h => normalizeSourceDate(nearObj.tradingDate || nearObj.date || h.dt_tm) === TARGET_TRADING_DATE).forEach(h => {
               const sc = String(h.SCRIP_CD);
+              if (!sc || sc === 'undefined') return;
               near52WeekScripCodes.add(sc);
               if (h.Cur52wkHigh) week52HighMap.set(sc, parseFloat(h.Cur52wkHigh));
             });
-            near52SourceStatus = 'LIVE_MCP';
+            if (near52WeekScripCodes.size > 0) near52SourceStatus = 'LIVE_MCP';
           }
         }
       }
@@ -348,12 +371,9 @@ async function syncUniverse() {
       const nearObj = JSON.parse(fs.readFileSync(near52Path, 'utf-8'));
       if (nearObj.highs && Array.isArray(nearObj.highs)) {
         // Enforce session date validation: cache records must match target trading session date
-        const isCurrentSession = nearObj.highs.some(h => 
-          (h.dt_tm && h.dt_tm.startsWith(TARGET_TRADING_DATE)) || 
-          (h.Cur52wkHighDT && h.Cur52wkHighDT.startsWith(TARGET_TRADING_DATE))
-        );
-        if (isCurrentSession) {
-          nearObj.highs.forEach(h => {
+        const currentSessionHighs = nearObj.highs.filter(h => normalizeSourceDate(h.dt_tm) === TARGET_TRADING_DATE);
+        if (currentSessionHighs.length) {
+          currentSessionHighs.forEach(h => {
             const sc = String(h.SCRIP_CD);
             near52WeekScripCodes.add(sc);
             if (h.Cur52wkHigh) week52HighMap.set(sc, parseFloat(h.Cur52wkHigh));
@@ -995,7 +1015,7 @@ async function syncUniverse() {
   const top100Count = verifiedSegments.top100;
   const rank101_250Count = verifiedSegments.rank101_250;
   const remainingVerifiedCount = verifiedSegments.remainingVerified;
-  const smeCount = verifiedSegments.smePlatform;
+  const smeCount = mergedStocks.filter(stock => stock.segment === 'SME').length;
   const unrankedCount = verifiedSegments.unranked;
 
   mergedStocks.forEach(s => {
@@ -1013,8 +1033,13 @@ async function syncUniverse() {
     }
   });
 
-  const near52Pct = parseFloat(((near52Count / mergedStocks.length) * 100).toFixed(1));
   const adRatio = parseFloat((advances / (declines || 1)).toFixed(2));
+  const near52SurveyedCount = near52WeekScripCodes.size > 0
+    ? mergedStocks.filter(stock => near52WeekScripCodes.has(String(stock.bse_scrip_code || ''))).length
+    : 0;
+  const near52Pct = near52SurveyedCount > 0
+    ? parseFloat(((near52Count / near52SurveyedCount) * 100).toFixed(1))
+    : null;
 
   // Formatted IST string using Intl with Asia/Kolkata timezone
   const istDisplayFormatter = new Intl.DateTimeFormat('en-IN', {
@@ -1041,11 +1066,11 @@ async function syncUniverse() {
     sources: [
       'NSE CM Unified Bhavcopy',
       'BSE CM Unified Bhavcopy',
-      'NSE India VIX MCP (nse_vix_historical)',
-      'BSE 52W High MCP (bse_near_52week)',
-      'BSE Security Master MCP (bse_list_securities)',
       'India Listed Companies Catalog (api.dharun.dev)',
-      'Screener Indian Equities Dataset'
+      'Screener Indian Equities Dataset',
+      ...(realVixDate ? ['NSE India VIX MCP (nse_vix_historical)'] : []),
+      ...(near52WeekScripCodes.size > 0 ? ['BSE 52W High MCP (bse_near_52week)'] : []),
+      ...(marketCapSources?.bseSecByIsin?.size ? ['BSE Security Master'] : [])
     ],
 
     // Stock Universe & Exchange Coverage
@@ -1062,14 +1087,16 @@ async function syncUniverse() {
       dualListed: dualListedCount,
       nseOnly: nseOnlyCount,
       bseOnly: bseOnlyCount,
-      mathematicalIdentity: 'dualListed(2504) + nseOnly(687) + bseOnly(2198) === 5389'
+      mathematicalIdentity: `dualListed(${dualListedCount}) + nseOnly(${nseOnlyCount}) + bseOnly(${bseOnlyCount}) === ${mergedStocks.length}`
     },
 
     // SME Platform Reconciliation
     smeReconciliation: {
       nseSmeCount: nseSmeCount,
       bseSmeCount: bseSmeCount,
-      dualListedSmeCount: 0,
+      dualListedSmeCount: [...nseByIsin.entries()].filter(([isin, stock]) =>
+        stock.segment === 'SME' && bseByIsin.get(isin)?.segment === 'SME'
+      ).length,
       totalUniqueSme: smeCount,
       mainboardCount: mergedStocks.length - smeCount,
       classificationRule: 'NSE Series SM & ST (NSE Emerge) + BSE Groups M, MT & MS (BSE SME Platform)'
@@ -1120,17 +1147,19 @@ async function syncUniverse() {
       breadthEligible: breadthCount,
       totalUniverse: mergedStocks.length,
       adRatio,
-      mathematicalIdentity: 'advances(3228) + declines(1539) + unchanged(620) + unpriced(2) === 5389'
+      mathematicalIdentity: `advances(${advances}) + declines(${declines}) + unchanged(${unchanged}) + unpriced(${unpriced}) === ${mergedStocks.length}`
     },
 
     // 52-Week High Proximity (Guarded with session verification & coverage documentation)
     near52WeekHighCount: near52WeekScripCodes.size > 0 ? near52Count : null,
-    near52WeekHighPct: near52WeekScripCodes.size > 0 ? near52Pct : null,
-    near52WeekHighSurveyedUniverse: 'BSE Groups A & B only (40 matched equities)',
-    near52WeekHighCoverage: '36 verified BSE Group A/B equities',
-    near52WeekHighSource: 'BSE MCP (bse_near_52week)',
-    near52WeekHighTradingDate: TARGET_TRADING_DATE,
-    near52WeekHighExchangeTimestamp: '2026-11-04T16:00:00 (BSE post-close calculation snapshot; exchange local time without explicit timezone offset)',
+    near52WeekHighPct: near52Pct,
+    near52WeekHighSurveyedUniverse: near52SurveyedCount > 0
+      ? `BSE Groups A & B only (${near52SurveyedCount} matched equities)`
+      : 'BSE Groups A & B only; no verified records for this session',
+    near52WeekHighCoverage: near52WeekScripCodes.size > 0 ? `${near52Count} verified BSE Group A/B equities` : null,
+    near52WeekHighSource: near52WeekScripCodes.size > 0 ? 'BSE MCP (bse_near_52week)' : null,
+    near52WeekHighTradingDate: near52WeekScripCodes.size > 0 ? TARGET_TRADING_DATE : null,
+    near52WeekHighExchangeTimestamp: null,
     near52WeekHighStatus: near52SourceStatus,
 
     // Historical Sessions & Methodology Documentation
@@ -1139,7 +1168,7 @@ async function syncUniverse() {
       startDate: HISTORICAL_DATES[0],
       endDate: HISTORICAL_DATES[HISTORICAL_DATES.length - 1],
       sessions: [...HISTORICAL_DATES],
-      methodology: 'Chronological EOD closing prices across 6 consecutive verified trading sessions spanning 1 calendar week (2026-10-28 to 2026-11-04). 1-Week return is computed from Session 1 close to Session 6 close.'
+      methodology: `Chronological EOD closing prices across ${HISTORICAL_DATES.length} consecutive verified trading sessions (${HISTORICAL_DATES[0]} to ${HISTORICAL_DATES[HISTORICAL_DATES.length - 1]}). 1-Week return is computed from Session 1 close to Session ${HISTORICAL_DATES.length} close.`
     },
 
     // Automatic New Listing & Universe Modification Discovery

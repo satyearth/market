@@ -174,7 +174,7 @@ async function handleRequest(req, res) {
   // 1. API: GET /api/market/status
   if (pathname === '/api/market/status' && req.method === 'GET') {
     const stats = readMarketStatsFromDataset();
-    const currentTradingDate = stats?.tradingDate || '2026-11-04';
+    const currentTradingDate = stats?.tradingDate || null;
     const freshness = checkSessionFreshness(currentTradingDate);
 
     const payload = {
@@ -184,7 +184,7 @@ async function handleRequest(req, res) {
       tradingDate: currentTradingDate,
       istDisplayTime: stats?.istDisplayTime,
       refreshedAtUtc: stats?.refreshedAtUtc,
-      stockCount: stats?.stockCount || 5389,
+      stockCount: stats?.stockCount || null,
       isUpToDate: freshness.isFresh,
       needsSync: freshness.needsSync,
       reason: freshness.reason,
@@ -213,7 +213,7 @@ async function handleRequest(req, res) {
 
     // Check session freshness
     const stats = readMarketStatsFromDataset();
-    const currentTradingDate = stats?.tradingDate || '2026-11-04';
+    const currentTradingDate = stats?.tradingDate || null;
     const freshness = checkSessionFreshness(currentTradingDate);
 
     // If up-to-date, avoid redundant sync (Requirement 2 & 10)
@@ -297,7 +297,7 @@ if (require.main === module) {
   setInterval(() => {
     try {
       const stats = readMarketStatsFromDataset();
-      const currentTradingDate = stats?.tradingDate || '2026-11-04';
+      const currentTradingDate = stats?.tradingDate || null;
       const freshness = checkSessionFreshness(currentTradingDate);
       if (freshness.needsSync && !isSyncing) {
         console.log(`[Auto-Sync Scheduler] New exchange session detected. Triggering automated EOD sync...`);

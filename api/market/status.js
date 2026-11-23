@@ -27,7 +27,7 @@ module.exports = function marketStatusApi(req, res) {
 
   try {
     const stats = readMarketStatsFromDataset();
-    const currentTradingDate = stats?.tradingDate || '2026-11-04';
+    const currentTradingDate = stats?.tradingDate || null;
     const freshness = checkSessionFreshness(currentTradingDate);
 
     const payload = {
@@ -36,7 +36,7 @@ module.exports = function marketStatusApi(req, res) {
       tradingDate: currentTradingDate,
       istDisplayTime: stats?.istDisplayTime,
       refreshedAtUtc: stats?.refreshedAtUtc,
-      stockCount: stats?.stockCount || 5389,
+      stockCount: stats?.stockCount || null,
       isUpToDate: freshness.isFresh,
       needsSync: freshness.needsSync,
       reason: freshness.reason,

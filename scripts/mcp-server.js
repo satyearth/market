@@ -1,14 +1,11 @@
 /**
- * Machli Bazzar — Local Exchange MCP Daemon (scripts/mcp-server.js)
+ * Machli Bazzar — Local Exchange File-Cache MCP Stub (scripts/mcp-server.js)
  *
  * Implements:
  * 1. JSON-RPC 2.0 Protocol on http://127.0.0.1:3000/mcp
- * 2. Exchange tools:
- *    - nse_download_equity_bhavcopy: Serves official EOD Bhavcopy
- *    - bse_download_bhavcopy: Serves official EOD Bhavcopy
- *    - nse_vix_historical: Returns genuine closing India VIX level and change
- *    - bse_near_52week: Returns verified near-52W-high equities
- *    - bse_list_securities: Returns verified equity master records
+ * 2. Exchange file tools only check whether an explicitly dated Bhavcopy
+ *    already exists in downloads/. This stub does not fetch exchange files.
+ * 3. VIX and 52-week tools stay unavailable until backed by live, dated data.
  */
 
 const http = require('http');
@@ -52,12 +49,16 @@ const server = http.createServer((req, res) => {
 
         switch (toolName) {
           case 'nse_download_equity_bhavcopy': {
-            const dtCompact = (toolArgs.date || '2026-11-04').replace(/-/g, '');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(toolArgs.date || ''))) {
+              result = { status: 'invalid_date', error: 'Pass an explicit trading date (YYYY-MM-DD).' };
+              break;
+            }
+            const dtCompact = toolArgs.date.replace(/-/g, '');
             const targetFile = path.join(DOWNLOADS_DIR, `BhavCopy_NSE_CM_0_0_0_${dtCompact}_F_0000.csv`);
             const exists = fs.existsSync(targetFile);
             result = {
               status: exists ? 'success' : 'not_found',
-              date: toolArgs.date || '2026-11-04',
+              date: toolArgs.date,
               file: targetFile,
               sizeBytes: exists ? fs.statSync(targetFile).size : 0
             };
@@ -65,12 +66,16 @@ const server = http.createServer((req, res) => {
           }
 
           case 'bse_download_bhavcopy': {
-            const dtCompact = (toolArgs.date || '2026-11-04').replace(/-/g, '');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(toolArgs.date || ''))) {
+              result = { status: 'invalid_date', error: 'Pass an explicit trading date (YYYY-MM-DD).' };
+              break;
+            }
+            const dtCompact = toolArgs.date.replace(/-/g, '');
             const targetFile = path.join(DOWNLOADS_DIR, `BhavCopy_BSE_CM_0_0_0_${dtCompact}_F_0000.CSV`);
             const exists = fs.existsSync(targetFile);
             result = {
               status: exists ? 'success' : 'not_found',
-              date: toolArgs.date || '2026-11-04',
+              date: toolArgs.date,
               file: targetFile,
               sizeBytes: exists ? fs.statSync(targetFile).size : 0
             };
@@ -78,21 +83,12 @@ const server = http.createServer((req, res) => {
           }
 
           case 'nse_vix_historical': {
-            result = {
-              vix: 15.19,
-              changePct: -3.39,
-              date: '04-NOV-2026',
-              source: 'NSE India VIX'
-            };
+            result = { status: 'not_configured', error: 'This local file-cache MCP stub does not fetch India VIX data.' };
             break;
           }
 
           case 'bse_near_52week': {
-            result = {
-              group: toolArgs.name || 'A',
-              count: 36,
-              source: 'BSE MCP'
-            };
+            result = { status: 'not_configured', error: 'This local file-cache MCP stub does not fetch BSE 52-week data.' };
             break;
           }
 

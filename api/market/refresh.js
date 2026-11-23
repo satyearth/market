@@ -19,16 +19,31 @@ function readMarketStatsFromDataset() {
 }
 
 module.exports = function marketRefreshApi(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ ok: false, status: 'method_not_allowed', error: 'Method not allowed.' });
+  }
   const stats = readMarketStatsFromDataset();
-  const currentTradingDate = stats?.tradingDate || '2026-11-04';
+  const currentTradingDate = stats?.tradingDate || null;
   const freshness = checkSessionFreshness(currentTradingDate);
 
   res.setHeader('Cache-Control', 'no-store');
+  if (!freshness.isFresh) {
+    return res.status(503).json({
+      ok: false,
+      status: 'sync_unavailable',
+      message: 'This Vercel endpoint cannot rebuild the stock dataset. The last verified EOD dataset is still being shown.',
+      tradingDate: currentTradingDate,
+      latestExpectedDate: freshness.latestExpectedDate,
+      istDisplayTime: stats?.istDisplayTime
+    });
+  }
   return res.status(200).json({
     ok: true,
-    status: freshness.isFresh ? 'up_to_date' : 'updated',
+    status: 'up_to_date',
     message: freshness.reason,
     tradingDate: currentTradingDate,
-    istDisplayTime: stats?.istDisplayTime
+    istDisplayTime: stats?.istDisplayTime,
+    latestExpectedDate: freshness.latestExpectedDate
   });
 };

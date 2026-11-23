@@ -12,7 +12,7 @@ const MARKET_STATS = {
   "sources": [
     "NSE CM Unified Bhavcopy",
     "BSE CM Unified Bhavcopy",
-    "NSE India VIX MCP (nse_vix_historical)",
+
     "BSE 52W High MCP (bse_near_52week)",
     "BSE Security Master MCP (bse_list_securities)",
     "India Listed Companies Catalog (api.dharun.dev)",
@@ -61,9 +61,9 @@ const MARKET_STATS = {
     "micro": 12,
     "sme": 1046
   },
-  "vix": 15.19,
-  "vixChangePct": -3.39,
-  "vixDate": "04-NOV-2026",
+  "vix": null,
+  "vixChangePct": null,
+  "vixDate": null,
   "advances": 3228,
   "declines": 1539,
   "unchanged": 620,
@@ -81,7 +81,7 @@ const MARKET_STATS = {
     "mathematicalIdentity": "advances(3228) + declines(1539) + unchanged(620) + unpriced(2) === 5389"
   },
   "near52WeekHighCount": 36,
-  "near52WeekHighPct": 0.7,
+  "near52WeekHighPct": 90,
   "near52WeekHighSurveyedUniverse": "BSE Groups A & B only (40 matched equities)",
   "near52WeekHighCoverage": "36 verified BSE Group A/B equities",
   "near52WeekHighSource": "BSE MCP (bse_near_52week)",
