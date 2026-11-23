@@ -24,6 +24,8 @@
   let searchQuery = '';
   let isDense = false;
   let searchDebounceTimer = null;
+  const comparisonStocks = new Map();
+  const MAX_COMPARISON_STOCKS = 4;
 
   // DOM Elements
   const tbody = document.getElementById('stocks-tbody');
@@ -336,6 +338,44 @@
     return added;
   }
 
+  function renderCompareTray() {
+    const tray = document.getElementById('compare-tray');
+    if (!tray) return;
+    if (!comparisonStocks.size) {
+      tray.hidden = true;
+      tray.innerHTML = '';
+      return;
+    }
+    const selected = Array.from(comparisonStocks.values());
+    tray.hidden = false;
+    tray.innerHTML = `<div class="compare-tray-inner"><div class="compare-tray-label"><span class="compare-tray-count">${selected.length}</span><span>${selected.length === 1 ? 'stock selected' : 'stocks selected'}</span><span class="compare-tray-hint">Choose up to ${MAX_COMPARISON_STOCKS}</span></div><div class="compare-tray-actions"><div class="compare-chips">${selected.map(stock => `<span class="compare-chip">${escapeHtml(stock.symbol || stock.company_name)}<button type="button" data-compare-remove="${escapeHtml(stock.isin)}" aria-label="Remove ${escapeHtml(stock.symbol)} from comparison">×</button></span>`).join('')}</div><button type="button" class="compare-open-btn" data-compare-open ${selected.length < 2 ? 'disabled' : ''}>Compare stocks <span aria-hidden="true">↗</span></button><button type="button" class="compare-clear-btn" data-compare-clear>Clear</button></div></div>`;
+  }
+
+  function renderComparison() {
+    const content = document.getElementById('compare-content');
+    if (!content) return;
+    const stocks = Array.from(comparisonStocks.values());
+    const metrics = [
+      ['Price', stock => formatCurrency(stock.current_price)],
+      ['Daily change', stock => `<span class="${getReturnColorClass(stock.change_percent)}">${formatPercent(stock.change_percent)}</span>`],
+      ['Market cap', stock => formatMarketCap(stock.market_cap_cr)],
+      ['1 week return', stock => `<span class="${getReturnColorClass(stock.return_1w)}">${formatPercent(stock.return_1w)}</span>`],
+      ['Volume', stock => escapeHtml(formatVolume(stock.volume))],
+      ['Sector', stock => escapeHtml(stock.sector || 'Unclassified')],
+      ['Exchange', stock => escapeHtml((stock.exchanges || []).join(' + ') || '—')]
+    ];
+    content.innerHTML = `<div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Metric</th>${stocks.map(stock => `<th><span class="compare-symbol">${escapeHtml(stock.symbol || '—')}</span><span class="compare-company">${escapeHtml(stock.company_name || '')}</span></th>`).join('')}</tr></thead><tbody>${metrics.map(([label, value]) => `<tr><th scope="row">${label}</th>${stocks.map(stock => `<td>${value(stock)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="compare-data-note">End-of-day data · Missing values are shown as —</p>`;
+  }
+
+  function toggleComparison(stock) {
+    const isin = String(stock?.isin || '').toUpperCase();
+    if (!isin) return;
+    if (comparisonStocks.has(isin)) comparisonStocks.delete(isin);
+    else if (comparisonStocks.size < MAX_COMPARISON_STOCKS) comparisonStocks.set(isin, stock);
+    renderCompareTray();
+    renderTable();
+  }
+
   // Server-side filtering keeps search and sorting complete across all listed stocks.
   function queryParameters(offset) {
     const defaultColumn = activeFilter === 'TOP GAINERS' || activeFilter === 'TOP LOSERS' ? 'change_percent' : sortColumn;
@@ -359,6 +399,7 @@
       const chgArrow = isChgPositive ? '▴' : '▾';
       const sectorText = (!s.sector || String(s.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : s.sector;
       const isStarred = s.isin && watchlist.has(String(s.isin).toUpperCase());
+      const isCompared = s.isin && comparisonStocks.has(String(s.isin).toUpperCase());
       return `
         <tr data-row-isin="${escapeHtml(s.isin)}" tabindex="0" aria-label="Open details for ${escapeHtml(s.company_name || s.symbol)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna focus-visible:outline-offset-[-1px] pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
           <td class="text-right font-mono tabular-nums text-[13px] text-ink-muted px-2" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
@@ -380,6 +421,7 @@
           <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px">
             <span class="inline-flex items-center gap-0.5 ${isStarred ? 'opacity-100' : 'opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0'} transition-all duration-150">
               <button type="button" class="watchlist-toggle-btn w-6 h-6 flex items-center justify-center rounded-full text-[13px] transition-colors ${isStarred ? 'text-amber-400' : 'text-ink-muted/50 hover:text-amber-400'}" data-isin="${escapeHtml(s.isin)}" title="${isStarred ? 'Remove from Watchlist' : 'Add to Watchlist'}" aria-label="Toggle watchlist for ${escapeHtml(s.symbol)}">★</button>
+              <button type="button" class="compare-toggle-btn w-6 h-6 flex items-center justify-center rounded-full text-[12px] transition-colors ${isCompared ? 'is-selected' : ''}" data-isin="${escapeHtml(s.isin)}" title="${isCompared ? 'Remove from comparison' : 'Add to comparison'}" aria-label="${isCompared ? 'Remove' : 'Compare'} ${escapeHtml(s.symbol)}">⇄</button>
               <a class="stock-details-link w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">↗</a>
             </span>
           </td>
@@ -443,6 +485,10 @@
       if (version !== queryVersion) return;
       if (!data?.ok || !Array.isArray(data.stocks)) throw new Error('Invalid stock response');
       marketStats = data.stats || marketStats; resultTotal = Number(data.total)||0; hasMore = Boolean(data.hasMore);
+      data.stocks.forEach(stock => {
+        const isin = String(stock.isin || '').toUpperCase();
+        if (comparisonStocks.has(isin)) comparisonStocks.set(isin, stock);
+      });
       const unique = data.stocks.filter(stock => stock.isin && !loadedIsins.has(String(stock.isin).toUpperCase()));
       unique.forEach(stock => loadedIsins.add(String(stock.isin).toUpperCase()));
       const isFirstBatch = loadedStocks.length === 0;
@@ -664,6 +710,18 @@
     // Event delegation keeps stock navigation working as rows are re-rendered.
     if (tbody) {
       tbody.addEventListener('click', (e) => {
+        const compareBtn = e.target.closest('.compare-toggle-btn');
+        if (compareBtn) {
+          e.stopPropagation();
+          const isin = String(compareBtn.getAttribute('data-isin') || '').toUpperCase();
+          const stock = loadedStocks.find(item => String(item.isin || '').toUpperCase() === isin);
+          if (comparisonStocks.size >= MAX_COMPARISON_STOCKS && !comparisonStocks.has(isin)) {
+            compareBtn.title = `Comparison is limited to ${MAX_COMPARISON_STOCKS} stocks`;
+            return;
+          }
+          if (stock) toggleComparison(stock);
+          return;
+        }
         const starBtn = e.target.closest('.watchlist-toggle-btn');
         if (starBtn) {
           e.stopPropagation();
@@ -699,6 +757,27 @@
         if (isin) window.location.href = `./stock.html?isin=${encodeURIComponent(isin)}`;
       });
     }
+
+    const tray = document.getElementById('compare-tray');
+    if (tray) tray.addEventListener('click', e => {
+      if (e.target.closest('[data-compare-clear]')) {
+        comparisonStocks.clear(); renderCompareTray(); renderTable(); return;
+      }
+      const remove = e.target.closest('[data-compare-remove]');
+      if (remove) {
+        comparisonStocks.delete(String(remove.getAttribute('data-compare-remove')).toUpperCase());
+        renderCompareTray(); renderTable(); return;
+      }
+      if (e.target.closest('[data-compare-open]')) {
+        const dialog = document.getElementById('compare-dialog');
+        renderComparison();
+        if (dialog?.showModal) dialog.showModal();
+      }
+    });
+    const dialog = document.getElementById('compare-dialog');
+    dialog?.addEventListener('click', e => {
+      if (e.target === dialog || e.target.closest('[data-compare-close]')) dialog.close();
+    });
   }
 
   // EOD Auto-Refresh Status Indicator & Lifecycle Management

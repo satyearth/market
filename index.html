@@ -241,7 +241,19 @@
         </div>
       </div>
     </main>
+    <footer class="site-wide-shell mt-auto border-t border-ink-rule py-5 text-center text-[11px] tracking-[0.04em] text-ink-faint">
+      <span>Made by <span class="font-semibold text-ink-sienna">Satyarth</span></span>
+    </footer>
   </div>
+
+  <aside id="compare-tray" class="compare-tray" aria-live="polite" hidden></aside>
+  <dialog id="compare-dialog" class="compare-dialog" aria-labelledby="compare-title">
+    <div class="compare-dialog-head">
+      <div><p class="compare-kicker">SIDE BY SIDE</p><h2 id="compare-title">Compare stocks</h2></div>
+      <button type="button" class="compare-close" data-compare-close aria-label="Close comparison">×</button>
+    </div>
+    <div id="compare-content" class="compare-content"></div>
+  </dialog>
 
   <!-- App Data and Scripts -->
   <script src="./js/company-logo-manifest.js"></script>
