@@ -6,37 +6,41 @@ name: Daily NSE + BSE EOD Stock Data Refresh
 # atomically to external storage (Supabase Storage) with ZERO git commits.
 on:
   schedule:
-    - cron: '15 11 * * 1-5' # 16:45 IST (Mon-Fri) — initial post-close window
-    - cron: '0 12 * * 1-5'  # 17:30 IST (Mon-Fri) — retry window 1
-    - cron: '0 13 * * 1-5'  # 18:30 IST (Mon-Fri) — retry window 2
-    - cron: '30 14 * * 1-5' # 20:00 IST (Mon-Fri) — late publication retry window
-    - cron: '30 14 * * 0'   # 20:00 IST (Sun) — special Muhurat session check
+    - cron: '22 11 * * 1-5' # 16:52 IST (Mon-Fri) — initial post-close window
+    - cron: '07 12 * * 1-5' # 17:37 IST (Mon-Fri) — retry window 1
+    - cron: '42 12 * * 1-5' # 18:12 IST (Mon-Fri) — retry window 2
+    - cron: '18 13 * * 1-5' # 18:48 IST (Mon-Fri) — retry window 3
+    - cron: '08 14 * * 1-5' # 19:38 IST (Mon-Fri) — retry window 4
+    - cron: '47 14 * * 1-5' # 20:17 IST (Mon-Fri) — late publication retry window
+    - cron: '23 15 * * 1-5' # 20:53 IST (Mon-Fri) — final evening catch-up
+    - cron: '37 02 * * 1-6' # 08:07 IST (Mon-Sat) — overnight/pre-market recovery check
+    - cron: '37 14 * * 0'   # 20:07 IST (Sun) — special Muhurat session check
   workflow_dispatch:
     inputs:
       date:
-        description: 'Specific trading date (YYYY-MM-DD). Leave blank for latest expected.'
+        description: "Specific trading date (YYYY-MM-DD). Leave blank for latest expected."
         required: false
         type: string
       backfill:
-        description: 'Backfill missing trading sessions before compiling.'
+        description: "Backfill missing trading sessions before compiling."
         required: false
         type: boolean
         default: false
       force:
-        description: 'Force rebuild & re-publish even if external storage matches latest expected date.'
+        description: "Force rebuild & re-publish even if external storage matches latest expected date."
         required: false
         type: boolean
         default: false
       dry_run:
-        description: 'Validate download & compilation without publishing or deleting storage objects.'
+        description: "Validate download & compilation without publishing or deleting storage objects."
         required: false
         type: boolean
         default: false
       wait_minutes:
-        description: 'Max minutes to poll when today BhavCopy is delayed.'
+        description: "Max minutes to poll when today BhavCopy is delayed."
         required: false
         type: string
-        default: '4'
+        default: '15'
 
 concurrency:
   group: stock-data-refresh
@@ -49,7 +53,7 @@ jobs:
   refresh-stock-data:
     name: Refresh NSE & BSE EOD Dataset (External Storage)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       TZ: Asia/Kolkata
 
@@ -62,8 +66,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci --omit=dev
@@ -106,12 +110,29 @@ jobs:
                 fs.appendFileSync(process.env.GITHUB_OUTPUT, 'is_fresh=' + freshness.isFresh + '\n');
                 fs.appendFileSync(process.env.GITHUB_OUTPUT, 'latest_expected=' + calendar.latestExpectedDate + '\n');
                 fs.appendFileSync(process.env.GITHUB_OUTPUT, 'published=' + (published || 'none') + '\n');
+                fs.appendFileSync(process.env.GITHUB_OUTPUT, 'skip_reason=' + String(freshness.reason || '').replace(/\r?\n/g, ' ') + '\n');
               }
             })().catch(err => {
               console.error(err.message);
               process.exit(1);
             });
           "
+
+      - name: Report skipped refresh diagnostics
+        if: >-
+          github.event_name != 'workflow_dispatch' &&
+          steps.precheck.outputs.is_fresh == 'true'
+        env:
+          LATEST_EXPECTED: ${{ steps.precheck.outputs.latest_expected }}
+          PUBLISHED_DATE: ${{ steps.precheck.outputs.published }}
+          IS_TRADING_DAY: ${{ steps.precheck.outputs.is_trading_day }}
+          SKIP_REASON: ${{ steps.precheck.outputs.skip_reason }}
+        run: |
+          echo "Refresh skipped cleanly: remote storage is already up-to-date."
+          echo "  Latest Expected Date : $LATEST_EXPECTED"
+          echo "  Published Date       : $PUBLISHED_DATE"
+          echo "  Trading Day Today    : $IS_TRADING_DAY"
+          echo "  Reason               : $SKIP_REASON"
 
       - name: Run refresh pipeline (download + backfill + validate + atomic storage publish)
         id: refresh
@@ -122,32 +143,78 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_STORAGE_BUCKET: ${{ vars.SUPABASE_STORAGE_BUCKET || 'machii-bazzar-datasets' }}
+          REFRESH_WAIT_MINUTES: ${{ inputs.wait_minutes || vars.REFRESH_WAIT_MINUTES || '15' }}
+          REFRESH_POLL_SECONDS: ${{ vars.REFRESH_POLL_SECONDS || '30' }}
+          INPUT_BACKFILL: ${{ inputs.backfill }}
+          INPUT_DATE: ${{ inputs.date }}
+          INPUT_FORCE: ${{ inputs.force }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           ARGS=""
-          if [ "${{ inputs.backfill }}" = "true" ]; then
+          if [ "$INPUT_BACKFILL" = "true" ]; then
             ARGS="$ARGS --backfill"
-          elif [ -n "${{ inputs.date }}" ]; then
-            ARGS="$ARGS --date=${{ inputs.date }}"
+          elif [ -n "$INPUT_DATE" ]; then
+            ARGS="$ARGS --date=$INPUT_DATE"
           else
-            ARGS="$ARGS --latest --wait --wait-minutes=${{ inputs.wait_minutes || '4' }} --poll-seconds=30"
+            ARGS="$ARGS --latest --wait --wait-minutes=$REFRESH_WAIT_MINUTES --poll-seconds=$REFRESH_POLL_SECONDS"
           fi
-          if [ "${{ inputs.force }}" = "true" ]; then
+          if [ "$INPUT_FORCE" = "true" ]; then
             ARGS="$ARGS --force"
           fi
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
           echo "Executing: node scripts/refresh.js $ARGS"
           node scripts/refresh.js $ARGS
 
+      - name: Verify remote Supabase manifest freshness
+        if: >-
+          !inputs.dry_run &&
+          inputs.dry_run != 'true' &&
+          (github.event_name == 'workflow_dispatch' || steps.precheck.outputs.is_fresh == 'false')
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: ${{ vars.SUPABASE_STORAGE_BUCKET || 'machii-bazzar-datasets' }}
+          EXPECTED_DATE: ${{ (inputs.backfill && steps.precheck.outputs.latest_expected) || inputs.date || steps.precheck.outputs.latest_expected }}
+        run: |
+          node -e "
+            const storage = require('./src/storage/supabase-storage');
+            (async () => {
+              const res = await storage.fetchLatestManifest();
+              if (!res.ok || !res.manifest) {
+                throw new Error('Remote latest.json manifest verification failed: ' + (res.error || 'missing'));
+              }
+              const m = res.manifest;
+              console.log('Verified Remote Manifest:', JSON.stringify({
+                tradingDate: m.tradingDate,
+                versionId: m.versionId,
+                totalStocks: m.totalStocks,
+                istDisplayTime: m.istDisplayTime
+              }));
+              if (!m.totalStocks || m.totalStocks <= 0) {
+                throw new Error('Remote manifest has invalid totalStocks: ' + m.totalStocks);
+              }
+              const expected = process.env.EXPECTED_DATE;
+              if (expected && m.tradingDate < expected) {
+                throw new Error('Remote manifest is still stale after refresh: published=' + m.tradingDate + ', expected=' + expected);
+              }
+            })().catch(err => {
+              console.error(err.message);
+              process.exit(1);
+            });
+          "
+
       - name: Run isolated backend tests & integrity audit (zero storage secrets)
         if: >-
           github.event_name == 'workflow_dispatch' ||
           steps.precheck.outputs.is_fresh == 'false'
+        env:
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           node tests/run-all.js
           node scripts/test-pipeline.js
-          if [ "${{ inputs.dry_run }}" != "true" ]; then
+          if [ "$INPUT_DRY_RUN" != "true" ]; then
             PUB_DATE=$(node -e "console.log(require('./src/publishing/publisher').readPublishedTradingDate() || '')")
             COMPACT_DATE="${PUB_DATE//-/}"
             if [ -n "$COMPACT_DATE" ] && [ -f "downloads/BhavCopy_NSE_CM_0_0_0_${COMPACT_DATE}_F_0000.csv" ]; then
@@ -163,6 +230,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_STORAGE_BUCKET: ${{ vars.SUPABASE_STORAGE_BUCKET || 'machii-bazzar-datasets' }}
+          JOB_STATUS: ${{ job.status }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run || false }}
         run: |
           {
             echo "## Daily Stock Data Refresh Summary (External Storage)"
@@ -174,8 +243,8 @@ jobs:
                 const m = res.ok ? res.manifest : null;
                 console.log('| Metric | Value |');
                 console.log('|---|---|');
-                console.log('| Job Outcome | ${{ job.status }} |');
-                console.log('| Dry Run | ${{ inputs.dry_run || false }} |');
+                console.log('| Job Outcome | ' + (process.env.JOB_STATUS || 'unknown') + ' |');
+                console.log('| Dry Run | ' + (process.env.INPUT_DRY_RUN || 'false') + ' |');
                 console.log('| Storage Provider | Supabase (' + storage.bucket + ') |');
                 console.log('| Published Trading Date | ' + (m?.tradingDate || 'unknown') + ' |');
                 console.log('| Version ID | ' + (m?.versionId || 'unknown') + ' |');

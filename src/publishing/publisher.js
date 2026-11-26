@@ -624,6 +624,14 @@ async function syncUniverse(options = {}) {
     if (!storageResult.ok) {
       throw new Error(`External storage publish failed: ${storageResult.error}`);
     }
+    if (typeof storageClient.fetchLatestManifest === 'function') {
+      const verifyManifest = await storageClient.fetchLatestManifest();
+      if (!verifyManifest.ok || verifyManifest.manifest?.tradingDate !== TARGET_TRADING_DATE) {
+        throw new Error(
+          `Post-publish manifest verification failed: expected tradingDate=${TARGET_TRADING_DATE}, got ${verifyManifest.manifest?.tradingDate || verifyManifest.error || 'missing'}`
+        );
+      }
+    }
     logger.log(`  Published immutable storage snapshot: ${storageResult.datasetPath} -> ${storageResult.versionId}`);
     if (options.syncReference || process.argv.includes('--sync-reference')) {
       await uploadReferenceFilesToStorage(downloadsDir, storageClient, logger);
@@ -717,8 +725,14 @@ async function runRefresh(options = {}) {
   const dryRun = Boolean(options.dryRun);
   const allowDowngrade = Boolean(options.allowDowngrade);
   const wait = Boolean(options.wait);
-  const waitMinutes = options.waitMinutes ?? 5;
-  const pollSeconds = options.pollSeconds ?? 30;
+  const envWait = Number(process.env.REFRESH_WAIT_MINUTES);
+  const waitMinutes = options.waitMinutes !== undefined
+    ? options.waitMinutes
+    : (Number.isFinite(envWait) && envWait >= 0 ? envWait : 15);
+  const envPoll = Number(process.env.REFRESH_POLL_SECONDS);
+  const pollSeconds = options.pollSeconds !== undefined
+    ? options.pollSeconds
+    : (Number.isFinite(envPoll) && envPoll > 0 ? envPoll : 30);
   const minRows = options.minRows ?? 1000;
   const minBytes = options.minBytes ?? 50000;
   const skipStorage = Boolean(options.skipStorage);
@@ -1006,8 +1020,13 @@ function parseCliArgs(argv = process.argv.slice(2)) {
   const dateArg = (argv.find(a => a.startsWith('--date=')) || '').split('=')[1] ||
     argv.find(a => /^\d{4}-\d{2}-\d{2}$/.test(a)) || null;
   const fromDate = (argv.find(a => a.startsWith('--from=')) || '').split('=')[1] || null;
-  const waitMinutes = Number((argv.find(a => a.startsWith('--wait-minutes=')) || '').split('=')[1]) || 5;
-  const pollSeconds = Number((argv.find(a => a.startsWith('--poll-seconds=')) || '').split('=')[1]) || 30;
+  const rawWait = argv.find(a => a.startsWith('--wait-minutes='))?.split('=')[1];
+  const parsedWait = rawWait !== undefined ? Number(rawWait) : Number(process.env.REFRESH_WAIT_MINUTES);
+  const waitMinutes = Number.isFinite(parsedWait) && parsedWait >= 0 ? parsedWait : 15;
+
+  const rawPoll = argv.find(a => a.startsWith('--poll-seconds='))?.split('=')[1];
+  const parsedPoll = rawPoll !== undefined ? Number(rawPoll) : Number(process.env.REFRESH_POLL_SECONDS);
+  const pollSeconds = Number.isFinite(parsedPoll) && parsedPoll > 0 ? parsedPoll : 30;
 
   return {
     backfill: argv.includes('--backfill'),

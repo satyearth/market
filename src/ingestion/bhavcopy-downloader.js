@@ -374,7 +374,7 @@ function createDownloader(config = {}) {
   function isRetryableFailure(res) {
     if (!res) return true;
     if (res.statusCode === 404 || res.statusCode === 410) return false;
-    if (res.statusCode === 403 || res.statusCode === 429 || res.statusCode >= 500) return true;
+    if (res.statusCode === 403 || res.statusCode === 408 || res.statusCode === 429 || res.statusCode >= 500) return true;
     if (res.statusCode === 0) return true;
     return false;
   }
@@ -689,9 +689,25 @@ function createDownloader(config = {}) {
     return { date: dateStr, nse, bse, bothOk, pendingPublication, supplementary };
   }
 
+  function isRecoverableSessionResult(res) {
+    if (!res || res.bothOk) return false;
+    if (res.skippedNonTradingDay) return false;
+    if (res.pendingPublication) return true;
+    for (const ex of [res.nse, res.bse]) {
+      if (!ex || ex.ok) continue;
+      if (ex.notPublished) return true;
+      if (ex.statusCode === 0 || ex.statusCode === 403 || ex.statusCode === 404 || ex.statusCode === 408 || ex.statusCode === 429 || ex.statusCode >= 500) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   async function waitForSessionPublication(dateStr, opts = {}) {
     const maxWaitMs = opts.maxWaitMs ?? 120000;
-    const pollIntervalMs = opts.pollIntervalMs ?? 15000;
+    const basePollMs = opts.pollIntervalMs ?? 15000;
+    const maxPollMs = opts.maxPollIntervalMs ?? Math.max(basePollMs, 120000);
+    const backoffFactor = opts.backoffFactor ?? 1.5;
     const start = Date.now();
     let attempt = 0;
 
@@ -701,12 +717,23 @@ function createDownloader(config = {}) {
       if (res.bothOk) return { ...res, pollAttempts: attempt };
 
       const elapsed = Date.now() - start;
-      if (!res.pendingPublication || elapsed + pollIntervalMs > maxWaitMs) {
-        return { ...res, pollAttempts: attempt, timedOutWaiting: res.pendingPublication };
+      const remainingMs = maxWaitMs - elapsed;
+      const recoverable = isRecoverableSessionResult(res);
+      if (!recoverable || remainingMs <= 0 || basePollMs <= 0) {
+        return { ...res, pollAttempts: attempt, timedOutWaiting: recoverable };
       }
 
-      logger.log(`  Delayed BhavCopy for ${dateStr} (poll ${attempt}). Waiting ${pollIntervalMs / 1000}s before retry...`);
-      await sleep(pollIntervalMs);
+      const nextDelayMs = Math.min(
+        Math.round(basePollMs * Math.pow(backoffFactor, attempt - 1)),
+        maxPollMs,
+        remainingMs
+      );
+      if (nextDelayMs <= 0) {
+        return { ...res, pollAttempts: attempt, timedOutWaiting: recoverable };
+      }
+
+      logger.log(`  Delayed/transient BhavCopy for ${dateStr} (poll ${attempt}). Waiting ${Math.round(nextDelayMs / 1000)}s before retry...`);
+      await sleep(nextDelayMs);
     }
   }
 

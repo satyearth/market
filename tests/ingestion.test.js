@@ -63,6 +63,27 @@ async function run() {
   const preCloseFresh = checkSessionFreshness('2026-11-23', new Date('2026-11-25T05:00:00Z')); // 10:30 IST
   assert.strictEqual(preCloseFresh.isFresh, true);
 
+  // Date-specific regression tests for 2026-11-25 and 2026-11-26
+  const nov26PreClose = checkSessionFreshness('2026-11-25', new Date('2026-11-26T07:32:00Z')); // 13:02 IST
+  assert.strictEqual(nov26PreClose.latestExpectedDate, '2026-11-25');
+  assert.strictEqual(nov26PreClose.isFresh, true);
+
+  const nov26PostClose = checkSessionFreshness('2026-11-25', new Date('2026-11-26T11:30:00Z')); // 17:00 IST
+  assert.strictEqual(nov26PostClose.latestExpectedDate, '2026-11-26');
+  assert.strictEqual(nov26PostClose.isFresh, false);
+  assert.strictEqual(nov26PostClose.isDelayed, true);
+  assert.strictEqual(nov26PostClose.freshnessStatus, 'delayed');
+  assert.deepStrictEqual(nov26PostClose.missingSessions, ['2026-11-26']);
+
+  const nov26Published = checkSessionFreshness('2026-11-26', new Date('2026-11-26T18:37:00Z')); // 2026-11-27 00:07 IST
+  assert.strictEqual(nov26Published.latestExpectedDate, '2026-11-26');
+  assert.strictEqual(nov26Published.isFresh, true);
+  assert.strictEqual(nov26Published.freshnessStatus, 'current');
+
+  // Holiday or future date in dataset must never be marked fresh
+  assert.strictEqual(checkSessionFreshness('2026-11-24', new Date('2026-11-26T11:30:00Z')).isFresh, false);
+  assert.strictEqual(checkSessionFreshness('2026-11-27', new Date('2026-11-26T11:30:00Z')).isFresh, false);
+
   // 2. Host-scoped insecureHTTPParser strictly for BSE
   assert.strictEqual(shouldUseInsecureHttpParser(new URL('https://www.bseindia.com/foo')), true);
   assert.strictEqual(shouldUseInsecureHttpParser(new URL('https://nsearchives.nseindia.com/foo')), false);
@@ -99,7 +120,51 @@ async function run() {
   const nonTrading = await downloader.downloadSession('2026-11-24');
   assert.strictEqual(nonTrading.skippedNonTradingDay, true);
 
-  // 5. Supplementary CSV validation
+  // 5. Polling recovery across transient 503 + 404 with exponential backoff
+  const os = require('os');
+  const fs = require('fs');
+  const path = require('path');
+  const tmpDl = fs.mkdtempSync(path.join(os.tmpdir(), 'mb-poll-'));
+  try {
+    const nov26Csv = sampleCsv.replace(/2026-11-25/g, '2026-11-26');
+    const nov26Zip = buildMinimalZip('test26.csv', nov26Csv);
+    const sleeps = [];
+    let pollStep = 0;
+    const pollDownloader = createDownloader({
+      downloadsDir: tmpDl,
+      minNseRows: 1,
+      minBseRows: 1,
+      minBytes: 10,
+      rateLimitMs: 0,
+      baseDelayMs: 1,
+      maxAttempts: 2,
+      sleep: async (ms) => { sleeps.push(ms); },
+      httpGet: async (url) => {
+        if (url.includes('bseindia')) {
+          return { ok: true, statusCode: 200, headers: { 'content-type': 'text/csv' }, buffer: Buffer.from(nov26Csv, 'utf8') };
+        }
+        pollStep++;
+        if (pollStep <= 2) return { ok: false, statusCode: 503, headers: {}, buffer: Buffer.alloc(0) };
+        if (pollStep <= 5) return { ok: false, statusCode: 404, headers: {}, buffer: Buffer.alloc(0) };
+        if (url.endsWith('.zip')) {
+          return { ok: true, statusCode: 200, headers: { 'content-type': 'application/zip' }, buffer: nov26Zip };
+        }
+        return { ok: true, statusCode: 200, headers: { 'content-type': 'text/csv' }, buffer: Buffer.from(nov26Csv, 'utf8') };
+      }
+    });
+    const recovered = await pollDownloader.waitForSessionPublication('2026-11-26', {
+      maxWaitMs: 60000,
+      pollIntervalMs: 10,
+      backoffFactor: 2
+    });
+    assert.strictEqual(recovered.bothOk, true, 'Polling must recover from transient 503 and 404');
+    assert.ok(recovered.pollAttempts >= 3, 'Expected multiple poll attempts before recovery');
+    assert.ok(sleeps.includes(10) && sleeps.includes(20), 'Expected exponential backoff poll delays');
+  } finally {
+    fs.rmSync(tmpDl, { recursive: true, force: true });
+  }
+
+  // 6. Supplementary CSV validation
   assert.strictEqual(validateIndicesCsvContent('<html>blocked</html>', '2026-11-25').ok, false);
   assert.strictEqual(validate52WeekCsvContent('too short', '2026-11-25').ok, false);
 }

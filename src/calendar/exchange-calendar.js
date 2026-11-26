@@ -233,6 +233,32 @@ function checkSessionFreshness(datasetTradingDate, now = new Date()) {
     };
   }
 
+  if (!isTradingDay(datasetTradingDate)) {
+    return {
+      isFresh: false,
+      needsSync: true,
+      freshnessStatus: 'invalid',
+      isDelayed: false,
+      isStale: true,
+      missingSessionsCount: null,
+      latestExpectedDate,
+      reason: `Dataset trading date (${datasetTradingDate}) is not a valid exchange trading day.`
+    };
+  }
+
+  if (datasetTradingDate > calendar.currentIstDate) {
+    return {
+      isFresh: false,
+      needsSync: true,
+      freshnessStatus: 'future',
+      isDelayed: false,
+      isStale: true,
+      missingSessionsCount: null,
+      latestExpectedDate,
+      reason: `Dataset trading date (${datasetTradingDate}) is ahead of current IST date (${calendar.currentIstDate}).`
+    };
+  }
+
   if (datasetTradingDate >= latestExpectedDate) {
     return {
       isFresh: true,
