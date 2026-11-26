@@ -1,0 +1,187 @@
+name: Daily NSE + BSE EOD Stock Data Refresh
+
+# Indian equities close at 15:30 IST (10:00 UTC); official CM BhavCopy files
+# typically publish between 16:30 and 19:30 IST. Multiple scheduled retry
+# windows handle delayed publication. Generated datasets are published
+# atomically to external storage (Supabase Storage) with ZERO git commits.
+on:
+  schedule:
+    - cron: '15 11 * * 1-5' # 16:45 IST (Mon-Fri) — initial post-close window
+    - cron: '0 12 * * 1-5'  # 17:30 IST (Mon-Fri) — retry window 1
+    - cron: '0 13 * * 1-5'  # 18:30 IST (Mon-Fri) — retry window 2
+    - cron: '30 14 * * 1-5' # 20:00 IST (Mon-Fri) — late publication retry window
+    - cron: '30 14 * * 0'   # 20:00 IST (Sun) — special Muhurat session check
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Specific trading date (YYYY-MM-DD). Leave blank for latest expected.'
+        required: false
+        type: string
+      backfill:
+        description: 'Backfill missing trading sessions before compiling.'
+        required: false
+        type: boolean
+        default: false
+      force:
+        description: 'Force rebuild & re-publish even if external storage matches latest expected date.'
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Validate download & compilation without publishing or deleting storage objects.'
+        required: false
+        type: boolean
+        default: false
+      wait_minutes:
+        description: 'Max minutes to poll when today BhavCopy is delayed.'
+        required: false
+        type: string
+        default: '4'
+
+concurrency:
+  group: stock-data-refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-stock-data:
+    name: Refresh NSE & BSE EOD Dataset (External Storage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: Asia/Kolkata
+
+    steps:
+      - name: Checkout repository (read-only)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Restore BhavCopy archive cache
+        uses: actions/cache@v4
+        with:
+          path: downloads
+          key: bhavcopy-archives-${{ github.run_id }}
+          restore-keys: |
+            bhavcopy-archives-
+
+      - name: Validate external storage configuration & check freshness
+        id: precheck
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: ${{ vars.SUPABASE_STORAGE_BUCKET || 'machii-bazzar-datasets' }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const cal = require('./src/calendar/exchange-calendar');
+            const storage = require('./src/storage/supabase-storage');
+
+            (async () => {
+              if (!storage.isWriteConfigured()) {
+                throw new Error('Missing required GitHub Secrets: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured.');
+              }
+              const calendar = cal.getLatestExpectedTradingDate();
+              const remote = await storage.fetchLatestManifest();
+              const published = remote.ok ? remote.manifest.tradingDate : null;
+              const freshness = cal.checkSessionFreshness(published);
+              const isTradingDay = !calendar.isWeekend && !calendar.isHoliday;
+              console.log('IST Date:', calendar.currentIstDate);
+              console.log('Latest Expected:', calendar.latestExpectedDate);
+              console.log('Remote Storage Published Date:', published || 'none');
+              console.log('Freshness:', JSON.stringify(freshness));
+              if (process.env.GITHUB_OUTPUT) {
+                fs.appendFileSync(process.env.GITHUB_OUTPUT, 'is_trading_day=' + isTradingDay + '\n');
+                fs.appendFileSync(process.env.GITHUB_OUTPUT, 'is_fresh=' + freshness.isFresh + '\n');
+                fs.appendFileSync(process.env.GITHUB_OUTPUT, 'latest_expected=' + calendar.latestExpectedDate + '\n');
+                fs.appendFileSync(process.env.GITHUB_OUTPUT, 'published=' + (published || 'none') + '\n');
+              }
+            })().catch(err => {
+              console.error(err.message);
+              process.exit(1);
+            });
+          "
+
+      - name: Run refresh pipeline (download + backfill + validate + atomic storage publish)
+        id: refresh
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          steps.precheck.outputs.is_fresh == 'false'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: ${{ vars.SUPABASE_STORAGE_BUCKET || 'machii-bazzar-datasets' }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.backfill }}" = "true" ]; then
+            ARGS="$ARGS --backfill"
+          elif [ -n "${{ inputs.date }}" ]; then
+            ARGS="$ARGS --date=${{ inputs.date }}"
+          else
+            ARGS="$ARGS --latest --wait --wait-minutes=${{ inputs.wait_minutes || '4' }} --poll-seconds=30"
+          fi
+          if [ "${{ inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          echo "Executing: node scripts/refresh.js $ARGS"
+          node scripts/refresh.js $ARGS
+
+      - name: Run isolated backend tests & integrity audit (zero storage secrets)
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          steps.precheck.outputs.is_fresh == 'false'
+        run: |
+          node tests/run-all.js
+          node scripts/test-pipeline.js
+          if [ "${{ inputs.dry_run }}" != "true" ]; then
+            PUB_DATE=$(node -e "console.log(require('./src/publishing/publisher').readPublishedTradingDate() || '')")
+            COMPACT_DATE="${PUB_DATE//-/}"
+            if [ -n "$COMPACT_DATE" ] && [ -f "downloads/BhavCopy_NSE_CM_0_0_0_${COMPACT_DATE}_F_0000.csv" ]; then
+              node scripts/verify-dataset.js
+            else
+              echo "Skipping local BhavCopy disk reconciliation (remote storage was already up-to-date without local CSV downloads)."
+            fi
+          fi
+
+      - name: Publish job summary (zero git commits)
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: ${{ vars.SUPABASE_STORAGE_BUCKET || 'machii-bazzar-datasets' }}
+        run: |
+          {
+            echo "## Daily Stock Data Refresh Summary (External Storage)"
+            echo ""
+            node -e "
+              const storage = require('./src/storage/supabase-storage');
+              (async () => {
+                const res = await storage.fetchLatestManifest();
+                const m = res.ok ? res.manifest : null;
+                console.log('| Metric | Value |');
+                console.log('|---|---|');
+                console.log('| Job Outcome | ${{ job.status }} |');
+                console.log('| Dry Run | ${{ inputs.dry_run || false }} |');
+                console.log('| Storage Provider | Supabase (' + storage.bucket + ') |');
+                console.log('| Published Trading Date | ' + (m?.tradingDate || 'unknown') + ' |');
+                console.log('| Version ID | ' + (m?.versionId || 'unknown') + ' |');
+                console.log('| Total Stocks | ' + (m?.totalStocks || '?') + ' |');
+                console.log('| Refreshed At (IST) | ' + (m?.istDisplayTime || '?') + ' |');
+                console.log('| Git Commits Created | 0 (Disabled) |');
+              })();
+            "
+          } >> "$GITHUB_STEP_SUMMARY"

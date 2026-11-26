@@ -4,6 +4,15 @@ node_modules/
 test-results/
 .vscode/*
 !.vscode/settings.json
+.backup/
 downloads/*.json
+downloads/*.csv
+downloads/*.CSV
+downloads/*.zip
+js/stocks-data.backup.js
 *.log
+*.zip
+.env
+.env.*
+!.env.example
 

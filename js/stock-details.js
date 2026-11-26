@@ -64,12 +64,13 @@
     return `<div class="stock-listing-row"><dt class="stock-listing-label">${escapeHtml(label)}</dt><dd class="stock-listing-value">${escapeHtml(valueOrNA(value))}</dd></div>`;
   }
 
-  function renderStock(stock) {
+  function renderStock(stock, activeStats = null) {
+    const statsMeta = activeStats || (typeof MARKET_STATS !== 'undefined' ? MARKET_STATS : null);
     const latestPrice = asNumber(stock.current_price ?? stock.close_price);
     const previousClose = asNumber(stock.prev_close);
     const change = latestPrice != null && previousClose != null ? latestPrice - previousClose : null;
     const percent = asNumber(stock.change_percent);
-    const tradeDate = stock.trading_date || stock.trade_date || (typeof MARKET_STATS !== 'undefined' && MARKET_STATS.tradingDate);
+    const tradeDate = stock.trading_date || stock.trade_date || statsMeta?.tradingDate;
     const dateLabel = formatDate(tradeDate);
     const symbol = stock.nse_symbol || stock.symbol;
 
@@ -292,12 +293,14 @@
 
     loading.classList.add('hidden');
     detail.classList.remove('hidden');
-    updateMarketStatus(dateLabel);
+    updateMarketStatus(dateLabel, statsMeta);
   }
 
-  async function updateMarketStatus(dateLabel) {
+  async function updateMarketStatus(dateLabel, statsMeta = null) {
     const status = document.getElementById('market-data-status');
-    const snapshotLabel = `Showing the latest available end-of-day snapshot${dateLabel === 'N/A' ? '' : ` dated ${dateLabel}`}. Live prices are not connected.`;
+    const resolvedMeta = statsMeta || (typeof MARKET_STATS !== 'undefined' ? MARKET_STATS : null);
+    const refreshTime = resolvedMeta?.istDisplayTime ? ` (refreshed ${resolvedMeta.istDisplayTime})` : '';
+    const snapshotLabel = `Showing end-of-day snapshot${dateLabel === 'N/A' ? '' : ` for trading session ${dateLabel}`}${refreshTime}. Live prices are not connected.`;
     status.textContent = snapshotLabel;
 
     if (window.location.protocol === 'file:') return;
@@ -313,12 +316,17 @@
       const data = await response.json();
       if (!data || !data.ok) return;
 
+      const expectedLabel = data.latestExpectedDate ? formatDate(data.latestExpectedDate) : null;
       if (data.isSyncing) {
         status.textContent = `${snapshotLabel} An EOD refresh is currently in progress.`;
+      } else if (data.isDelayed) {
+        status.textContent = `${snapshotLabel} Status: Delayed — awaiting BhavCopy publication for ${expectedLabel || 'today'}.`;
       } else if (data.needsSync) {
-        status.textContent = `${snapshotLabel} The market status service reports that a newer session may be available.`;
+        status.textContent = `${snapshotLabel} Status: Stale — latest expected exchange session is ${expectedLabel || 'newer'}.`;
       } else if (data.marketCalendar && (data.marketCalendar.isWeekend || data.marketCalendar.isHoliday)) {
-        status.textContent = `${snapshotLabel} The exchange is closed today.`;
+        status.textContent = `${snapshotLabel} Status: Current (exchange closed today).`;
+      } else {
+        status.textContent = `${snapshotLabel} Status: Current.`;
       }
     } catch (_) {
       // Static hosting does not provide the local market-status API; the bundled EOD data remains usable.
@@ -327,19 +335,66 @@
     }
   }
 
-  function init() {
+  async function fetchLiveStockByIsin(isin) {
+    if (window.location.protocol === 'file:' || !window.location.host) return null;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`/api/stocks?isin=${encodeURIComponent(isin)}&limit=1`, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!data?.ok || !Array.isArray(data.stocks) || data.stocks.length === 0) return null;
+      const match = data.stocks.find(item => String(item.isin || '').toUpperCase() === isin);
+      return match ? { stock: match, stats: data.stats || null } : null;
+    } catch (_) {
+      return null;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  function loadStaticFallbackScript() {
+    if (typeof STOCKS_DATA !== 'undefined' && Array.isArray(STOCKS_DATA)) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = './js/stocks-data.js';
+      script.async = true;
+      script.onload = () => resolve(typeof STOCKS_DATA !== 'undefined' && Array.isArray(STOCKS_DATA));
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  }
+
+  async function init() {
     const isin = new URLSearchParams(window.location.search).get('isin');
     if (!isin || !/^[A-Z0-9]{12}$/i.test(isin.trim())) {
       setError('A valid stock ISIN was not provided in the page URL.');
       return;
     }
 
+    const normalizedIsin = isin.trim().toUpperCase();
+    const live = await fetchLiveStockByIsin(normalizedIsin);
+    if (live?.stock) {
+      try {
+        renderStock(live.stock, live.stats);
+        return;
+      } catch (_) {}
+    }
+
+    await loadStaticFallbackScript();
+
     if (typeof STOCKS_DATA === 'undefined' || !Array.isArray(STOCKS_DATA)) {
       setError('Stock data could not be loaded. Please return to the stock list and try again.');
       return;
     }
 
-    const stock = STOCKS_DATA.find(item => String(item.isin || '').toUpperCase() === isin.trim().toUpperCase());
+    const stock = STOCKS_DATA.find(item => (item.isin || '').toUpperCase() === isin.trim().toUpperCase());
     if (!stock) {
       setError('No stock with that ISIN is available in the current dataset.');
       return;

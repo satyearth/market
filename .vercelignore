@@ -1,0 +1,17 @@
+.git
+.github
+.backup
+.agents
+.vscode
+downloads
+docs
+tests
+scripts
+test-results
+server.js
+eslint.config.js
+js/stocks-data.backup.js
+*.log
+*.zip
+.env
+.env.*

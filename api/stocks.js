@@ -1,15 +1,15 @@
 'use strict';
 
-const { queryStocks } = require('../lib/stocks-query');
+const { queryStocksAsync } = require('../src/query/stock-query-service');
 
-module.exports = function stocksApi(req, res) {
+module.exports = async function stocksApi(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     res.status(405).json({ ok: false, error: 'Method not allowed.' });
     return;
   }
   try {
-    const payload = queryStocks(req.query || {});
+    const payload = await queryStocksAsync(req.query || {});
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json(payload);
   } catch (err) {

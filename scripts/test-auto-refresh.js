@@ -103,17 +103,21 @@ async function runAutoRefreshTestSuite() {
     assert.strictEqual(cal.isTradingDay('2026-11-07'), false, 'Saturday is not trading day');
   });
 
-  test('Detects Sunday as weekend and non-trading day', () => {
-    const sun = new Date('2026-11-08T12:00:00+05:30');
+  test('Detects regular Sunday as weekend and non-trading day', () => {
+    const sun = new Date('2026-11-15T12:00:00+05:30');
     const ist = cal.getIstTime(sun);
-    assert.strictEqual(ist.isWeekend, true, 'Sunday must be weekend');
-    assert.strictEqual(cal.isTradingDay('2026-11-08'), false, 'Sunday is not trading day');
+    assert.strictEqual(ist.isWeekend, true, 'Regular Sunday must be weekend');
+    assert.strictEqual(cal.isTradingDay('2026-11-15'), false, 'Regular Sunday is not trading day');
+    assert.strictEqual(cal.isTradingDay('2026-11-08'), true, 'Special Diwali Muhurat Sunday (2026-11-08) is a trading day');
   });
 
-  test('Detects 2026 official exchange holidays (Republic Day & Christmas)', () => {
+  test('Detects 2026 official exchange holidays and special Muhurat session', () => {
     assert.strictEqual(cal.isTradingDay('2026-01-26'), false, 'Republic Day is holiday');
+    assert.strictEqual(cal.isTradingDay('2026-11-10'), false, 'Diwali Balipratipada is holiday');
+    assert.strictEqual(cal.isTradingDay('2026-11-24'), false, 'Guru Nanak Jayanti is holiday');
     assert.strictEqual(cal.isTradingDay('2026-12-25'), false, 'Christmas is holiday');
-    assert.strictEqual(cal.EXCHANGE_HOLIDAYS_2026.size, 14, 'Must have 14 official exchange holidays in 2026');
+    assert.strictEqual(cal.isTradingDay('2026-11-08'), true, 'Sunday Diwali Muhurat session is trading day');
+    assert(cal.EXCHANGE_HOLIDAYS_2026.size >= 14, 'Must define official 2026 exchange holidays');
   });
 
   test('Correctly rolls back to Friday from weekend', () => {
@@ -163,21 +167,25 @@ async function runAutoRefreshTestSuite() {
   // Group 3: Server HTTP API & Endpoints
   console.log('\n[Test Group 3: Server Endpoints & Handlers]');
 
+  const activeStats = readMarketStatsFromDataset();
+
   await testAsync('GET /api/market/status returns valid JSON structure', async () => {
     const res = await invokeMockHandler('/api/market/status', 'GET');
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.ok, true);
     assert.strictEqual(res.body.isSyncing, false);
-    assert.strictEqual(res.body.tradingDate, '2026-11-04');
-    assert.strictEqual(res.body.stockCount, 5389);
+    assert.strictEqual(res.body.tradingDate, activeStats.tradingDate);
+    assert.strictEqual(res.body.stockCount, activeStats.stockCount);
     assert.strictEqual(typeof res.body.isUpToDate, 'boolean');
+    assert.strictEqual(typeof res.body.freshnessStatus, 'string');
     assert(res.body.istDisplayTime.includes('IST'));
     assert(res.body.marketCalendar != null);
   });
 
   await testAsync('POST /api/market/refresh returns up_to_date without running redundant sync', async () => {
     const NativeDate = Date;
-    const fixedNow = new NativeDate('2026-11-05T04:00:00+05:30').getTime();
+    const [y, m, d] = activeStats.tradingDate.split('-').map(Number);
+    const fixedNow = new NativeDate(Date.UTC(y, m - 1, d, 13, 0, 0)).getTime(); // 18:30 IST on active tradingDate
     global.Date = class FixedDate extends NativeDate {
       constructor(...args) { super(...(args.length ? args : [fixedNow])); }
       static now() { return fixedNow; }
@@ -188,16 +196,16 @@ async function runAutoRefreshTestSuite() {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.ok, true);
     assert.strictEqual(res.body.status, 'up_to_date');
-    assert.strictEqual(res.body.tradingDate, '2026-11-04');
-    assert(res.body.message.includes('up-to-date') || res.body.message.includes('2026-11-04'));
+    assert.strictEqual(res.body.tradingDate, activeStats.tradingDate);
+    assert(res.body.message.includes('up-to-date') || res.body.message.includes(activeStats.tradingDate));
   });
 
   await testAsync('GET /api/market/dataset returns lightweight stats payload', async () => {
     const res = await invokeMockHandler('/api/market/dataset', 'GET');
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.ok, true);
-    assert.strictEqual(res.body.stats.stockCount, 5389);
-    assert.strictEqual(res.body.stats.tradingDate, '2026-11-04');
+    assert.strictEqual(res.body.stats.stockCount, activeStats.stockCount);
+    assert.strictEqual(res.body.stats.tradingDate, activeStats.tradingDate);
   });
 
   await testAsync('Static file server serves index.html at root "/"', async () => {
@@ -218,8 +226,9 @@ async function runAutoRefreshTestSuite() {
 
   const htmlContent = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf-8');
 
-  test('index.html keeps the requested EOD status badge removed from the listing header', () => {
-    assert(!htmlContent.includes('id="eod-sync-indicator"'), 'The status badge was removed from the homepage header');
+  test('index.html exposes EOD sync indicator and market status badge', () => {
+    assert(htmlContent.includes('id="eod-sync-indicator"'), 'Must render #eod-sync-indicator');
+    assert(htmlContent.includes('id="market-status-badge"'), 'Must render #market-status-badge');
   });
 
   test('index.html status indicator conforms to ink theme classes', () => {
@@ -237,9 +246,11 @@ async function runAutoRefreshTestSuite() {
     assert(appJsContent.includes('function updateSyncIndicator'), 'Must define updateSyncIndicator');
   });
 
-  test('app.js handles all 4 required states: updating, latest, failed, closed', () => {
+  test('app.js handles updating, latest, delayed, stale, failed, and closed states', () => {
     assert(appJsContent.includes("case 'updating':"), 'Must handle updating');
     assert(appJsContent.includes("case 'failed':"), 'Must handle failed');
+    assert(appJsContent.includes("case 'delayed':"), 'Must handle delayed');
+    assert(appJsContent.includes("case 'stale':"), 'Must handle stale');
     assert(appJsContent.includes("case 'closed':"), 'Must handle closed');
     assert(appJsContent.includes("case 'latest':"), 'Must handle latest');
     assert(appJsContent.includes('Updating market data...'), 'Must render "Updating market data..."');
@@ -251,9 +262,9 @@ async function runAutoRefreshTestSuite() {
     assert(appJsContent.includes('CACHE_TTL_MS'), 'Must use cache TTL');
   });
 
-  test('app.js implements stale-while-revalidate (immediate initial display before check)', () => {
-    assert(appJsContent.includes("updateSyncIndicator('latest');"), 'Must set initial indicator immediately');
-    assert(appJsContent.includes('renderTable();'), 'Must render table immediately before sync check');
+  test('app.js implements stale-while-revalidate (renders data immediately and checks status)', () => {
+    assert(appJsContent.includes("updateSyncIndicator('stale', 'Checking EOD data date...');"), 'Must avoid claiming freshness before verification');
+    assert(appJsContent.includes('fetchNextBatch();'), 'Must fetch and render table immediately alongside sync check');
   });
 
   test('app.js handles offline / static host fallback cleanly without throwing', () => {

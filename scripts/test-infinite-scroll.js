@@ -6,14 +6,23 @@ const { chromium } = require('playwright');
 const stocksFunction = require('../api/stocks');
 const logoAudit = require('../docs/reports/logo-verification-audit-2026-11-05.json');
 
+const { loadDataset } = require('../lib/stocks-query');
+
 async function main() {
+  const dataset = loadDataset();
+  const expectedTotal = dataset.stocks.length;
+  const expectedNse = dataset.stocks.filter(s => Array.isArray(s.exchanges) && s.exchanges.includes('NSE')).length;
+  const expectedBse = dataset.stocks.filter(s => Array.isArray(s.exchanges) && s.exchanges.includes('BSE')).length;
+  const expectedBatches = Math.ceil(expectedTotal / 50);
+  const expectedFirstAlpha = [...dataset.stocks].sort((a, b) => String(a.symbol).localeCompare(String(b.symbol), undefined, { sensitivity: 'base' }) || String(a.isin).localeCompare(String(b.isin)))[0].symbol;
+
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   let browser;
   try {
     const first = await (await fetch(`${origin}/api/stocks?limit=50&offset=0`)).json();
     assert.equal(first.stocks.length, 50);
-    assert.equal(first.total, 5389);
+    assert.equal(first.total, expectedTotal);
     assert(first.hasMore);
     const capped = await (await fetch(`${origin}/api/stocks?limit=500&offset=0`)).json();
     assert.equal(capped.stocks.length, 50, 'endpoint caps every response at 50 items');
@@ -24,15 +33,15 @@ async function main() {
     assert.equal((await (await fetch(`${origin}/api/stocks?search=INE002A01018`)).json()).stocks[0].symbol, 'RELIANCE');
     assert.equal((await (await fetch(`${origin}/api/stocks?search=Tata%20Consultancy`)).json()).stocks[0].symbol, 'TCS');
     assert.equal((await (await fetch(`${origin}/api/stocks?filter=TOP%20GAINERS`)).json()).stocks[0].change_percent > 0, true);
-    assert.equal((await (await fetch(`${origin}/api/stocks?exchange=NSE`)).json()).total, 3191);
-    assert.equal((await (await fetch(`${origin}/api/stocks?exchange=BSE`)).json()).total, 4702);
+    assert.equal((await (await fetch(`${origin}/api/stocks?exchange=NSE`)).json()).total, expectedNse);
+    assert.equal((await (await fetch(`${origin}/api/stocks?exchange=BSE`)).json()).total, expectedBse);
     const sorted = await (await fetch(`${origin}/api/stocks?sort=symbol&direction=asc`)).json();
-    assert.equal(sorted.stocks[0].symbol, '1STCUS');
+    assert.equal(sorted.stocks[0].symbol, expectedFirstAlpha);
     const empty = await (await fetch(`${origin}/api/stocks?search=this-company-should-not-exist`)).json();
     assert.equal(empty.stocks.length, 0);
     assert.equal(empty.hasMore, false);
     let serverlessPayload, serverlessStatus;
-    stocksFunction({ method: 'GET', query: { limit: '50', offset: '0' } }, {
+    await stocksFunction({ method: 'GET', query: { limit: '50', offset: '0' } }, {
       setHeader() {}, status(code) { serverlessStatus = code; return this; }, json(payload) { serverlessPayload = payload; }
     });
     assert.equal(serverlessStatus, 200);
@@ -51,16 +60,16 @@ async function main() {
       offset = response.nextOffset;
       ended = !response.hasMore;
     }
-    assert.equal(all.size, 5389);
-    assert.equal(batches, 108);
-    assert.equal(offset, 5389);
+    assert.equal(all.size, expectedTotal);
+    assert.equal(batches, expectedBatches);
+    assert.equal(offset, expectedTotal);
     console.log(`PASS: API returned all ${all.size} unique ISINs in ${batches} batches; NSE/BSE totals and filters match.`);
 
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     page.on('pageerror', error => console.error('Browser page error:', error.message));
     page.on('console', message => { if (message.type() === 'error') console.error('Browser console:', message.text()); });
-    await page.route('**/api/market/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, needsSync: false, isSyncing: false, isUpToDate: true, tradingDate: '2026-11-04' }) }));
+    await page.route('**/api/market/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, needsSync: false, isSyncing: false, isUpToDate: true, tradingDate: dataset.stats.tradingDate }) }));
     let failFirstRequest = true;
     await page.route('**/api/stocks*', async route => {
       if (failFirstRequest) { failFirstRequest = false; return route.fulfill({ status: 503, contentType: 'application/json', body: '{"ok":false}' }); }
@@ -120,7 +129,7 @@ async function main() {
     await page.locator('th[data-col="Stock"]').click();
     const sortedResponse = await sortResponse;
     const sortedPage = await sortedResponse.json();
-    assert.equal(sortedPage.stocks[0].symbol, '1STCUS');
+    assert.equal(sortedPage.stocks[0].symbol, expectedFirstAlpha);
     await page.waitForFunction(isin => document.querySelector('#stocks-tbody tr[data-row-isin]')?.getAttribute('data-row-isin') === isin, sortedPage.stocks[0].isin, { timeout: 10000 });
     await page.locator('#infinite-sentinel').scrollIntoViewIfNeeded();
     await page.waitForFunction(() => document.querySelectorAll('#stocks-tbody tr[data-row-isin]').length > 50, { timeout: 10000 });

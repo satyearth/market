@@ -142,8 +142,12 @@
     const badge = document.getElementById('market-status-badge');
     if (badge && marketStats.stockCount) {
       const dt = marketStats.tradingDate || 'date unavailable';
-      const istInfo = marketStats.istDisplayTime ? ` · <span class="text-ink-muted text-[11px] font-normal">Dataset built ${escapeHtml(marketStats.istDisplayTime)}</span>` : '';
-      badge.innerHTML = `Market closed · EOD (${dt})${istInfo} · <span class="tabular-nums text-ink-text font-bold">${marketStats.stockCount.toLocaleString('en-IN')}</span> listed companies (NSE + BSE)`;
+      const istInfo = marketStats.istDisplayTime ? ` · <span class="text-ink-muted text-[11px] font-normal">Refreshed ${escapeHtml(marketStats.istDisplayTime)}</span>` : '';
+      badge.innerHTML = `Market closed · EOD <span class="text-ink-ink font-semibold">${escapeHtml(dt)}</span>${istInfo} · <span class="tabular-nums text-ink-text font-bold">${marketStats.stockCount.toLocaleString('en-IN')}</span> listed companies (NSE + BSE)`;
+    }
+    const gridTable = document.querySelector('table[role="grid"]');
+    if (gridTable && marketStats.stockCount) {
+      gridTable.setAttribute('aria-rowcount', String(marketStats.stockCount));
     }
 
     // Card 1: Verified Market Cap (Explicit partial coverage note)
@@ -792,7 +796,9 @@
     // Reset animation classes
     dot.className = 'relative inline-block size-[7px] shrink-0 rounded-full';
 
-    const defaultTime = marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '';
+    const defaultTime = marketStats?.tradingDate
+      ? `EOD ${marketStats.tradingDate}${marketStats.istDisplayTime ? ` · Refreshed ${marketStats.istDisplayTime}` : ''}`
+      : '';
 
     switch (state) {
       case 'updating':
@@ -805,6 +811,12 @@
         dot.classList.add('bg-amber-500');
         textEl.textContent = message || 'Update failed — showing previous data';
         if (timeEl) timeEl.textContent = ` · ${timeText || defaultTime}`;
+        break;
+
+      case 'delayed':
+        dot.classList.add('bg-amber-500');
+        textEl.textContent = message || 'BhavCopy delayed — showing latest verified session';
+        if (timeEl) timeEl.textContent = timeText ? ` · ${timeText}` : (defaultTime ? ` · ${defaultTime}` : '');
         break;
 
       case 'stale':
@@ -828,29 +840,54 @@
     }
   }
 
+  function formatStatusDetails(data) {
+    const tradingDate = data?.tradingDate || marketStats?.tradingDate || 'unknown';
+    const refreshTime = data?.istDisplayTime || marketStats?.istDisplayTime || '';
+    const expectedDate = data?.latestExpectedDate || data?.marketCalendar?.latestExpectedDate;
+    const base = `EOD ${tradingDate}${refreshTime ? ` · Refreshed ${refreshTime}` : ''}`;
+    if (expectedDate && tradingDate !== expectedDate && data?.needsSync) {
+      return `${base} · Expected ${expectedDate}`;
+    }
+    return base;
+  }
+
   // Automatic EOD Data Refresh on Website Open
   async function checkEodAutoRefresh() {
-    // Do not claim freshness until the backend has checked the dataset date.
+    // Do not claim freshness until the backend verifies the dataset date against the calendar.
     updateSyncIndicator('stale', 'Checking EOD data date...');
 
     // In static file mode (e.g. file:///), no backend HTTP server is available
     if (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.host)) {
-      updateSyncIndicator('stale', 'Showing bundled EOD dataset', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : 'freshness unverified');
+      updateSyncIndicator('stale', 'Showing bundled EOD dataset', formatStatusDetails({}));
       return;
     }
 
-    // Client-side cache: prevent repeated requests within 5 minutes
+    // Client-side cache: preserve exact freshness state (never mask stale/delayed data as current)
     const CACHE_KEY = 'mb_last_sync_check';
     const CACHE_TTL_MS = 5 * 60 * 1000;
     try {
-      const lastCheck = Number(sessionStorage.getItem(CACHE_KEY) || 0);
-      if (Date.now() - lastCheck < CACHE_TTL_MS) {
-        updateSyncIndicator('latest', 'EOD data checked recently', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '');
-        return;
+      const rawCache = sessionStorage.getItem(CACHE_KEY);
+      if (rawCache) {
+        const cached = JSON.parse(rawCache);
+        if (cached && cached.checkedAt && (Date.now() - cached.checkedAt < CACHE_TTL_MS)) {
+          updateSyncIndicator(cached.state || 'latest', cached.message, cached.timeText);
+          return;
+        }
       }
     } catch (_) {
-      // Ignore storage access errors in restricted iframe/browser modes
+      // Ignore storage access or legacy string cache errors
     }
+
+    const saveStatusCache = (state, message, timeText) => {
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+          checkedAt: Date.now(),
+          state,
+          message,
+          timeText
+        }));
+      } catch (_) {}
+    };
 
     // Attempt to query the backend EOD status API
     try {
@@ -860,25 +897,40 @@
       });
 
       if (!res.ok) {
-        updateSyncIndicator('stale', 'EOD freshness could not be checked', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '');
+        updateSyncIndicator('stale', 'EOD freshness could not be checked', formatStatusDetails({}));
         return;
       }
       const data = await res.json();
 
       if (!data || !data.ok) {
-        updateSyncIndicator('stale', 'EOD freshness could not be checked', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '');
+        updateSyncIndicator('stale', 'EOD freshness could not be checked', formatStatusDetails({}));
         return;
       }
 
       if (data.isSyncing) {
-        // Sync is actively running in background
         updateSyncIndicator('updating', 'Updating market data...');
         pollSyncCompletion();
         return;
       }
 
       if (data.needsSync) {
-        // Newer exchange session is available; trigger background sync
+        if (data.canTriggerSync === false) {
+          const isDelayed = Boolean(data.isDelayed);
+          const state = isDelayed ? 'delayed' : 'stale';
+          const expectedDate = data.latestExpectedDate || data.marketCalendar?.latestExpectedDate;
+          const msg = isDelayed
+            ? `Delayed — awaiting ${expectedDate || 'today'} BhavCopy`
+            : 'Stale EOD data — showing last verified session';
+          const details = formatStatusDetails({
+            tradingDate: data.tradingDate,
+            istDisplayTime: data.istDisplayTime,
+            latestExpectedDate: expectedDate,
+            needsSync: true
+          });
+          updateSyncIndicator(state, msg, details);
+          saveStatusCache(state, msg, details);
+          return;
+        }
         updateSyncIndicator('updating', 'Updating market data...');
         try {
           const refreshRes = await fetch('/api/market/refresh', {
@@ -888,36 +940,53 @@
           const refreshData = await refreshRes.json();
 
           if (refreshData.ok && refreshData.status === 'updated') {
-            // Hot-reload fresh dataset without full page reload
             await reloadDatasetHot();
-            updateSyncIndicator('latest', 'Latest EOD data', `EOD ${refreshData.tradingDate || data.tradingDate}`);
-            try { sessionStorage.setItem(CACHE_KEY, String(Date.now())); } catch (_) {}
+            const msg = 'Latest EOD data';
+            const details = `EOD ${refreshData.tradingDate || data.tradingDate}${refreshData.istDisplayTime ? ` · Refreshed ${refreshData.istDisplayTime}` : ''}`;
+            updateSyncIndicator('latest', msg, details);
+            saveStatusCache('latest', msg, details);
           } else if (refreshData.status === 'in_progress') {
             pollSyncCompletion();
           } else {
-            // Vercel cannot rebuild the checked-in dataset from this function.
-            const sourceDate = refreshData.tradingDate || data.tradingDate;
-            const expectedDate = refreshData.latestExpectedDate || data.marketCalendar?.latestExpectedDate;
-            updateSyncIndicator('stale', 'Showing previous verified EOD data', `EOD ${sourceDate || 'unknown'} · expected ${expectedDate || 'newer session'}`);
+            const isDelayed = Boolean(refreshData.isDelayed ?? data.isDelayed);
+            const state = isDelayed ? 'delayed' : 'stale';
+            const expectedDate = refreshData.latestExpectedDate || data.latestExpectedDate || data.marketCalendar?.latestExpectedDate;
+            const msg = isDelayed
+              ? `Delayed — awaiting ${expectedDate || 'today'} BhavCopy`
+              : 'Stale EOD data — showing last verified session';
+            const details = formatStatusDetails({
+              tradingDate: refreshData.tradingDate || data.tradingDate,
+              istDisplayTime: refreshData.istDisplayTime || data.istDisplayTime,
+              latestExpectedDate: expectedDate,
+              needsSync: true
+            });
+            updateSyncIndicator(state, msg, details);
+            saveStatusCache(state, msg, details);
           }
         } catch (err) {
-          updateSyncIndicator('stale', 'Showing previous verified EOD data', `EOD ${data.tradingDate || 'unknown'} · expected ${data.marketCalendar?.latestExpectedDate || 'newer session'}`);
+          const state = data.isDelayed ? 'delayed' : 'stale';
+          const msg = data.isDelayed ? 'Delayed — awaiting BhavCopy publication' : 'Showing previous verified EOD data';
+          const details = formatStatusDetails(data);
+          updateSyncIndicator(state, msg, details);
         }
         return;
       }
 
-      // Already up-to-date
-      if (data.marketCalendar && (data.marketCalendar.isWeekend || data.marketCalendar.isHoliday)) {
-        updateSyncIndicator('latest', 'Latest EOD data (Market closed)', `EOD ${data.tradingDate || 'date unavailable'}`);
-      } else {
-        updateSyncIndicator('latest', 'Latest EOD data', `EOD ${data.tradingDate || 'date unavailable'}`);
+      const isClosed = Boolean(data.marketCalendar && (data.marketCalendar.isWeekend || data.marketCalendar.isHoliday));
+      const msg = isClosed ? 'Latest EOD data (Market closed)' : 'Latest EOD data';
+      const details = formatStatusDetails(data);
+      const hasNewerRemote = Boolean(
+        (data.tradingDate && marketStats?.tradingDate && data.tradingDate > marketStats.tradingDate) ||
+        (data.storageVersionId && marketStats?.storageVersionId && data.storageVersionId !== marketStats.storageVersionId)
+      );
+      if (hasNewerRemote) {
+        await reloadDatasetHot();
       }
-      try { sessionStorage.setItem(CACHE_KEY, String(Date.now())); } catch (_) {}
+      updateSyncIndicator('latest', msg, details);
+      saveStatusCache('latest', msg, details);
 
     } catch (err) {
-      // In static deployment (e.g. GitHub Pages or file:///), /api/market/status will fail
-      // Stale-while-revalidate guarantees the loaded EOD dataset remains active and clean
-      updateSyncIndicator('stale', 'EOD freshness could not be checked', marketStats?.tradingDate ? `EOD ${marketStats.tradingDate}` : '');
+      updateSyncIndicator('stale', 'EOD freshness could not be checked', formatStatusDetails({}));
     }
   }
 
@@ -935,10 +1004,20 @@
           clearInterval(pollInterval);
           if (data.isUpToDate) {
             await reloadDatasetHot();
-            updateSyncIndicator('latest', 'Latest EOD data', `EOD ${data.tradingDate || 'date unavailable'}`);
-            try { sessionStorage.setItem('mb_last_sync_check', String(Date.now())); } catch (_) {}
+            const details = formatStatusDetails(data);
+            updateSyncIndicator('latest', 'Latest EOD data', details);
+            try {
+              sessionStorage.setItem('mb_last_sync_check', JSON.stringify({
+                checkedAt: Date.now(),
+                state: 'latest',
+                message: 'Latest EOD data',
+                timeText: details
+              }));
+            } catch (_) {}
           } else {
-            updateSyncIndicator('stale', 'Showing previous verified EOD data', `EOD ${data.tradingDate || 'unknown'} · expected ${data.marketCalendar?.latestExpectedDate || 'newer session'}`);
+            const state = data.isDelayed ? 'delayed' : 'stale';
+            const msg = data.isDelayed ? 'Delayed — awaiting BhavCopy publication' : 'Showing previous verified EOD data';
+            updateSyncIndicator(state, msg, formatStatusDetails(data));
           }
         }
       } catch (_) {

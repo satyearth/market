@@ -3,7 +3,7 @@ const globals = require('globals');
 
 module.exports = [
   {
-    ignores: ['node_modules/**', 'test-results/**', 'js/company-logo-manifest.js']
+    ignores: ['node_modules/**', 'test-results/**', '.backup/**', 'js/company-logo-manifest.js']
   },
   js.configs.recommended,
   {
