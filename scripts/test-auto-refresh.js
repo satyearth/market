@@ -15,7 +15,7 @@ const assert = require('assert');
 const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
-const cal = require('./exchange-calendar');
+const cal = require('../src/calendar/exchange-calendar');
 const { handleRequest, readMarketStatsFromDataset } = require('../server');
 
 let passedCount = 0;

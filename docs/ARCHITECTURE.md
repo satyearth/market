@@ -4,7 +4,7 @@
 
 **Machii Bazzar** is a zero-runtime-dependency Node.js + vanilla web application for End-of-Day (EOD) Indian equity market screening and stock detail inspection across **NSE and BSE** (Mainboard and SME segments).
 
-- **Frontend**: Static HTML/CSS/JS ([index.html](file:///c:/Users/Satya/Stocks/index.html), [stock.html](file:///c:/Users/Satya/Stocks/stock.html)) using editorial Dark Ink styling (`css/`) and ISIN-keyed logos/monograms (`js/company-logo*.js`).
+- **Frontend**: Static HTML/CSS/JS ([index.html](../index.html), [stock.html](../stock.html)) using editorial Dark Ink styling (`css/`) and ISIN-keyed logos/monograms (`js/company-logo*.js`).
 - **Serverless Read Layer**: Vercel Functions (`api/`) reading versioned snapshots from **Supabase Storage** (`latest.json` -> `datasets/<tradingDate>/...json`) with automatic in-memory caching and fallback to `js/stocks-data.js`.
 - **Automated Daily Refresh**: GitHub Actions (`TZ=Asia/Kolkata`) downloads official exchange BhavCopy archives, validates data invariants, and publishes atomically to Supabase Storage with zero Git commits.
 
@@ -53,7 +53,7 @@ scripts/
   test-*.js                     # Specialized regression, pipeline, auto-refresh, listing & Playwright browser suites
 ```
 
-Compatibility wrappers under `lib/*.js`, top-level `scripts/*.js` CLIs, and `server.js` preserve existing npm scripts and test entrypoints while delegating to `src/`.
+Top-level `scripts/*.js` CLIs and `server.js` preserve existing npm scripts and test entrypoints while delegating to `src/`.
 
 ---
 
@@ -71,7 +71,7 @@ Compatibility wrappers under `lib/*.js`, top-level `scripts/*.js` CLIs, and `ser
 
 ## 4. Environment Variables & Setup
 
-See [EXTERNAL_STORAGE_SETUP.md](file:///c:/Users/Satya/Stocks/docs/EXTERNAL_STORAGE_SETUP.md) for Supabase Storage, GitHub Actions, and Vercel setup.
+See [EXTERNAL_STORAGE_SETUP.md](./EXTERNAL_STORAGE_SETUP.md) for Supabase Storage, GitHub Actions, and Vercel setup.
 
 - **Vercel (Read-only APIs)**:
   - `SUPABASE_URL` (required for reading external datasets)

@@ -47,7 +47,7 @@ delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 delete process.env.SUPABASE_ANON_KEY;
 delete process.env.SUPABASE_STORAGE_BUCKET;
 
-const cal = require('./exchange-calendar');
+const cal = require('../src/calendar/exchange-calendar');
 const {
   createDownloader,
   validateBhavcopyCsvContent,
@@ -61,7 +61,7 @@ const {
   validateMergedDataset
 } = require('./sync-stock-universe');
 const { runRefresh } = require('./refresh');
-const { createStorageClient, isSafeDatasetPrunePath } = require('../lib/dataset-storage');
+const { createStorageClient, isSafeDatasetPrunePath } = require('../src/storage/supabase-storage');
 const { expandHistoricalPricesForIsin } = require('../src/storage/historical-store');
 const {
   loadDatasetAsync,
@@ -69,7 +69,7 @@ const {
   queryStocksAsync,
   queryStockHistoryAsync,
   resetCacheForTests
-} = require('../lib/stocks-query');
+} = require('../src/query/stock-query-service');
 
 let passed = 0;
 let failed = 0;
@@ -1329,7 +1329,7 @@ async function runAll() {
     const origHttpReq = http.request;
     const origHttpsReq = https.request;
     const modIds = [
-      require.resolve('../lib/dataset-storage'),
+      require.resolve('../src/storage/supabase-storage'),
       require.resolve('./sync-stock-universe'),
       require.resolve('./refresh')
     ];
@@ -1351,7 +1351,7 @@ async function runAll() {
       process.env.SUPABASE_STORAGE_BUCKET = 'machii-bazzar-datasets';
 
       for (const id of modIds) delete require.cache[id];
-      const freshStorage = require('../lib/dataset-storage');
+      const freshStorage = require('../src/storage/supabase-storage');
       const { syncUniverse: freshSyncUniverse } = require('./sync-stock-universe');
       const { runRefresh: freshRunRefresh } = require('./refresh');
 

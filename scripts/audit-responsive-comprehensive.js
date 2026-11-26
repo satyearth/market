@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
-const { queryStocks } = require('../lib/stocks-query');
+const { queryStocks } = require('../src/query/stock-query-service');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const INDEX_FILE_URL = 'file:///' + path.join(ROOT_DIR, 'index.html').replace(/\\/g, '/');

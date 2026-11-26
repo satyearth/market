@@ -19,7 +19,7 @@ const path = require('path');
 const {
   resolveStockMarketCap,
   rankStocksAndCategorize
-} = require('../lib/market-cap-pipeline');
+} = require('../src/enrichment/market-cap');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const STOCKS_DATA_PATH = path.join(ROOT_DIR, 'js', 'stocks-data.js');

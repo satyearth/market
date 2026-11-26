@@ -6,7 +6,7 @@ const { chromium } = require('playwright');
 const stocksFunction = require('../api/stocks');
 const logoAudit = require('../docs/reports/logo-verification-audit-2026-11-05.json');
 
-const { loadDataset } = require('../lib/stocks-query');
+const { loadDataset } = require('../src/query/stock-query-service');
 
 async function main() {
   const dataset = loadDataset();

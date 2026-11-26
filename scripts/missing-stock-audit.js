@@ -10,7 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getRecentTradingSessions } = require('./exchange-calendar');
+const { getRecentTradingSessions } = require('../src/calendar/exchange-calendar');
 const { parseCsv, readExistingDataset } = require('./sync-stock-universe');
 const { getNseFilename, getBseFilename } = require('./download-bhavcopy');
 

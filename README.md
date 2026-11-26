@@ -7,9 +7,9 @@
 
 ## Key Capabilities
 
-- **ISIN-Unified Screener ([index.html](file:///c:/Users/Satya/Stocks/index.html))**: Infinite-scroll virtualized table served via `GET /api/stocks` (50 rows/batch), instant multi-key search (ticker, company name, ISIN, BSE scrip code, aliases), sector pills, watchlist (`localStorage`), comparison tray, CSV export, and Market Pulse cards.
-- **Stock Profile Pages ([stock.html](file:///c:/Users/Satya/Stocks/stock.html))**: Fetches single-stock data via `GET /api/stocks?isin=...` (with lazy fallback to `./js/stocks-data.js` in offline `file://` mode), showing EOD OHLC, 52-week range indicator, fundamentals (when verified), and 6-session historical closes.
-- **Automated Daily EOD Pipeline ([.github/workflows/refresh-stock-data.yml](file:///c:/Users/Satya/Stocks/.github/workflows/refresh-stock-data.yml))**: Runs Mon–Fri post-close (`16:45–20:00 IST`) + Sun Muhurat checks, downloads official NSE & BSE BhavCopy archives, validates integrity, and atomically publishes to Supabase Storage (`machii-bazzar-datasets`) with 30-trading-session retention and **zero Git commits**.
+- **ISIN-Unified Screener ([index.html](index.html))**: Infinite-scroll virtualized table served via `GET /api/stocks` (50 rows/batch), instant multi-key search (ticker, company name, ISIN, BSE scrip code, aliases), sector pills, watchlist (`localStorage`), comparison tray, CSV export, and Market Pulse cards.
+- **Stock Profile Pages ([stock.html](stock.html))**: Fetches single-stock data via `GET /api/stocks?isin=...` (with lazy fallback to `./js/stocks-data.js` in offline `file://` mode), showing EOD OHLC, 52-week range indicator, fundamentals (when verified), and up to 90-session historical closes.
+- **Automated Daily EOD Pipeline ([.github/workflows/refresh-stock-data.yml](.github/workflows/refresh-stock-data.yml))**: Runs Mon–Fri post-close (`16:45–20:00 IST`) + Sun Muhurat checks, downloads official NSE & BSE BhavCopy archives, validates integrity, and atomically publishes to Supabase Storage (`machii-bazzar-datasets`) with 90-trading-session retention and **zero Git commits**.
 
 ---
 
@@ -19,6 +19,7 @@
 - `GET /api/stocks` — Paginated (`limit <= 50`), searchable, sortable, filterable query endpoint and exact `?isin=` lookup.
 - `GET /api/market/status` — IST calendar session evaluation and active dataset metadata.
 - `GET /api/market/dataset` — Lightweight dataset statistics and freshness metadata.
+- `GET /api/market/history` — Versioned 90-session history metadata and per-ISIN closing price series.
 - `POST /api/market/refresh` — Triggers local sync in `server.js`; returns storage status (`200` if fresh / `503` if stale) in read-only serverless mode.
 
 ---
@@ -36,6 +37,6 @@ npm test                   # Runs tests/run-all.js + dataset, QA, audit & pipeli
 
 ## Documentation
 
-- [Architecture & Data Pipeline](file:///c:/Users/Satya/Stocks/docs/ARCHITECTURE.md)
-- [Supabase Storage, GitHub Actions & Vercel Setup](file:///c:/Users/Satya/Stocks/docs/EXTERNAL_STORAGE_SETUP.md)
-- [Market Cap Coverage Report](file:///c:/Users/Satya/Stocks/docs/reports/MARKET_CAP_COVERAGE_REPORT.md)
+- [Architecture & Data Pipeline](docs/ARCHITECTURE.md)
+- [Supabase Storage, GitHub Actions & Vercel Setup](docs/EXTERNAL_STORAGE_SETUP.md)
+- [Market Cap Coverage Report](docs/reports/MARKET_CAP_COVERAGE_REPORT.md)
