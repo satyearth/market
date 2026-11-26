@@ -125,6 +125,39 @@ function isSafeDatasetPrunePath(objectPath) {
   return /^datasets\/\d{4}-\d{2}-\d{2}\/.+$/.test(normalized);
 }
 
+/**
+ * Returns true strictly when Supabase Storage indicates a missing object key
+ * (HTTP 404 or HTTP 400 with NoSuchKey / object not found payload).
+ * Auth, permissions, missing bucket, rate-limit, 5xx, and network errors return false.
+ */
+function isObjectNotFoundResponse(res) {
+  if (!res || res.ok) return false;
+  if (res.statusCode === 404) return true;
+  if (res.statusCode !== 400) return false;
+
+  const rawBody = Buffer.isBuffer(res.body) ? res.body.toString('utf8') : String(res.body || '');
+  const lower = rawBody.toLowerCase();
+  if (
+    lower.includes('nosuchbucket') ||
+    lower.includes('bucket not found') ||
+    lower.includes('jwt') ||
+    lower.includes('unauthorized') ||
+    lower.includes('forbidden')
+  ) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(rawBody);
+    const errStr = String(parsed?.error || '').toLowerCase();
+    const codeStr = String(parsed?.statusCode || '').trim();
+    const msgStr = String(parsed?.message || '').toLowerCase();
+    return errStr === 'nosuchkey' || errStr === 'not_found' || codeStr === '404' || msgStr.includes('object not found');
+  } catch (_) {
+    return /\bnosuchkey\b/i.test(rawBody) || /\bobject not found\b/i.test(rawBody);
+  }
+}
+
 function createStorageClient(config = {}) {
   const initialEnvCfg = getStorageConfigFromEnv();
   const dynamicEnv = Boolean(config.dynamicEnv);
@@ -224,8 +257,8 @@ function createStorageClient(config = {}) {
       headers: buildAuthHeaders(authKey, { Accept: 'application/json' })
     });
 
-    if (res.statusCode === 404) {
-      return { ok: false, notFound: true, statusCode: 404, error: `Object not found: ${objectPath}` };
+    if (isObjectNotFoundResponse(res)) {
+      return { ok: false, notFound: true, statusCode: res.statusCode, error: `Object not found: ${objectPath}` };
     }
     if (!res.ok) {
       return {
@@ -282,7 +315,7 @@ function createStorageClient(config = {}) {
       method: 'DELETE',
       headers: buildAuthHeaders(cfg.serviceKey)
     });
-    return { ok: res.ok || res.statusCode === 404, statusCode: res.statusCode };
+    return { ok: res.ok || isObjectNotFoundResponse(res), statusCode: res.statusCode };
   }
 
   async function listObjects(prefix = '', options = {}) {
@@ -438,7 +471,7 @@ function createStorageClient(config = {}) {
         body: Buffer.from(payload, 'utf8')
       });
 
-      if (res.ok || res.statusCode === 404) {
+      if (res.ok || isObjectNotFoundResponse(res)) {
         deletedPaths.push(...chunk);
       } else {
         failedPaths.push(...chunk);
@@ -654,11 +687,11 @@ function createStorageClient(config = {}) {
     try {
       const manifest = JSON.parse(res.text);
       if (!manifest || !manifest.tradingDate || !manifest.datasetPath) {
-        return { ok: false, error: 'latest.json manifest missing required fields (tradingDate, datasetPath)' };
+        return { ok: false, parseError: true, error: 'latest.json manifest missing required fields (tradingDate, datasetPath)' };
       }
       return { ok: true, manifest };
     } catch (err) {
-      return { ok: false, error: `latest.json JSON parse error: ${err.message}` };
+      return { ok: false, parseError: true, error: `latest.json JSON parse error: ${err.message}` };
     }
   }
 
@@ -821,8 +854,12 @@ function createStorageClient(config = {}) {
             error: `Refusing to overwrite newer storage dataset (${previousManifest.tradingDate}) with older date (${stats.tradingDate})`
           };
         }
-      } else if (!currentRes.notFound && !options.force) {
-        return { ok: false, error: `Cannot verify current latest.json state: ${currentRes.error}` };
+      } else if (!currentRes.notFound && !(options.force && currentRes.parseError)) {
+        return {
+          ok: false,
+          statusCode: currentRes.statusCode,
+          error: `Cannot verify current latest.json state: ${currentRes.error}`
+        };
       }
 
       const safeTimestamp = (stats.refreshedAtUtc || new Date().toISOString()).replace(/[:.]/g, '-');
@@ -1007,6 +1044,7 @@ module.exports = {
   DEFAULT_RETAIN_TRADING_SESSIONS,
   sha256Hex,
   isSafeDatasetPrunePath,
+  isObjectNotFoundResponse,
   getStorageConfigFromEnv,
   createStorageClient,
   ...defaultClient

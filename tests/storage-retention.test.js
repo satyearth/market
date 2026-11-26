@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('assert');
-const { createStorageClient, isSafeDatasetPrunePath } = require('../src/storage/supabase-storage');
+const { createStorageClient, isSafeDatasetPrunePath, isObjectNotFoundResponse } = require('../src/storage/supabase-storage');
 const { isTradingDay } = require('../src/calendar/exchange-calendar');
 
 function createMockSupabase(initialObjects = {}) {
@@ -174,6 +174,138 @@ async function run() {
   assert.strictEqual(liveRes.deletedCount, 4);
   assert.ok(retMock.objects.has('reference/catalog.json'));
   assert.ok(retMock.objects.has('latest.json'));
+
+  // 4. Missing-object vs real error classification + first-time publish on HTTP 400 NoSuchKey
+  assert.strictEqual(isObjectNotFoundResponse({ ok: false, statusCode: 404, body: Buffer.from('') }), true);
+  assert.strictEqual(isObjectNotFoundResponse({ ok: false, statusCode: 400, body: Buffer.from('NoSuchKey') }), true);
+  assert.strictEqual(
+    isObjectNotFoundResponse({ ok: false, statusCode: 400, body: Buffer.from('{"statusCode":"404","error":"not_found","message":"Object not found"}') }),
+    true
+  );
+  assert.strictEqual(
+    isObjectNotFoundResponse({ ok: false, statusCode: 400, body: Buffer.from('{"statusCode":"404","error":"Bucket not found"}') }),
+    false,
+    'Missing bucket must never look like missing object key'
+  );
+  assert.strictEqual(
+    isObjectNotFoundResponse({ ok: false, statusCode: 400, body: Buffer.from('{"message":"Invalid JWT"}') }),
+    false,
+    'JWT error must never look like missing object key'
+  );
+  assert.strictEqual(isObjectNotFoundResponse({ ok: false, statusCode: 401, body: Buffer.from('NoSuchKey') }), false);
+  assert.strictEqual(isObjectNotFoundResponse({ ok: false, statusCode: 403, body: Buffer.from('Forbidden') }), false);
+  assert.strictEqual(isObjectNotFoundResponse({ ok: false, statusCode: 500, body: Buffer.from('Internal') }), false);
+
+  // First-time publish succeeds when Supabase returns HTTP 400 NoSuchKey for missing latest.json & lock
+  const noSuchKeyStore = new Map();
+  const firstPubClient = createStorageClient({
+    url: 'https://mock-supabase.local',
+    serviceKey: 'mock-service-role',
+    bucket: 'machii-bazzar-datasets',
+    maxRetries: 1,
+    httpRequest: async (url, opts = {}) => {
+      const parsed = new URL(url);
+      const method = (opts.method || 'GET').toUpperCase();
+      const parts = parsed.pathname.split('/');
+      if (parts[4] === 'list' && method === 'POST') {
+        const prefix = JSON.parse(Buffer.from(opts.body || '{}').toString('utf8')).prefix || '';
+        const seenFolders = new Set();
+        const items = [];
+        for (const [k, v] of noSuchKeyStore.entries()) {
+          if (prefix && !k.startsWith(prefix + '/')) continue;
+          const rest = prefix ? k.slice(prefix.length + 1) : k;
+          if (!rest) continue;
+          if (rest.includes('/')) {
+            const folder = rest.split('/')[0];
+            if (!seenFolders.has(folder)) {
+              seenFolders.add(folder);
+              items.push({ name: folder, id: null, metadata: null });
+            }
+          } else {
+            items.push({ name: rest, id: `id-${rest}`, metadata: { size: Buffer.byteLength(v, 'utf8') } });
+          }
+        }
+        return { ok: true, statusCode: 200, headers: {}, body: Buffer.from(JSON.stringify(items), 'utf8') };
+      }
+      const isAuthGet = parts[4] === 'authenticated' || parts[4] === 'public';
+      const objPath = decodeURIComponent(parts.slice(isAuthGet ? 6 : 5).join('/'));
+      if (method === 'GET') {
+        if (!noSuchKeyStore.has(objPath)) {
+          return { ok: false, statusCode: 400, headers: {}, body: Buffer.from('NoSuchKey') };
+        }
+        return { ok: true, statusCode: 200, headers: {}, body: Buffer.from(noSuchKeyStore.get(objPath), 'utf8') };
+      }
+      if (method === 'POST') {
+        noSuchKeyStore.set(objPath, Buffer.from(opts.body || '').toString('utf8'));
+        return { ok: true, statusCode: 200, headers: {}, body: Buffer.from('{}') };
+      }
+      if (method === 'DELETE') {
+        noSuchKeyStore.delete(objPath);
+        return { ok: true, statusCode: 200, headers: {}, body: Buffer.from('{}') };
+      }
+      return { ok: false, statusCode: 400, headers: {}, body: Buffer.alloc(0) };
+    }
+  });
+
+  const firstPub = await firstPubClient.publishDatasetToStorage(
+    { tradingDate: '2026-11-26', refreshedAtUtc: '2026-11-26T07:00:00.000Z', istDisplayTime: '26 Nov 2026, 12:30:00 IST' },
+    [{ isin: 'INE002A01018', symbol: 'RELIANCE' }]
+  );
+  assert.strictEqual(firstPub.ok, true, 'First publish must succeed on HTTP 400 NoSuchKey');
+  assert.strictEqual(firstPub.previousVersionId, null);
+  assert.ok(noSuchKeyStore.has(firstPub.datasetPath));
+  assert.ok(noSuchKeyStore.has('latest.json'));
+  const createdLatest = JSON.parse(noSuchKeyStore.get('latest.json'));
+  assert.strictEqual(createdLatest.tradingDate, '2026-11-26');
+  assert.strictEqual(createdLatest.previousVersion, null);
+  assert.deepStrictEqual(createdLatest.publishedSessions, ['2026-11-26']);
+
+  // Genuine storage/auth/network errors on latest.json MUST fail closed (even with force: true) and never upload dataset
+  for (const errCase of [
+    { label: '403 Forbidden', res: { ok: false, statusCode: 403, headers: {}, body: Buffer.from('Forbidden') } },
+    { label: '400 Bucket Not Found', res: { ok: false, statusCode: 400, headers: {}, body: Buffer.from('{"error":"Bucket not found"}') } },
+    { label: '500 Internal Error', res: { ok: false, statusCode: 500, headers: {}, body: Buffer.from('Server Error') } },
+    { label: 'Network Error', res: { ok: false, statusCode: 0, headers: {}, body: Buffer.alloc(0), error: 'ECONNRESET' } }
+  ]) {
+    const errStore = new Map();
+    const errClient = createStorageClient({
+      url: 'https://mock-supabase.local',
+      serviceKey: 'mock-service-role',
+      bucket: 'machii-bazzar-datasets',
+      maxRetries: 1,
+      httpRequest: async (url, opts = {}) => {
+        const parsed = new URL(url);
+        const method = (opts.method || 'GET').toUpperCase();
+        const parts = parsed.pathname.split('/');
+        const isAuthGet = parts[4] === 'authenticated' || parts[4] === 'public';
+        const objPath = decodeURIComponent(parts.slice(isAuthGet ? 6 : 5).join('/'));
+        if (method === 'GET' && objPath === 'latest.json') return errCase.res;
+        if (method === 'GET') {
+          return errStore.has(objPath)
+            ? { ok: true, statusCode: 200, headers: {}, body: Buffer.from(errStore.get(objPath), 'utf8') }
+            : { ok: false, statusCode: 404, headers: {}, body: Buffer.from('Not Found') };
+        }
+        if (method === 'POST') {
+          errStore.set(objPath, Buffer.from(opts.body || '').toString('utf8'));
+          return { ok: true, statusCode: 200, headers: {}, body: Buffer.from('{}') };
+        }
+        if (method === 'DELETE') {
+          errStore.delete(objPath);
+          return { ok: true, statusCode: 200, headers: {}, body: Buffer.from('{}') };
+        }
+        return { ok: false, statusCode: 400, headers: {}, body: Buffer.alloc(0) };
+      }
+    });
+
+    const failOut = await errClient.publishDatasetToStorage(
+      { tradingDate: '2026-11-26', refreshedAtUtc: '2026-11-26T07:05:00.000Z' },
+      [{ isin: 'INE002A01018', symbol: 'RELIANCE' }],
+      { force: true, skipRetention: true }
+    );
+    assert.strictEqual(failOut.ok, false, `${errCase.label} must fail closed even with force: true`);
+    assert.ok(!errStore.has('latest.json'), `${errCase.label} must never create latest.json`);
+    assert.ok(![...errStore.keys()].some(k => k.startsWith('datasets/')), `${errCase.label} must not upload dataset when manifest probe fails`);
+  }
 }
 
 module.exports = { name: 'storage-retention.test.js', run };
