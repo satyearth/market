@@ -10,10 +10,18 @@
 
 const fs = require('fs');
 const path = require('path');
+const {
+  CARRY_FORWARD_SESSIONS,
+  SPARKLINE_SESSIONS,
+  RETURN_WINDOW_1W_SESSIONS,
+  RETURN_WINDOW_1M_SESSIONS,
+  RETURN_WINDOW_3M_SESSIONS
+} = require('../config/constants');
 const { parseCSVContent, cleanCompanyName } = require('./csv-parser');
 const { getNseFilename, getBseFilename } = require('../ingestion/bhavcopy-downloader');
 const { resolveStockMarketCap, rankStocksAndCategorize } = require('../enrichment/market-cap');
 const { enrichFundamentalsForStock } = require('../enrichment/fundamentals');
+const { hydrateHistoryMapFromPayload } = require('../storage/historical-store');
 
 const NSE_MAINBOARD_SERIES = new Set(['EQ', 'BE', 'BZ']);
 const NSE_SME_SERIES = new Set(['SM', 'ST', 'SZ']);
@@ -27,8 +35,35 @@ function isEligibleIsin(isin) {
   return Boolean(isin && (isin.startsWith('INE') || isin.startsWith('IN9')));
 }
 
-function compileHistoricalMatrix(downloadsDir, historicalDates) {
+function compileHistoricalMatrix(downloadsDir, historicalDates, previousUniverseByIsin = null, previousHistoryDataset = null) {
   const priceHistoryByIsin = new Map();
+  const historicalDateSet = new Set(historicalDates || []);
+  const targetDate = Array.isArray(historicalDates) && historicalDates.length > 0
+    ? historicalDates[historicalDates.length - 1]
+    : null;
+
+  // Hydrate previously validated compact history (schema v2) strictly < targetDate within window
+  if (previousHistoryDataset) {
+    hydrateHistoryMapFromPayload(previousHistoryDataset, historicalDateSet, targetDate, priceHistoryByIsin);
+  }
+
+  // Also hydrate inline legacy/local historical_prices strictly < targetDate within window (without overwriting recovered history unless missing)
+  if (previousUniverseByIsin && typeof previousUniverseByIsin.entries === 'function') {
+    for (const [isin, prevStock] of previousUniverseByIsin.entries()) {
+      if (!isEligibleIsin(isin) || !Array.isArray(prevStock?.historical_prices)) continue;
+      for (const h of prevStock.historical_prices) {
+        if (!h || typeof h.date !== 'string' || !historicalDateSet.has(h.date)) continue;
+        if (targetDate && h.date >= targetDate) continue;
+        const p = Number(h.close);
+        if (Number.isFinite(p) && p > 0) {
+          if (!priceHistoryByIsin.has(isin)) priceHistoryByIsin.set(isin, {});
+          const entry = priceHistoryByIsin.get(isin);
+          if (entry[h.date] == null) entry[h.date] = p;
+        }
+      }
+    }
+  }
+
   for (const dt of historicalDates) {
     const nFile = path.join(downloadsDir, getNseFilename(dt));
     const bFile = path.join(downloadsDir, getBseFilename(dt));
@@ -62,6 +97,81 @@ function compileHistoricalMatrix(downloadsDir, historicalDates) {
     }
   }
   return priceHistoryByIsin;
+}
+
+/**
+ * Computes a verified period return over `targetSessions` trading days.
+ * Returns null safely whenever verified history is insufficient or unpriced.
+ */
+function computePeriodReturn({
+  validDates,
+  histObj,
+  currentPrice,
+  historicalDates,
+  populatedDateSet,
+  targetSessions,
+  maxStartLag = 0,
+  requireFullDatasetWindow = true
+}) {
+  if (!Array.isArray(historicalDates) || historicalDates.length === 0) {
+    return { value: null, startDate: null, endDate: null, prices: [] };
+  }
+  if (requireFullDatasetWindow && (historicalDates.length < targetSessions || populatedDateSet.size < targetSessions)) {
+    return { value: null, startDate: null, endDate: null, prices: [] };
+  }
+
+  const populatedDates = historicalDates.filter(d => populatedDateSet.has(d));
+  const windowSource = populatedDates.length >= targetSessions ? populatedDates : historicalDates;
+  const windowDates = windowSource.slice(-targetSessions);
+  const windowDatesSet = new Set(windowDates);
+  if (requireFullDatasetWindow) {
+    if (windowDates.length < targetSessions) {
+      return { value: null, startDate: null, endDate: null, prices: [] };
+    }
+    let winPopulatedCount = 0;
+    for (const d of windowDates) {
+      if (populatedDateSet.has(d)) winPopulatedCount++;
+    }
+    if (winPopulatedCount < Math.max(targetSessions - maxStartLag, 2)) {
+      return { value: null, startDate: null, endDate: null, prices: [] };
+    }
+  }
+
+  const inWindow = validDates.filter(d => windowDatesSet.has(d));
+  const prices = inWindow.map(d => histObj[d]);
+  if (inWindow.length < 2) {
+    return { value: null, startDate: null, endDate: null, prices };
+  }
+
+  let startDate = inWindow[0];
+  if (requireFullDatasetWindow) {
+    const windowStart = windowDates[0];
+    const anchorEnd = windowDates[Math.min(maxStartLag, windowDates.length - 1)];
+    const anchorDate = inWindow.find(d => d >= windowStart && d <= anchorEnd);
+    if (!anchorDate) {
+      return { value: null, startDate: null, endDate: null, prices };
+    }
+    startDate = anchorDate;
+  }
+
+  const endDate = inWindow[inWindow.length - 1];
+  const recentTailStart = windowSource[Math.max(0, windowSource.length - RETURN_WINDOW_1W_SESSIONS)];
+  if (endDate < recentTailStart && currentPrice == null) {
+    return { value: null, startDate: null, endDate: null, prices };
+  }
+
+  const pFirst = histObj[startDate];
+  const pLatest = currentPrice != null ? currentPrice : histObj[endDate];
+  if (!pFirst || !pLatest || pFirst <= 0 || pLatest <= 0) {
+    return { value: null, startDate: null, endDate: null, prices };
+  }
+
+  return {
+    value: parseFloat((((pLatest / pFirst) - 1) * 100).toFixed(2)),
+    startDate,
+    endDate,
+    prices
+  };
 }
 
 function buildUniverseDiff(mergedStocks, previousUniverseByIsin, targetDate, compileTime) {
@@ -158,11 +268,22 @@ function mergeExchangeUniverse({
   historicalDates,
   marketCapSources,
   previousUniverseByIsin,
+  previousHistoryDataset = null,
   nse52Week,
   bse52Week,
   fetchStartTime
 }) {
-  const priceHistoryByIsin = compileHistoricalMatrix(downloadsDir, historicalDates);
+  const priceHistoryByIsin = compileHistoricalMatrix(
+    downloadsDir,
+    historicalDates,
+    previousUniverseByIsin,
+    previousHistoryDataset
+  );
+  const populatedDateSet = new Set();
+  for (const histMap of priceHistoryByIsin.values()) {
+    for (const dt of Object.keys(histMap)) populatedDateSet.add(dt);
+  }
+  const populatedHistoricalDates = historicalDates.filter(d => populatedDateSet.has(d));
   const nseByIsin = new Map();
   let nseMainboardCount = 0;
   let nseSmeCount = 0;
@@ -268,8 +389,11 @@ function mergeExchangeUniverse({
   }
 
   // Carry forward securities absent on target session if traded within prior 5 sessions
-  for (let idx = historicalDates.length - 2; idx >= 0; idx--) {
-    const dt = historicalDates[idx];
+  const priorCarryDates = historicalDates
+    .slice(0, -1)
+    .slice(-CARRY_FORWARD_SESSIONS)
+    .reverse();
+  for (const dt of priorCarryDates) {
     const nFile = path.join(downloadsDir, getNseFilename(dt));
     const bFile = path.join(downloadsDir, getBseFilename(dt));
     const dayNseRaw = fs.existsSync(nFile) ? parseCSVContent(fs.readFileSync(nFile, 'utf8')) : [];
@@ -450,24 +574,60 @@ function mergeExchangeUniverse({
     const histObj = priceHistoryByIsin.get(isin) || {};
     const validDates = historicalDates.filter(d => histObj[d] != null);
     let historicalPrices = null;
-    let sparkline7d = null;
-    let return1w = null;
-    let sessionStartDate = null;
-    let sessionEndDate = null;
-
     if (validDates.length >= 2) {
       historicalPrices = validDates.map(d => ({ date: d, close: histObj[d] }));
-      sparkline7d = historicalPrices.map(h => h.close);
-      sessionStartDate = validDates[0];
-      sessionEndDate = validDates[validDates.length - 1];
-      const pFirst = histObj[sessionStartDate];
-      const pLatest = currentPrice != null ? currentPrice : histObj[sessionEndDate];
-      if (pFirst && pLatest && pFirst > 0) {
-        return1w = parseFloat((((pLatest - pFirst) / pFirst) * 100).toFixed(2));
-      }
     }
 
-    const benchmark = marketCapSources.benchmarkBySymbol.get(String(symbol || '').toUpperCase());
+    const ret1wRes = computePeriodReturn({
+      validDates,
+      histObj,
+      currentPrice,
+      historicalDates,
+      populatedDateSet,
+      targetSessions: RETURN_WINDOW_1W_SESSIONS,
+      maxStartLag: 0,
+      requireFullDatasetWindow: false
+    });
+    const ret1mRes = computePeriodReturn({
+      validDates,
+      histObj,
+      currentPrice,
+      historicalDates,
+      populatedDateSet,
+      targetSessions: RETURN_WINDOW_1M_SESSIONS,
+      maxStartLag: 2,
+      requireFullDatasetWindow: true
+    });
+    const ret3mRes = computePeriodReturn({
+      validDates,
+      histObj,
+      currentPrice,
+      historicalDates,
+      populatedDateSet,
+      targetSessions: RETURN_WINDOW_3M_SESSIONS,
+      maxStartLag: 4,
+      requireFullDatasetWindow: true
+    });
+
+    const sparkline7d = ret1wRes.prices.length >= 2
+      ? ret1wRes.prices.slice(-SPARKLINE_SESSIONS)
+      : null;
+    const return1w = ret1wRes.value;
+    const sessionStartDate = ret1wRes.startDate;
+    const sessionEndDate = ret1wRes.endDate;
+    const return1m = ret1mRes.value;
+    const return3m = ret3mRes.value;
+
+    const symUpper = String(symbol || '').toUpperCase();
+    const nseSymUpper = String(nseSymbol || '').toUpperCase();
+    const benchmark = marketCapSources.benchmarkMetaByIsin?.get(isin) ||
+      marketCapSources.benchmarkBySymbol.get(symUpper) ||
+      (nseSymUpper ? marketCapSources.benchmarkBySymbol.get(nseSymUpper) : null);
+    const catalogEntry = marketCapSources.catalogMetaByIsin?.get(isin) ||
+      marketCapSources.catalogByIsin?.get(isin) ||
+      marketCapSources.catalogMetaByTicker?.get(nseSymUpper) ||
+      marketCapSources.catalogMetaByTicker?.get(symUpper) ||
+      null;
     const prevStock = previousUniverseByIsin.get(isin);
     const bseMasterEntry = marketCapSources.bseSecByIsin.get(isin);
 
@@ -479,6 +639,7 @@ function mergeExchangeUniverse({
       series,
       currentPrice,
       benchmark,
+      catalogEntry,
       prevStock,
       bseMasterEntry,
       nse52Week,
@@ -525,8 +686,8 @@ function mergeExchangeUniverse({
       return_1w: return1w,
       return_1w_session_start: sessionStartDate,
       return_1w_session_end: sessionEndDate,
-      return_1m: null,
-      return_3m: null,
+      return_1m: return1m,
+      return_3m: return3m,
       week52_high: fund.week52_high,
       week52_low: fund.week52_low,
       pct_from_high: fund.pct_from_high,
@@ -549,6 +710,8 @@ function mergeExchangeUniverse({
   return {
     mergedStocks,
     rankingResult,
+    populatedHistoricalDates,
+    priceHistoryByIsin,
     counts: {
       nseCount: nseByIsin.size,
       bseCount: bseByIsin.size,
@@ -575,6 +738,7 @@ module.exports = {
   BSE_EQUITY_GROUPS,
   isEligibleIsin,
   compileHistoricalMatrix,
+  computePeriodReturn,
   buildUniverseDiff,
   mergeExchangeUniverse
 };

@@ -10,18 +10,29 @@
  */
 
 const fs = require('fs');
+const path = require('path');
 const {
   TARGET_DATA_PATH,
+  DOWNLOADS_DIR,
   POINTER_CACHE_TTL_MS,
-  SECTOR_OVERRIDES
+  SECTOR_OVERRIDES,
+  MAX_HISTORICAL_SESSIONS,
+  RETURN_WINDOW_1W_SESSIONS,
+  RETURN_WINDOW_1M_SESSIONS,
+  RETURN_WINDOW_3M_SESSIONS
 } = require('../config/constants');
 const defaultStorage = require('../storage/supabase-storage');
+const { expandHistoricalPricesForIsin } = require('../storage/historical-store');
+const { mapCatalogToCanonicalSector } = require('../enrichment/fundamentals');
+const { computePeriodReturn } = require('../processing/universe-merger');
 
 const DATA_PATH = TARGET_DATA_PATH;
 
 let cachedLocal = null;
-let cachedRemote = null; // { versionId, checkedAt, data, manifest }
+let cachedRemote = null; // { versionId, checkedAt, data, manifest, historicalDatasetMeta }
 let cachedManifestOnly = null; // { checkedAt, stats, manifest, versionId }
+let cachedHistoricalRemote = null; // { versionId, sha256, checkedAt, history, meta }
+let cachedCatalogSectorMap = null;
 
 const ALIASES = {
   zomato: 'ETERNAL',
@@ -38,9 +49,39 @@ const SORTABLE = new Set([
   'return_1w', 'return_1m', 'return_3m', 'volume_ratio', 'volume'
 ]);
 
+function getLocalCatalogSectorMap() {
+  if (cachedCatalogSectorMap !== null) return cachedCatalogSectorMap;
+  const map = new Map();
+  try {
+    const catalogPath = path.join(DOWNLOADS_DIR, 'api-companies-catalog.json');
+    if (fs.existsSync(catalogPath)) {
+      const list = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+      if (Array.isArray(list)) {
+        for (const c of list) {
+          if (!c.isin) continue;
+          const mapped = mapCatalogToCanonicalSector(c.sector, c.industry);
+          if (mapped || c.industry) {
+            map.set(String(c.isin).trim().toUpperCase(), { sector: mapped, industry: c.industry || null });
+          }
+        }
+      }
+    }
+  } catch (_) {}
+  cachedCatalogSectorMap = map;
+  return cachedCatalogSectorMap;
+}
+
+function isPlaceholderSectorVal(sector, industry) {
+  const s = String(sector || '').trim().toUpperCase();
+  if (!s || s === 'GENERAL' || s === 'UNCLASSIFIED' || s === 'N/A' || s === 'UNKNOWN') return true;
+  if (String(industry || '').trim().toUpperCase() === 'SPECIALIZED SECTOR') return true;
+  return false;
+}
+
 function normalizeDataset(stats, rawStocks) {
   const seen = new Set();
   const stocks = [];
+  const catalogSectors = getLocalCatalogSectorMap();
   for (const raw of rawStocks || []) {
     const isin = String(raw.isin || '').trim().toUpperCase();
     if (!isin || seen.has(isin)) continue;
@@ -49,8 +90,12 @@ function normalizeDataset(stats, rawStocks) {
     if (SECTOR_OVERRIDES[isin]) {
       stock.sector = SECTOR_OVERRIDES[isin].sector;
       stock.industry = SECTOR_OVERRIDES[isin].industry;
-    } else if (!stock.sector || String(stock.sector).toUpperCase() === 'GENERAL') {
-      stock.sector = 'Unclassified';
+    } else if (isPlaceholderSectorVal(stock.sector, stock.industry)) {
+      const catMeta = catalogSectors.get(isin);
+      stock.sector = catMeta?.sector || 'Unclassified';
+      if ((!stock.industry || isPlaceholderSectorVal('x', stock.industry) || String(stock.industry).toUpperCase() === 'DIVERSIFIED') && catMeta?.industry) {
+        stock.industry = catMeta.industry;
+      }
     }
     stocks.push(stock);
   }
@@ -94,7 +139,8 @@ async function loadDatasetAsync(options = {}) {
       return {
         ...cachedRemote.data,
         storageSource: 'supabase_storage',
-        storageVersionId: cachedRemote.versionId
+        storageVersionId: cachedRemote.versionId,
+        historicalDatasetMeta: cachedRemote.historicalDatasetMeta || null
       };
     }
 
@@ -105,21 +151,28 @@ async function loadDatasetAsync(options = {}) {
 
       if (remote.ok && remote.unchanged && cachedRemote) {
         cachedRemote.checkedAt = now;
+        if (remote.manifest) {
+          cachedRemote.manifest = remote.manifest;
+          cachedRemote.historicalDatasetMeta = remote.manifest.historicalDataset || remote.manifest.stats?.historicalDataset || cachedRemote.historicalDatasetMeta || null;
+        }
         return {
           ...cachedRemote.data,
           storageSource: 'supabase_storage',
-          storageVersionId: cachedRemote.versionId
+          storageVersionId: cachedRemote.versionId,
+          historicalDatasetMeta: cachedRemote.historicalDatasetMeta || null
         };
       }
 
       if (remote.ok && remote.stats && Array.isArray(remote.stocks)) {
         const normalized = normalizeDataset(remote.stats, remote.stocks);
         const versionId = remote.manifest?.versionId || remote.stats.storageVersionId || remote.stats.refreshedAtUtc;
+        const histMeta = remote.historicalDatasetMeta || remote.manifest?.historicalDataset || remote.stats?.historicalDataset || null;
         cachedRemote = {
           versionId,
           checkedAt: now,
           manifest: remote.manifest,
-          data: normalized
+          data: normalized,
+          historicalDatasetMeta: histMeta
         };
         cachedManifestOnly = {
           checkedAt: now,
@@ -130,7 +183,8 @@ async function loadDatasetAsync(options = {}) {
         return {
           ...normalized,
           storageSource: 'supabase_storage',
-          storageVersionId: versionId
+          storageVersionId: versionId,
+          historicalDatasetMeta: histMeta
         };
       }
     } catch (_) {}
@@ -139,7 +193,8 @@ async function loadDatasetAsync(options = {}) {
       return {
         ...cachedRemote.data,
         storageSource: 'supabase_storage_cached',
-        storageVersionId: cachedRemote.versionId
+        storageVersionId: cachedRemote.versionId,
+        historicalDatasetMeta: cachedRemote.historicalDatasetMeta || null
       };
     }
 
@@ -147,7 +202,8 @@ async function loadDatasetAsync(options = {}) {
     return {
       ...localData,
       storageSource: 'local_fallback',
-      storageVersionId: localData.stats?.storageVersionId || null
+      storageVersionId: localData.stats?.storageVersionId || null,
+      historicalDatasetMeta: localData.stats?.historicalDataset || null
     };
   }
 
@@ -155,7 +211,8 @@ async function loadDatasetAsync(options = {}) {
   return {
     ...localData,
     storageSource: 'local_file',
-    storageVersionId: localData.stats?.storageVersionId || null
+    storageVersionId: localData.stats?.storageVersionId || null,
+    historicalDatasetMeta: localData.stats?.historicalDataset || null
   };
 }
 
@@ -242,6 +299,163 @@ function resetCacheForTests() {
   cachedLocal = null;
   cachedRemote = null;
   cachedManifestOnly = null;
+  cachedHistoricalRemote = null;
+  cachedCatalogSectorMap = null;
+}
+
+function deriveReturnsFromHistory(stock, sessions, prices) {
+  const safePrices = Array.isArray(prices) ? prices : [];
+  if (safePrices.length < 2) {
+    return {
+      return_1w: stock?.return_1w ?? null,
+      return_1m: stock?.return_1m ?? null,
+      return_3m: stock?.return_3m ?? null
+    };
+  }
+  const histObj = {};
+  for (const entry of safePrices) {
+    if (entry && typeof entry.date === 'string' && Number.isFinite(Number(entry.close)) && Number(entry.close) > 0) {
+      histObj[entry.date] = Number(entry.close);
+    }
+  }
+  const validDates = Object.keys(histObj).sort();
+  if (validDates.length < 2) {
+    return {
+      return_1w: stock?.return_1w ?? null,
+      return_1m: stock?.return_1m ?? null,
+      return_3m: stock?.return_3m ?? null
+    };
+  }
+  const historicalDates = Array.isArray(sessions) && sessions.length >= validDates.length ? sessions : validDates;
+  const populatedDateSet = new Set(historicalDates);
+  const currentPrice = stock?.current_price != null ? Number(stock.current_price) : null;
+
+  const ret1w = stock?.return_1w != null
+    ? stock.return_1w
+    : computePeriodReturn({
+      validDates,
+      histObj,
+      currentPrice,
+      historicalDates,
+      populatedDateSet,
+      targetSessions: RETURN_WINDOW_1W_SESSIONS,
+      maxStartLag: 0,
+      requireFullDatasetWindow: false
+    }).value;
+
+  const ret1m = stock?.return_1m != null
+    ? stock.return_1m
+    : computePeriodReturn({
+      validDates,
+      histObj,
+      currentPrice,
+      historicalDates,
+      populatedDateSet,
+      targetSessions: RETURN_WINDOW_1M_SESSIONS,
+      maxStartLag: 2,
+      requireFullDatasetWindow: true
+    }).value;
+
+  const ret3m = stock?.return_3m != null
+    ? stock.return_3m
+    : computePeriodReturn({
+      validDates,
+      histObj,
+      currentPrice,
+      historicalDates,
+      populatedDateSet,
+      targetSessions: RETURN_WINDOW_3M_SESSIONS,
+      maxStartLag: 4,
+      requireFullDatasetWindow: true
+    }).value;
+
+  return {
+    return_1w: ret1w ?? null,
+    return_1m: ret1m ?? null,
+    return_3m: ret3m ?? null
+  };
+}
+
+async function loadHistoricalDatasetAsync(metaOrManifest = null, options = {}) {
+  const storage = options.storageClient || defaultStorage;
+  if (!storage || typeof storage.isReadConfigured !== 'function' || !storage.isReadConfigured()) {
+    return { ok: false, notConfigured: true, history: null, meta: null, storageSource: 'local_file' };
+  }
+
+  let meta = metaOrManifest?.datasetPath
+    ? metaOrManifest
+    : (metaOrManifest?.historicalDataset || null);
+
+  if (!meta) {
+    const manifestState = await loadMarketStatsAsync(options);
+    meta = manifestState.manifest?.historicalDataset || manifestState.stats?.historicalDataset || null;
+  }
+
+  if (!meta || !meta.datasetPath || typeof storage.fetchHistoricalDataset !== 'function') {
+    return { ok: false, notFound: true, history: null, meta: null, storageSource: 'supabase_storage' };
+  }
+
+  const now = Date.now();
+  if (
+    !options.force &&
+    cachedHistoricalRemote &&
+    cachedHistoricalRemote.versionId === meta.versionId &&
+    (!meta.sha256 || cachedHistoricalRemote.sha256 === meta.sha256)
+  ) {
+    cachedHistoricalRemote.checkedAt = now;
+    return {
+      ok: true,
+      history: cachedHistoricalRemote.history,
+      meta: cachedHistoricalRemote.meta || meta,
+      storageSource: 'supabase_storage',
+      historyVersionId: cachedHistoricalRemote.versionId
+    };
+  }
+
+  try {
+    const res = await storage.fetchHistoricalDataset(meta, {
+      knownVersionId: options.force ? null : cachedHistoricalRemote?.versionId
+    });
+    if (res.ok && res.unchanged && cachedHistoricalRemote) {
+      cachedHistoricalRemote.checkedAt = now;
+      return {
+        ok: true,
+        history: cachedHistoricalRemote.history,
+        meta: cachedHistoricalRemote.meta || meta,
+        storageSource: 'supabase_storage',
+        historyVersionId: cachedHistoricalRemote.versionId
+      };
+    }
+    if (res.ok && res.history) {
+      const histVersionId = meta.versionId || res.history.versionId;
+      cachedHistoricalRemote = {
+        versionId: histVersionId,
+        sha256: meta.sha256 || null,
+        checkedAt: now,
+        history: res.history,
+        meta
+      };
+      return {
+        ok: true,
+        history: res.history,
+        meta,
+        storageSource: 'supabase_storage',
+        historyVersionId: histVersionId
+      };
+    }
+  } catch (_) {}
+
+  if (cachedHistoricalRemote?.history) {
+    return {
+      ok: true,
+      history: cachedHistoricalRemote.history,
+      meta: cachedHistoricalRemote.meta || meta,
+      storageSource: 'supabase_storage_cached',
+      historyVersionId: cachedHistoricalRemote.versionId
+    };
+  }
+
+  return { ok: false, history: null, meta, storageSource: 'local_fallback' };
 }
 
 function searchMatches(stock, query) {
@@ -320,15 +534,124 @@ function queryStocks(params = {}) {
 
 async function queryStocksAsync(params = {}, options = {}) {
   const dataset = await loadDatasetAsync(options);
-  return executeStockQuery(dataset, params);
+  const result = executeStockQuery(dataset, params);
+  const includeHistory = Boolean(
+    (params.isin && String(params.isin).trim()) ||
+    String(params.includeHistory || '').toLowerCase() === 'true' ||
+    params.includeHistory === '1'
+  );
+
+  if (
+    includeHistory &&
+    result.stocks.length > 0 &&
+    result.stocks.some(s => !Array.isArray(s.historical_prices)) &&
+    dataset.historicalDatasetMeta?.datasetPath
+  ) {
+    try {
+      const histRes = await loadHistoricalDatasetAsync(dataset.historicalDatasetMeta, options);
+      if (histRes.ok && histRes.history) {
+        const sess = histRes.history.sessions || dataset.stats?.historicalSessions?.sessions || [];
+        result.stocks = result.stocks.map(s => {
+          const histPrices = Array.isArray(s.historical_prices)
+            ? s.historical_prices
+            : expandHistoricalPricesForIsin(histRes.history, s.isin);
+          const derived = deriveReturnsFromHistory(s, sess, histPrices);
+          return {
+            ...s,
+            historical_prices: histPrices,
+            ...derived
+          };
+        });
+      }
+    } catch (_) {}
+  }
+
+  return result;
 }
 
 async function getStockByIsinAsync(isin, options = {}) {
   const cleanIsin = String(isin || '').trim().toUpperCase();
   if (!cleanIsin) return null;
   const dataset = await loadDatasetAsync(options);
-  const match = dataset.stocks.find(s => String(s.isin || '').toUpperCase() === cleanIsin);
-  return match ? { stock: match, stats: dataset.stats, storageSource: dataset.storageSource } : null;
+  let match = dataset.stocks.find(s => String(s.isin || '').toUpperCase() === cleanIsin);
+  if (!match) return null;
+  if (!Array.isArray(match.historical_prices) && dataset.historicalDatasetMeta?.datasetPath) {
+    try {
+      const histRes = await loadHistoricalDatasetAsync(dataset.historicalDatasetMeta, options);
+      if (histRes.ok && histRes.history) {
+        match = {
+          ...match,
+          historical_prices: expandHistoricalPricesForIsin(histRes.history, cleanIsin)
+        };
+      }
+    } catch (_) {}
+  }
+  return { stock: match, stats: dataset.stats, storageSource: dataset.storageSource };
+}
+
+async function queryStockHistoryAsync(params = {}, options = {}) {
+  const rawIsin = params.isin ? String(params.isin).trim().toUpperCase() : '';
+  if (rawIsin && !/^[A-Z0-9]{12}$/.test(rawIsin)) {
+    return { ok: false, statusCode: 400, error: 'A valid 12-character ISIN is required.' };
+  }
+
+  const dataset = await loadDatasetAsync(options);
+  const histMeta = dataset.historicalDatasetMeta || dataset.stats?.historicalDataset || null;
+  let histRes = { ok: false, history: null, meta: histMeta };
+  if (histMeta?.datasetPath) {
+    histRes = await loadHistoricalDatasetAsync(histMeta, options);
+  }
+
+  const historyObj = histRes.history || null;
+  const sessions = historyObj?.sessions || dataset.stats?.historicalSessions?.sessions || [];
+  const resolvedMeta = histRes.meta || histMeta || null;
+  const historyVersionId = resolvedMeta?.versionId || historyObj?.versionId || null;
+
+  if (!rawIsin) {
+    return {
+      ok: true,
+      tradingDate: dataset.stats?.tradingDate || null,
+      historyVersionId,
+      historicalDataset: resolvedMeta,
+      startDate: sessions[0] || resolvedMeta?.startDate || null,
+      endDate: sessions[sessions.length - 1] || resolvedMeta?.endDate || null,
+      sessionCount: sessions.length,
+      maxSessions: historyObj?.maxSessions || resolvedMeta?.maxSessions || MAX_HISTORICAL_SESSIONS,
+      sessions,
+      storageSource: dataset.storageSource || 'local_file',
+      storageVersionId: dataset.storageVersionId || null
+    };
+  }
+
+  const stock = dataset.stocks.find(s => String(s.isin || '').toUpperCase() === rawIsin);
+  if (!stock) {
+    return { ok: false, statusCode: 404, error: `No equity found for ISIN ${rawIsin}.` };
+  }
+
+  const prices = Array.isArray(stock.historical_prices)
+    ? stock.historical_prices
+    : expandHistoricalPricesForIsin(historyObj, rawIsin);
+  const derivedReturns = deriveReturnsFromHistory(stock, sessions, prices);
+
+  return {
+    ok: true,
+    isin: rawIsin,
+    symbol: stock.symbol,
+    company_name: stock.company_name,
+    tradingDate: dataset.stats?.tradingDate || stock.trading_date || null,
+    historyVersionId,
+    historicalDataset: resolvedMeta,
+    startDate: prices?.[0]?.date || null,
+    endDate: prices?.[prices.length - 1]?.date || null,
+    sessionCount: Array.isArray(prices) ? prices.length : 0,
+    maxSessions: historyObj?.maxSessions || resolvedMeta?.maxSessions || MAX_HISTORICAL_SESSIONS,
+    historical_prices: prices || [],
+    return_1w: derivedReturns.return_1w,
+    return_1m: derivedReturns.return_1m,
+    return_3m: derivedReturns.return_3m,
+    storageSource: dataset.storageSource || 'local_file',
+    storageVersionId: dataset.storageVersionId || null
+  };
 }
 
 module.exports = {
@@ -336,9 +659,11 @@ module.exports = {
   loadDataset,
   loadDatasetAsync,
   loadMarketStatsAsync,
+  loadHistoricalDatasetAsync,
   executeStockQuery,
   queryStocks,
   queryStocksAsync,
+  queryStockHistoryAsync,
   getStockByIsinAsync,
   normalizeDataset,
   resetCacheForTests

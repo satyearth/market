@@ -115,6 +115,105 @@ function loadBse52WeekFallback(downloadsDir, targetDate) {
   return { near52WeekScripCodes, week52HighMap, loaded: false };
 }
 
+const PLACEHOLDER_SECTORS = new Set(['GENERAL', 'UNCLASSIFIED', 'N/A', 'UNKNOWN', 'OTHER', 'MISCELLANEOUS', 'DIVERSIFIED']);
+const PLACEHOLDER_INDUSTRIES = new Set(['SPECIALIZED SECTOR', 'DIVERSIFIED', 'MISCELLANEOUS', 'GENERAL GOVERNMENT', 'UNKNOWN', 'N/A']);
+
+const CATALOG_SECTOR_TO_CANONICAL = {
+  'energy minerals': 'Oil Gas & Consumable Fuels',
+  'communications': 'Telecommunication',
+  'health technology': 'Healthcare',
+  'health services': 'Healthcare',
+  'technology services': 'Information Technology',
+  'transportation': 'Services',
+  'commercial services': 'Services',
+  'distribution services': 'Services',
+  'retail trade': 'Consumer Services',
+  'consumer services': 'Consumer Services'
+};
+
+const CATALOG_PAIR_TO_CANONICAL = {
+  // Finance
+  'finance|real estate development': 'Realty',
+  'finance|real estate investment trusts': 'Realty',
+  'finance|*': 'Financial Services',
+  // Utilities
+  'utilities|gas distributors': 'Oil Gas & Consumable Fuels',
+  'utilities|electric utilities': 'Power',
+  'utilities|alternative power generation': 'Power',
+  'utilities|water utilities': 'Services',
+  // Non-Energy Minerals
+  'non-energy minerals|construction materials': 'Construction Materials',
+  'non-energy minerals|forest products': 'Consumer Durables',
+  'non-energy minerals|steel': 'Metals & Mining',
+  'non-energy minerals|aluminum': 'Metals & Mining',
+  'non-energy minerals|other metals/minerals': 'Metals & Mining',
+  'non-energy minerals|precious metals': 'Metals & Mining',
+  // Consumer Non-Durables
+  'consumer non-durables|apparel/footwear': 'Consumer Durables',
+  'consumer non-durables|*': 'Fast Moving Consumer Goods',
+  // Consumer Durables
+  'consumer durables|motor vehicles': 'Automobile and Auto Components',
+  'consumer durables|automotive aftermarket': 'Automobile and Auto Components',
+  'consumer durables|homebuilding': 'Realty',
+  'consumer durables|*': 'Consumer Durables',
+  // Producer Manufacturing
+  'producer manufacturing|auto parts: oem': 'Automobile and Auto Components',
+  'producer manufacturing|*': 'Capital Goods',
+  // Electronic Technology
+  'electronic technology|telecommunications equipment': 'Telecommunication',
+  'electronic technology|computer peripherals': 'Information Technology',
+  'electronic technology|computer processing hardware': 'Information Technology',
+  'electronic technology|computer communications': 'Information Technology',
+  'electronic technology|aerospace & defense': 'Capital Goods',
+  'electronic technology|electronic equipment/instruments': 'Capital Goods',
+  'electronic technology|electronic production equipment': 'Capital Goods',
+  'electronic technology|electronic components': 'Capital Goods',
+  'electronic technology|semiconductors': 'Capital Goods',
+  // Process Industries
+  'process industries|chemicals: specialty': 'Chemicals',
+  'process industries|chemicals: agricultural': 'Chemicals',
+  'process industries|chemicals: major diversified': 'Chemicals',
+  'process industries|industrial specialties': 'Chemicals',
+  'process industries|agricultural commodities/milling': 'Fast Moving Consumer Goods',
+  'process industries|textiles': 'Consumer Durables',
+  'process industries|containers/packaging': 'Capital Goods',
+  'process industries|pulp & paper': 'Capital Goods',
+  // Industrial Services
+  'industrial services|engineering & construction': 'Construction',
+  'industrial services|oil & gas pipelines': 'Oil Gas & Consumable Fuels',
+  'industrial services|oilfield services/equipment': 'Oil Gas & Consumable Fuels',
+  'industrial services|contract drilling': 'Oil Gas & Consumable Fuels',
+  'industrial services|environmental services': 'Services',
+  // Miscellaneous (only verified investment trusts/funds)
+  'miscellaneous|investment trusts/mutual funds': 'Financial Services'
+};
+
+function isCleanSector(sector, industry) {
+  const secUp = String(sector || '').trim().toUpperCase();
+  if (!secUp || PLACEHOLDER_SECTORS.has(secUp)) return false;
+  const indUp = String(industry || '').trim().toUpperCase();
+  if (indUp === 'SPECIALIZED SECTOR') return false;
+  return true;
+}
+
+function isCleanIndustry(industry) {
+  const indUp = String(industry || '').trim().toUpperCase();
+  return Boolean(indUp && !PLACEHOLDER_INDUSTRIES.has(indUp));
+}
+
+function mapCatalogToCanonicalSector(rawSector, rawIndustry) {
+  const sec = String(rawSector || '').trim().toLowerCase();
+  const ind = String(rawIndustry || '').trim().toLowerCase();
+  if (!sec || sec === 'government' || (sec === 'miscellaneous' && ind === 'miscellaneous')) {
+    return null;
+  }
+  const exact = CATALOG_PAIR_TO_CANONICAL[`${sec}|${ind}`];
+  if (exact) return exact;
+  const wildcard = CATALOG_PAIR_TO_CANONICAL[`${sec}|*`];
+  if (wildcard) return wildcard;
+  return CATALOG_SECTOR_TO_CANONICAL[sec] || null;
+}
+
 function enrichFundamentalsForStock({
   isin,
   symbol,
@@ -123,19 +222,53 @@ function enrichFundamentalsForStock({
   series,
   currentPrice,
   benchmark,
+  catalogEntry,
   prevStock,
   bseMasterEntry,
   nse52Week,
   bse52Week
 }) {
-  let sector = benchmark?.sector || prevStock?.sector || null;
-  let industry = benchmark?.industry || prevStock?.industry || bseMasterEntry?.industry || null;
+  const cleanIsin = String(isin || '').trim().toUpperCase();
+  let sector = null;
+  let industry = null;
 
-  const override = SECTOR_OVERRIDES[isin];
+  const override = SECTOR_OVERRIDES[cleanIsin];
   if (override) {
     sector = override.sector;
     industry = override.industry;
-  } else if (sector && String(sector).toUpperCase() === 'GENERAL') {
+  } else {
+    if (benchmark && isCleanSector(benchmark.sector, benchmark.industry)) {
+      sector = benchmark.sector;
+      if (isCleanIndustry(benchmark.industry)) industry = benchmark.industry;
+    }
+
+    const mappedCatalogSector = catalogEntry
+      ? mapCatalogToCanonicalSector(catalogEntry.sector, catalogEntry.industry)
+      : null;
+
+    if (!sector && mappedCatalogSector) {
+      sector = mappedCatalogSector;
+    }
+    if (!industry && catalogEntry && isCleanIndustry(catalogEntry.industry)) {
+      industry = catalogEntry.industry;
+    }
+
+    if (!sector && bseMasterEntry && isCleanSector(bseMasterEntry.sector, bseMasterEntry.industry)) {
+      sector = bseMasterEntry.sector;
+    }
+    if (!industry && bseMasterEntry && isCleanIndustry(bseMasterEntry.industry)) {
+      industry = bseMasterEntry.industry;
+    }
+
+    if (!sector && prevStock && isCleanSector(prevStock.sector, prevStock.industry)) {
+      sector = prevStock.sector;
+    }
+    if (!industry && prevStock && isCleanIndustry(prevStock.industry)) {
+      industry = prevStock.industry;
+    }
+  }
+
+  if (!sector || PLACEHOLDER_SECTORS.has(String(sector).trim().toUpperCase())) {
     sector = 'Unclassified';
   }
 
@@ -197,5 +330,6 @@ module.exports = {
   loadIndiaVixFromArchive,
   loadNse52WeekArchive,
   loadBse52WeekFallback,
+  mapCatalogToCanonicalSector,
   enrichFundamentalsForStock
 };

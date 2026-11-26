@@ -13,16 +13,17 @@ GitHub Actions (scheduled Mon-Fri IST + Sun Muhurat check)
   ├─ 3. Hydrate cached reference/*.json enrichment metadata when running on cold runner
   ├─ 4. Merge on canonical ISIN & run strict financial integrity checks
   ├─ 5. Acquire distributed lock (locks/refresh.lock.json)
-  ├─ 6. Upload immutable dataset JSON -> datasets/<tradingDate>/stocks-dataset-<versionId>.json
-  ├─ 7. Read-back SHA-256 & row-count verification
-  ├─ 8. Atomically swap pointer -> latest.json (previous valid version preserved)
-  └─ 9. Retain latest 30 distinct valid trading sessions (protecting latest, previousVersion, locks/, reference/)
+  ├─ 6. Upload compact gzip+base64 historical matrix -> history/<tradingDate>/historical-prices-<versionId>.json (reused if unchanged) + verify SHA-256
+  ├─ 7. Upload lean daily stocks snapshot (no inline 90-session arrays) -> datasets/<tradingDate>/stocks-dataset-<versionId>.json + verify SHA-256
+  ├─ 8. Atomically swap pointer -> latest.json (previous valid daily & historical versions preserved)
+  └─ 9. Retain latest 90 daily sessions (datasets/) + 10 rolling 90-session history snapshots (history/), protecting active/previous/locks/reference
 
 Vercel Serverless APIs (zero redeploy needed)
   ├─ GET /api/health          -> readiness, dataset date, freshness & storage configuration probe
-  ├─ GET /api/market/status   -> checks latest.json manifest + IST calendar freshness
-  ├─ GET /api/market/dataset  -> returns latest.json stats + freshness
-  └─ GET /api/stocks          -> caches latest versioned dataset in memory, refreshes automatically when versionId changes
+  ├─ GET /api/market/status   -> checks latest.json manifest + IST calendar freshness + historicalDataset metadata
+  ├─ GET /api/market/dataset  -> returns latest.json stats + historicalDataset metadata + freshness
+  ├─ GET /api/market/history  -> returns 90-session history metadata or per-ISIN closing series on demand
+  └─ GET /api/stocks          -> caches daily dataset per versionId and hydrates separated history automatically for ISIN queries
 ```
 
 ---

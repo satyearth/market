@@ -15,26 +15,28 @@
 ```text
 api/
   health.js                     # GET /api/health — readiness & freshness probe
-  stocks.js                     # GET /api/stocks — paginated/filtered/sorted universe & ISIN lookup
+  stocks.js                     # GET /api/stocks — paginated/filtered/sorted universe & ISIN lookup (hydrates history on ISIN)
   market/status.js              # GET /api/market/status — IST calendar & storage version metadata
   market/dataset.js             # GET /api/market/dataset — lightweight stats + freshness payload
+  market/history.js             # GET /api/market/history — versioned 90-session history metadata & per-ISIN series
   market/refresh.js             # POST /api/market/refresh — serverless read-only check (503 if stale)
 src/
-  config/constants.js           # Exchange series/group rules, Supabase defaults, sector overrides
+  config/constants.js           # Exchange series/group rules, Supabase defaults, 90d daily / 10d history retention constants
   calendar/exchange-calendar.js # IST calendar, 2026 holidays, special Muhurat sessions, 16:30/19:30 cutoffs
   ingestion/
     http-client.js              # Retry/timeout HTTP(S) client (insecureHTTPParser scoped to bseindia.com)
     bhavcopy-downloader.js      # Official NSE (.csv.zip/.csv) & BSE (.CSV) BhavCopy + VIX/52W downloaders
   processing/
     csv-parser.js               # RFC-4180 CSV parser, name cleaner, date normalizer
-    universe-merger.js          # ISIN deduplication, 5-session carry-forward, 6-session history matrix
+    universe-merger.js          # ISIN deduplication, 5-session carry-forward, up to 90-session history matrix & 1W/1M/3M returns
   enrichment/
     market-cap.js               # 7-tier market-cap resolution waterfall & Supabase reference hydration
     fundamentals.js             # Sector overrides, PE/PB/ROCE carryover, VIX & 52W High/Low enrichment
   validation/
-    dataset-validator.js        # Schema, ISIN format, OHLC bounds, shrinkage & breadth arithmetic checks
+    dataset-validator.js        # Schema, ISIN format, OHLC bounds, compact history bounds, shrinkage & breadth arithmetic checks
   storage/
-    supabase-storage.js         # Locking, 3-phase atomic upload/verify/swap, 30-session retention, reference/
+    historical-store.js         # Compact columnar 90-session history serialization & gzip+base64 JSON encoding
+    supabase-storage.js         # Locking, separated history/ + daily upload/verify, atomic latest.json swap, 90d/10d pruning
   publishing/
     publisher.js                # Unified orchestrator (syncUniverse, runRefresh, --dry-run, --sync-reference)
   query/
@@ -60,10 +62,10 @@ Compatibility wrappers under `lib/*.js`, top-level `scripts/*.js` CLIs, and `ser
 1. **Exchange Ingestion**: Downloads NSE CM Unified BhavCopy (`.csv.zip`), BSE CM Unified BhavCopy (`.CSV`), optional NSE Index Close (`ind_close_all_DDMMYYYY.csv` for India VIX), and NSE 52-Week High/Low (`CM_52_wk_High_low_DDMMYYYY.csv`). HTML error pages, date mismatches, and truncated archives are rejected before saving.
 2. **ISIN Primary Key & Deduplication**: Eligible Indian equities (`INE*`, `IN9*`) are merged by ISIN across NSE and BSE. Dual-listed records aggregate traded volume and bound OHLC cleanly.
 3. **Zero Fabricated Metrics**: Missing prices, market caps, and ratios remain `null` and render as `—`. Market caps resolve across benchmark, BSE master, India API catalog (`reference/api-companies-catalog.json` or live API), screener cache, share count math, and previous-session carryover.
-4. **Atomic Publish & 30-Session Retention**:
-   - Uploads immutable snapshot `datasets/<date>/stocks-dataset-<versionId>.json`.
-   - Verifies SHA-256 checksum & stock count before swapping `latest.json`.
-   - Prunes datasets older than 30 distinct valid trading sessions while strictly protecting `latest`, `previousVersion`, `latest.json`, `locks/`, and `reference/`.
+4. **Atomic Publish, Separated History & Supabase Free Plan Retention**:
+   - Uploads immutable compact columnar historical matrix `history/<date>/historical-prices-<versionId>.json` (`gzip+base64` JSON envelope, reused without duplication when `contentSha256` is unchanged) and verifies SHA-256 read-back & structure.
+   - Strips inline `historical_prices` from remote daily rows and uploads lean snapshot `datasets/<date>/stocks-dataset-<versionId>.json` (`gzip+base64` JSON envelope) with SHA-256 read-back verification.
+   - Atomically swaps `latest.json` (storing `historicalDataset` version, coverage, and checksums) before running fail-closed retention cleanup (`90` daily snapshots in `datasets/`, `10` rolling recovery versions in `history/`, protecting active, `previousVersion`, `latest.json`, `locks/`, and `reference/`).
 
 ---
 

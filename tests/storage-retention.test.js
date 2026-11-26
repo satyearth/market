@@ -1,7 +1,16 @@
 'use strict';
 
 const assert = require('assert');
-const { createStorageClient, isSafeDatasetPrunePath, isObjectNotFoundResponse } = require('../src/storage/supabase-storage');
+const {
+  DEFAULT_RETAIN_TRADING_SESSIONS,
+  DEFAULT_RETAIN_HISTORY_SESSIONS,
+  createStorageClient,
+  isSafeDatasetPrunePath,
+  isSafeHistoryPrunePath,
+  isSafePrunePath,
+  isObjectNotFoundResponse
+} = require('../src/storage/supabase-storage');
+const { expandHistoricalPricesForIsin } = require('../src/storage/historical-store');
 const { isTradingDay } = require('../src/calendar/exchange-calendar');
 
 function createMockSupabase(initialObjects = {}) {
@@ -67,7 +76,7 @@ function createMockSupabase(initialObjects = {}) {
       let text = objects.get(objPath);
       if (corruptReadbackOnce && objPath.startsWith('datasets/')) {
         corruptReadbackOnce = false;
-        text = text.replace('STOCK_A', 'CORRUPTED');
+        text = JSON.stringify({ corrupted: true });
       }
       return { ok: true, statusCode: 200, headers: {}, body: Buffer.from(text, 'utf8') };
     }
@@ -138,11 +147,12 @@ async function run() {
   assert.strictEqual(refRes.ok, true);
   assert.strictEqual(refRes.data[0].symbol, 'TCS');
 
-  // 3. 30-session retention preserves latest 30 trading days + protected paths
+  // 3. Default 90-session retention preserves latest 90 trading days + protected paths
+  assert.strictEqual(DEFAULT_RETAIN_TRADING_SESSIONS, 90, 'Default retention constant must be 90 trading sessions');
   const seed = { 'locks/refresh.lock.json': '{}', 'reference/catalog.json': '[]' };
   const tradingDates = [];
-  let cursor = '2026-10-01';
-  while (tradingDates.length < 34) {
+  let cursor = '2026-06-01';
+  while (tradingDates.length < 94) {
     if (isTradingDay(cursor)) tradingDates.push(cursor);
     const dt = new Date(`${cursor}T00:00:00Z`);
     dt.setUTCDate(dt.getUTCDate() + 1);
@@ -163,17 +173,49 @@ async function run() {
   });
 
   const retMock = createMockSupabase(seed);
-  const dryRes = await retMock.client.pruneOldDatasets({ retainSessions: 30, dryRun: true });
+  const dryRes = await retMock.client.pruneOldDatasets({ dryRun: true });
   assert.strictEqual(dryRes.ok, true);
+  assert.strictEqual(dryRes.retainSessions, 90);
   assert.strictEqual(dryRes.expiredTradingDates.length, 4);
   assert.strictEqual(dryRes.plannedDeletions.length, 4);
   assert.strictEqual(retMock.deletedPaths.length, 0, 'Dry run must never delete objects');
 
-  const liveRes = await retMock.client.pruneOldDatasets({ retainSessions: 30, dryRun: false });
+  const liveRes = await retMock.client.pruneOldDatasets({ dryRun: false });
   assert.strictEqual(liveRes.ok, true);
+  assert.strictEqual(liveRes.retainSessions, 90);
+  assert.strictEqual(liveRes.retainedTradingDates.length, 90);
   assert.strictEqual(liveRes.deletedCount, 4);
   assert.ok(retMock.objects.has('reference/catalog.json'));
   assert.ok(retMock.objects.has('latest.json'));
+  assert.ok(retMock.objects.has('locks/refresh.lock.json'));
+
+  // Fail-closed cleanup: manifest read error or list error must perform 0 deletions
+  const failManifestClient = createStorageClient({
+    url: 'https://mock-supabase.local',
+    serviceKey: 'mock-service-role',
+    bucket: 'machii-bazzar-datasets',
+    maxRetries: 1,
+    httpRequest: async (url) => {
+      if (url.endsWith('/latest.json')) return { ok: false, statusCode: 500, headers: {}, body: Buffer.from('Boom') };
+      if (url.includes('/list/')) return { ok: false, statusCode: 500, headers: {}, body: Buffer.from('List Boom') };
+      throw new Error('Unexpected DELETE on fail-closed abort');
+    }
+  });
+  const failPruneManifest = await failManifestClient.pruneOldDatasets({ dryRun: false });
+  assert.strictEqual(failPruneManifest.ok, false);
+  assert.strictEqual(failPruneManifest.phase, 'read_manifest');
+  assert.strictEqual(failPruneManifest.deletedCount, 0);
+
+  const failPruneList = await failManifestClient.pruneOldDatasets({
+    dryRun: false,
+    latestManifest: {
+      tradingDate: latestDate,
+      datasetPath: `datasets/${latestDate}/stocks-dataset-${latestDate}-v1.json`
+    }
+  });
+  assert.strictEqual(failPruneList.ok, false);
+  assert.strictEqual(failPruneList.phase, 'list_objects');
+  assert.strictEqual(failPruneList.deletedCount, 0);
 
   // 4. Missing-object vs real error classification + first-time publish on HTTP 400 NoSuchKey
   assert.strictEqual(isObjectNotFoundResponse({ ok: false, statusCode: 404, body: Buffer.from('') }), true);
@@ -306,6 +348,143 @@ async function run() {
     assert.ok(!errStore.has('latest.json'), `${errCase.label} must never create latest.json`);
     assert.ok(![...errStore.keys()].some(k => k.startsWith('datasets/')), `${errCase.label} must not upload dataset when manifest probe fails`);
   }
+
+  // 5. Separated compact historical dataset, SHA-256 rollback, duplicate reuse, and rolling history pruning
+  assert.strictEqual(isSafeHistoryPrunePath('history/2026-11-25/historical-prices-2026-11-25-h1.json'), true);
+  assert.strictEqual(isSafeHistoryPrunePath('datasets/2026-11-25/stocks-dataset-v1.json'), false);
+  assert.strictEqual(isSafePrunePath('history/2026-11-25/historical-prices-2026-11-25-h1.json'), true);
+
+  const histStore = createMockSupabase();
+  const sess90 = tradingDates.slice(0, 90);
+  const stocksWith90 = [
+    {
+      isin: 'INE002A01018',
+      symbol: 'RELIANCE',
+      company_name: 'Reliance Industries Ltd',
+      current_price: 1490,
+      trading_date: sess90[89],
+      sparkline_7d: [1480, 1482, 1485, 1486, 1488, 1490],
+      return_1w: 0.68,
+      return_1m: 6.43,
+      return_3m: 14.62,
+      historical_prices: sess90.map((dt, idx) => ({ date: dt, close: 1300 + idx }))
+    }
+  ];
+  const sepPub = await histStore.client.publishDatasetToStorage(
+    {
+      tradingDate: sess90[89],
+      refreshedAtUtc: `${sess90[89]}T12:00:00.000Z`,
+      istDisplayTime: `${sess90[89]} 17:30:00 IST`,
+      stockCount: 1
+    },
+    stocksWith90,
+    { skipRetention: true }
+  );
+  assert.strictEqual(sepPub.ok, true);
+  assert.ok(sepPub.historicalDataset?.datasetPath?.startsWith(`history/${sess90[89]}/`), 'Historical dataset uploaded under history/');
+  assert.strictEqual(sepPub.historicalDataset.sessionCount, 90);
+  assert.strictEqual(sepPub.bytes < sepPub.rawBytes, true, 'Compressed daily snapshot must be smaller than uncompressed JSON');
+  assert.strictEqual(sepPub.historicalDataset.bytes < sepPub.historicalDataset.rawBytes, true, 'Compressed historical dataset must be smaller than uncompressed JSON');
+
+  const dailyRead = await histStore.client.fetchLatestDataset();
+  assert.strictEqual(dailyRead.ok, true);
+  assert.strictEqual(dailyRead.stocks[0].historical_prices, undefined, 'Daily snapshot must NOT duplicate inline historical_prices');
+
+  const histRead = await histStore.client.fetchHistoricalDataset(dailyRead.manifest);
+  assert.strictEqual(histRead.ok, true);
+  const expandedRel = expandHistoricalPricesForIsin(histRead.history, 'INE002A01018');
+  assert.strictEqual(expandedRel.length, 90);
+  assert.strictEqual(expandedRel[0].date, sess90[0]);
+  assert.strictEqual(expandedRel[89].close, 1389);
+
+  // Re-publishing identical historical closes reuses existing history/ blob instead of duplicating it
+  const histFilesBefore = [...histStore.objects.keys()].filter(k => k.startsWith('history/')).length;
+  const dupPub = await histStore.client.publishDatasetToStorage(
+    {
+      tradingDate: sess90[89],
+      refreshedAtUtc: `${sess90[89]}T12:05:00.000Z`,
+      istDisplayTime: `${sess90[89]} 17:35:00 IST`,
+      stockCount: 1
+    },
+    stocksWith90,
+    { skipRetention: true }
+  );
+  assert.strictEqual(dupPub.ok, true);
+  assert.strictEqual(dupPub.historicalDataset.datasetPath, sepPub.historicalDataset.datasetPath, 'Identical history must reuse immutable object');
+  assert.strictEqual([...histStore.objects.keys()].filter(k => k.startsWith('history/')).length, histFilesBefore);
+
+  // Corrupted historical upload read-back aborts BEFORE updating latest.json
+  const badHistClient = createStorageClient({
+    url: 'https://mock-supabase.local',
+    serviceKey: 'mock-service-role',
+    bucket: 'mock-bucket',
+    maxRetries: 1,
+    httpRequest: async (url, opts = {}) => {
+      const parsed = new URL(url);
+      const method = (opts.method || 'GET').toUpperCase();
+      const parts = parsed.pathname.split('/');
+      const isAuthGet = parts[4] === 'authenticated' || parts[4] === 'public';
+      const objPath = decodeURIComponent(parts.slice(isAuthGet ? 6 : 5).join('/'));
+      if (method === 'GET' && objPath.startsWith('history/') && objPath !== sepPub.historicalDataset.datasetPath) {
+        return { ok: true, statusCode: 200, headers: {}, body: Buffer.from('{"corrupted":true}', 'utf8') };
+      }
+      if (method === 'GET') {
+        return histStore.objects.has(objPath)
+          ? { ok: true, statusCode: 200, headers: {}, body: Buffer.from(histStore.objects.get(objPath), 'utf8') }
+          : { ok: false, statusCode: 404, headers: {}, body: Buffer.from('Not Found') };
+      }
+      if (method === 'POST') {
+        histStore.objects.set(objPath, Buffer.from(opts.body || '').toString('utf8'));
+        return { ok: true, statusCode: 200, headers: {}, body: Buffer.from('{}') };
+      }
+      if (method === 'DELETE') {
+        histStore.objects.delete(objPath);
+        return { ok: true, statusCode: 200, headers: {}, body: Buffer.from('{}') };
+      }
+      return { ok: false, statusCode: 400, headers: {}, body: Buffer.alloc(0) };
+    }
+  });
+  const nextDate = tradingDates[90];
+  const badHistPub = await badHistClient.publishDatasetToStorage(
+    { tradingDate: nextDate, refreshedAtUtc: `${nextDate}T12:00:00.000Z`, stockCount: 1 },
+    [{
+      ...stocksWith90[0],
+      trading_date: nextDate,
+      historical_prices: [...sess90.slice(1).map((dt, idx) => ({ date: dt, close: 1301 + idx })), { date: nextDate, close: 1500 }]
+    }],
+    { skipRetention: true }
+  );
+  assert.strictEqual(badHistPub.ok, false);
+  assert.strictEqual(badHistPub.phase, 'verify_history_checksum');
+  const manifestStillSafe = await histStore.client.fetchLatestManifest();
+  assert.strictEqual(manifestStillSafe.manifest.tradingDate, sess90[89], 'Corrupted history read-back must leave latest.json untouched');
+
+  // Seeded history retention prunes > DEFAULT_RETAIN_HISTORY_SESSIONS while keeping datasets & protected versions
+  const histRetSeed = { ...seed };
+  for (const dt of tradingDates.slice(-14)) {
+    histRetSeed[`history/${dt}/historical-prices-${dt}-h1.json`] = '{"schemaVersion":2}';
+  }
+  const latestRet = JSON.parse(histRetSeed['latest.json']);
+  latestRet.historicalDataset = {
+    versionId: `${latestDate}-h1`,
+    tradingDate: latestDate,
+    datasetPath: `history/${latestDate}/historical-prices-${latestDate}-h1.json`
+  };
+  latestRet.previousVersion.historicalDataset = {
+    versionId: `${prevDate}-h1`,
+    tradingDate: prevDate,
+    datasetPath: `history/${prevDate}/historical-prices-${prevDate}-h1.json`
+  };
+  histRetSeed['latest.json'] = JSON.stringify(latestRet);
+  const histRetMock = createMockSupabase(histRetSeed);
+  const histPruneRes = await histRetMock.client.pruneOldDatasets({ dryRun: false });
+  assert.strictEqual(histPruneRes.ok, true);
+  assert.strictEqual(histPruneRes.retainSessions, 90);
+  assert.strictEqual(histPruneRes.retainHistorySessions, DEFAULT_RETAIN_HISTORY_SESSIONS);
+  assert.strictEqual(histPruneRes.deletedDatasetCount, 4);
+  assert.strictEqual(histPruneRes.deletedHistoryCount, 14 - DEFAULT_RETAIN_HISTORY_SESSIONS);
+  assert.ok(histRetMock.objects.has(latestRet.historicalDataset.datasetPath));
+  assert.ok(histRetMock.objects.has(latestRet.previousVersion.historicalDataset.datasetPath));
 }
 
 module.exports = { name: 'storage-retention.test.js', run };

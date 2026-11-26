@@ -57,7 +57,10 @@ function assert(condition, testName, details = '') {
 }
 
 const activeDate = stats.tradingDate;
-const expectedSessions = getRecentTradingSessions(activeDate, 6);
+const expectedActiveSessions = getRecentTradingSessions(activeDate, 6);
+const expectedSessions = Array.isArray(stats.historicalSessions?.sessions) && stats.historicalSessions.sessions.length > 0
+  ? stats.historicalSessions.sessions
+  : expectedActiveSessions;
 
 // -----------------------------------------------------------------------------
 // Test Group 1: Trading Date & Session Consistency
@@ -214,18 +217,31 @@ assert(calcAdv + calcDec + calcUnc + calcUnpriced === stocks.length, `Advances +
 // Test Group 8: Historical Date-to-Price Mapping & Chronological Ordering
 // -----------------------------------------------------------------------------
 console.log('\n[Test Group 8: Historical Date-to-Price Mapping & Chronological Ordering]');
-assert(stats.historicalSessions && stats.historicalSessions.sessionCount === 6, 'Historical sessions count is exactly 6');
-assert(JSON.stringify(stats.historicalSessions?.sessions) === JSON.stringify(expectedSessions), 'Historical sessions match expected 6 trading dates', JSON.stringify(stats.historicalSessions?.sessions));
+assert(
+  stats.historicalSessions &&
+  stats.historicalSessions.sessionCount >= 6 &&
+  stats.historicalSessions.sessionCount <= 90,
+  'Historical sessions count is within valid bounds (6 to 90 sessions)',
+  `(${stats.historicalSessions?.sessionCount})`
+);
+assert(
+  stats.historicalSessions?.sessionCount === expectedSessions.length &&
+  expectedSessions[expectedSessions.length - 1] === activeDate,
+  'Historical sessions count matches sessions array and ends on active tradingDate',
+  `(${expectedSessions[0]} .. ${expectedSessions[expectedSessions.length - 1]})`
+);
 
 let stocksWithHistoricalPrices = 0;
 let chronologicallyOrderedCount = 0;
 let stocksWithValidDates = 0;
+let stocksWithinMaxHistory = 0;
 
 stocks.forEach(s => {
   if (s.historical_prices && Array.isArray(s.historical_prices) && s.historical_prices.length >= 2) {
     stocksWithHistoricalPrices++;
+    if (s.historical_prices.length <= 90) stocksWithinMaxHistory++;
     const allHaveDateAndClose = s.historical_prices.every(p =>
-      typeof p.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.date) && typeof p.close === 'number' && !isNaN(p.close) && p.close > 0
+      typeof p.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.date) && p.date <= activeDate && typeof p.close === 'number' && !isNaN(p.close) && p.close > 0
     );
     if (allHaveDateAndClose) stocksWithValidDates++;
 
@@ -241,21 +257,48 @@ stocks.forEach(s => {
 });
 
 assert(stocksWithHistoricalPrices > 4000, 'Over 4,000 stocks have date-to-price historical mappings', `(${stocksWithHistoricalPrices} stocks)`);
+assert(stocksWithinMaxHistory === stocksWithHistoricalPrices, '100% of historical_prices arrays do not exceed 90 sessions');
 assert(stocksWithValidDates === stocksWithHistoricalPrices, 'All historical price objects contain valid date strings and positive numeric closes');
 assert(chronologicallyOrderedCount === stocksWithHistoricalPrices, '100% of historical price arrays are strictly chronologically ordered');
 
 // Cross-verify RELIANCE closes directly against raw BhavCopy CSVs
 const reliance = stocks.find(s => s.symbol === 'RELIANCE' && s.isin === 'INE002A01018');
-const rawRelFirst = parseCsv(fs.readFileSync(path.join(downloadsDir, getNseFilename(expectedSessions[0])), 'utf8')).find(r => r.ISIN === 'INE002A01018');
+const rel1wFirstFile = path.join(downloadsDir, getNseFilename(expectedActiveSessions[0]));
+const rawRel1wFirst = fs.existsSync(rel1wFirstFile)
+  ? parseCsv(fs.readFileSync(rel1wFirstFile, 'utf8')).find(r => r.ISIN === 'INE002A01018')
+  : null;
 const rawRelLast = parseCsv(fs.readFileSync(nseTodayFile, 'utf8')).find(r => r.ISIN === 'INE002A01018');
-const expectedFirstClose = parseFloat(rawRelFirst?.ClsPric || rawRelFirst?.LastPric);
+const expected1wFirstClose = parseFloat(rawRel1wFirst?.ClsPric || rawRel1wFirst?.LastPric);
 const expectedLastClose = parseFloat(rawRelLast?.ClsPric || rawRelLast?.LastPric);
-const expected1w = parseFloat((((expectedLastClose - expectedFirstClose) / expectedFirstClose) * 100).toFixed(2));
+const expected1w = Number.isFinite(expected1wFirstClose) && expected1wFirstClose > 0
+  ? parseFloat((((expectedLastClose - expected1wFirstClose) / expected1wFirstClose) * 100).toFixed(2))
+  : null;
 
-assert(reliance && reliance.historical_prices && reliance.historical_prices.length === 6, 'RELIANCE has 6 verified daily historical closes');
-assert(reliance && reliance.historical_prices[0].date === expectedSessions[0] && reliance.historical_prices[0].close === expectedFirstClose, `RELIANCE Session 1 (${expectedSessions[0]}) close matches raw CSV (${expectedFirstClose})`);
-assert(reliance && reliance.historical_prices[5].date === activeDate && reliance.historical_prices[5].close === expectedLastClose, `RELIANCE Session 6 (${activeDate}) close matches raw CSV (${expectedLastClose})`);
-assert(reliance && reliance.return_1w === expected1w, `RELIANCE 1W return matches raw calculation (${expected1w}%)`, `(${reliance?.return_1w}%)`);
+assert(reliance && reliance.historical_prices && reliance.historical_prices.length === expectedSessions.length, `RELIANCE has ${expectedSessions.length} verified daily historical closes`);
+assert(reliance && reliance.historical_prices[0].date === expectedSessions[0], `RELIANCE oldest session (${expectedSessions[0]}) date matches dataset window`);
+const relHistLast = reliance?.historical_prices?.[reliance.historical_prices.length - 1];
+assert(relHistLast && relHistLast.date === activeDate && relHistLast.close === expectedLastClose, `RELIANCE latest session (${activeDate}) close matches raw CSV (${expectedLastClose})`);
+if (expected1w != null) {
+  assert(reliance && reliance.return_1w === expected1w, `RELIANCE 1W return matches raw calculation (${expected1w}%)`, `(${reliance?.return_1w}%)`);
+} else {
+  assert(reliance && typeof reliance.return_1w === 'number', 'RELIANCE 1W return is a verified number');
+}
+const earliestHistCsv = path.join(downloadsDir, getNseFilename(expectedSessions[0]));
+if (fs.existsSync(earliestHistCsv)) {
+  const rawRelEarliest = parseCsv(fs.readFileSync(earliestHistCsv, 'utf8')).find(r => r.ISIN === 'INE002A01018');
+  const expectedEarliestClose = parseFloat(rawRelEarliest?.ClsPric || rawRelEarliest?.LastPric);
+  assert(reliance && reliance.historical_prices[0].close === expectedEarliestClose, `RELIANCE earliest close (${expectedSessions[0]}) matches raw CSV (${expectedEarliestClose})`);
+}
+if (expectedSessions.length >= 22) {
+  assert(reliance && typeof reliance.return_1m === 'number', 'RELIANCE 1M return populated when >=22 verified sessions exist', `(${reliance?.return_1m}%)`);
+} else {
+  assert(reliance && reliance.return_1m === null, 'RELIANCE 1M return stays null when <22 verified sessions exist');
+}
+if (expectedSessions.length >= 66) {
+  assert(reliance && typeof reliance.return_3m === 'number', 'RELIANCE 3M return populated when >=66 verified sessions exist', `(${reliance?.return_3m}%)`);
+} else {
+  assert(reliance && reliance.return_3m === null, 'RELIANCE 3M return stays null when <66 verified sessions exist');
+}
 
 // -----------------------------------------------------------------------------
 // Test Group 9: Timestamp Timezone Correctness

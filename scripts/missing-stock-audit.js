@@ -38,7 +38,7 @@ async function runMissingStockAudit() {
   }
 
   const TARGET_DATE = MARKET_STATS.tradingDate;
-  const HISTORICAL_DATES = MARKET_STATS.historicalSessions?.sessions || getRecentTradingSessions(TARGET_DATE, 6);
+  const HISTORICAL_DATES = MARKET_STATS.historicalSessions?.activeWindowSessions || getRecentTradingSessions(TARGET_DATE, 6);
 
   console.log('================================================================');
   console.log(' MACHLI BAZZAR — MISSING STOCK AUDIT & ENTITY RESOLUTION SUITE');

@@ -236,9 +236,9 @@ async function runTests() {
   const expectedSessions = MARKET_STATS.historicalSessions?.sessions || [];
   assert(reliance != null, 'RELIANCE found in dataset');
   assert(reliance.historical_prices != null && Array.isArray(reliance.historical_prices), 'RELIANCE historical prices array is preserved');
-  assert(reliance.historical_prices.length === 6, 'RELIANCE historical prices covers exactly 6 sessions', `Length: ${reliance.historical_prices.length}`);
+  assert(reliance.historical_prices.length >= 6 && reliance.historical_prices.length <= 90 && reliance.historical_prices.length === expectedSessions.length, `RELIANCE historical prices covers ${expectedSessions.length} sessions (<= 90)`, `Length: ${reliance.historical_prices.length}`);
   assert(reliance.historical_prices[0].date === expectedSessions[0], `Session 1 date matches ${expectedSessions[0]}`);
-  assert(reliance.historical_prices[5].date === MARKET_STATS.tradingDate, `Session 6 date matches ${MARKET_STATS.tradingDate}`);
+  assert(reliance.historical_prices[reliance.historical_prices.length - 1].date === MARKET_STATS.tradingDate, `Latest historical session matches ${MARKET_STATS.tradingDate}`);
 
   // ---------------------------------------------------------------------------
   // TEST GROUP 7: INCOMPLETE DOWNLOAD / SAFETY ROLLBACK

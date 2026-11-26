@@ -1,5 +1,8 @@
 'use strict';
 
+const { MAX_HISTORICAL_SESSIONS } = require('../config/constants');
+const { validateCompactHistoryPayload } = require('../storage/historical-store');
+
 /**
  * Strict Financial & Structural Integrity Validator
  *
@@ -9,7 +12,7 @@
  * - Valid ISIN format and zero duplicate ISINs
  * - Positive finite OHLC/close/prev_close prices, high >= low bounds
  * - Non-negative integer volume and valid market cap (>0 when present)
- * - Strictly chronological historical_prices arrays
+ * - Strictly chronological historical_prices arrays (<= MAX_HISTORICAL_SESSIONS) and valid return metrics
  * - Exact market breadth & exchange coverage arithmetic identities
  */
 
@@ -17,6 +20,7 @@ function validateMergedDataset(mergedStocks, marketStats, options = {}) {
   const errors = [];
   const warnings = [];
   const targetDate = marketStats?.tradingDate;
+  const maxHistoricalSessions = options.maxHistoricalSessions ?? MAX_HISTORICAL_SESSIONS;
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(targetDate || ''))) {
     errors.push(`Invalid marketStats.tradingDate: ${targetDate}`);
@@ -26,6 +30,15 @@ function validateMergedDataset(mergedStocks, marketStats, options = {}) {
   }
   if (marketStats?.bseSourceDate !== targetDate) {
     errors.push(`BSE source date mismatch: expected ${targetDate}, got ${marketStats?.bseSourceDate}`);
+  }
+  if (marketStats?.historicalSessions) {
+    const hs = marketStats.historicalSessions;
+    if (
+      (hs.sessionCount != null && (!Number.isInteger(hs.sessionCount) || hs.sessionCount < 0 || hs.sessionCount > maxHistoricalSessions)) ||
+      (Array.isArray(hs.sessions) && hs.sessions.length > maxHistoricalSessions)
+    ) {
+      errors.push(`marketStats.historicalSessions exceeds maximum length (${maxHistoricalSessions})`);
+    }
   }
 
   const minUniverseSize = options.minUniverseSize ?? 1000;
@@ -52,6 +65,7 @@ function validateMergedDataset(mergedStocks, marketStats, options = {}) {
   let invalidMcapCount = 0;
   let dateMismatchCount = 0;
   let invalidHistoryCount = 0;
+  let invalidReturnCount = 0;
 
   for (const s of mergedStocks || []) {
     if (!s.isin || typeof s.isin !== 'string' || !/^IN[E9][A-Z0-9]{9}$/.test(s.isin)) {
@@ -80,13 +94,23 @@ function validateMergedDataset(mergedStocks, marketStats, options = {}) {
       invalidMcapCount++;
     }
 
+    for (const retField of ['return_1w', 'return_1m', 'return_3m']) {
+      if (s[retField] != null && !Number.isFinite(s[retField])) {
+        invalidReturnCount++;
+      }
+    }
+
     if (s.historical_prices != null) {
-      if (!Array.isArray(s.historical_prices)) {
+      if (!Array.isArray(s.historical_prices) || s.historical_prices.length > maxHistoricalSessions) {
         invalidHistoryCount++;
       } else {
         for (let i = 0; i < s.historical_prices.length; i++) {
           const h = s.historical_prices[i];
           if (!h || !/^\d{4}-\d{2}-\d{2}$/.test(h.date) || !Number.isFinite(h.close) || h.close <= 0) {
+            invalidHistoryCount++;
+            break;
+          }
+          if (targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate) && h.date > targetDate) {
             invalidHistoryCount++;
             break;
           }
@@ -118,7 +142,8 @@ function validateMergedDataset(mergedStocks, marketStats, options = {}) {
   if (invalidSpreadCount > 0) errors.push(`High < Low price spread anomalies: ${invalidSpreadCount}`);
   if (invalidVolumeCount > 0) errors.push(`Invalid negative/non-integer volume records: ${invalidVolumeCount}`);
   if (invalidMcapCount > 0) errors.push(`Invalid zero/negative/NaN market_cap_cr records: ${invalidMcapCount}`);
-  if (invalidHistoryCount > 0) errors.push(`Corrupted or non-chronological historical_prices arrays: ${invalidHistoryCount}`);
+  if (invalidReturnCount > 0) errors.push(`Invalid non-finite return metric values: ${invalidReturnCount}`);
+  if (invalidHistoryCount > 0) errors.push(`Corrupted, oversized, or non-chronological historical_prices arrays: ${invalidHistoryCount}`);
 
   const duplicateExchangeKeys = [];
   for (const [k, isins] of symbolsByExchange.entries()) {
@@ -143,6 +168,16 @@ function validateMergedDataset(mergedStocks, marketStats, options = {}) {
       errors.push(
         `Exchange coverage identity mismatch: ${dualListed}+${nseOnly}+${bseOnly} !== ${mergedStocks.length}`
       );
+    }
+  }
+
+  if (options.historyDataset) {
+    const histValidation = validateCompactHistoryPayload(options.historyDataset, {
+      tradingDate: targetDate,
+      maxSessions: maxHistoricalSessions
+    });
+    if (!histValidation.ok) {
+      errors.push(...histValidation.errors);
     }
   }
 

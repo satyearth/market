@@ -81,42 +81,103 @@ img {
   letter-spacing: 0.03em;
 }
 
-/* Pulse metrics card typography */
+#eod-sync-dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* Pulse metrics card typography & spacing */
+.pulse-metrics > div {
+  gap: 5px;
+}
+
+@media (min-width: 640px) {
+  .pulse-metrics > div {
+    gap: 7px;
+  }
+}
+
 #card-total-mcap,
 #card-vix-val,
 #card-near52-pct {
-  font-size: clamp(19px, 5vw, 21px);
+  font-size: clamp(17px, 4.5vw, 20px);
   overflow-wrap: anywhere;
 }
 
+#card-breadth-sub {
+  font-size: 10.5px;
+}
+
+@media (min-width: 640px) {
+  #card-breadth-sub {
+    font-size: 11px;
+  }
+}
+
 /* -------------------------------------------------------------------------
-   4. Filter Buttons Bar (Swipeable on Mobile, Responsive Wrap)
+   4. Filter Buttons Bar & Desktop Hover Safety
    ------------------------------------------------------------------------- */
 .filter-buttons-scroll-container {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-  margin-inline: -2px;
-  padding-inline: 2px;
 }
 
-.filter-buttons-scroll-container::-webkit-scrollbar {
-  display: none;
+@media (max-width: 639px) {
+  #sector-filter-group:not(.hidden) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    padding-top: 2px;
+  }
 }
 
-.filter-pill-btn {
-  min-height: var(--touch-target-min);
-  min-width: var(--touch-target-min);
+@media (min-width: 640px) {
+  #sector-filter-group {
+    display: contents !important;
+  }
+}
+
+.filter-pill-btn,
+#mobile-sector-toggle {
+  min-height: 40px;
+  min-width: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding-inline: 14px;
+  padding-inline: 12px;
   touch-action: manipulation;
   user-select: none;
+}
+
+/* Prevent hover clipping on desktop table right-hand action buttons */
+@media (min-width: 1024px) {
+  #stocks-table-card {
+    overflow-x: clip;
+  }
+
+  .table-scroll-container {
+    overflow-x: visible;
+  }
+
+  .stocks-table th.action-col-th,
+  .stocks-table tbody td.row-actions-cell {
+    width: 112px;
+    min-width: 112px;
+    padding-left: 6px !important;
+    padding-right: 12px !important;
+    white-space: nowrap;
+  }
+
+  .stocks-table .watchlist-toggle-btn,
+  .stocks-table .compare-toggle-btn,
+  .stocks-table .stock-details-link {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+  }
 }
 
 /* -------------------------------------------------------------------------
@@ -132,8 +193,31 @@ img {
   touch-action: manipulation;
 }
 
+@media (min-width: 640px) {
+  .table-toolbar > .relative {
+    width: 240px;
+    flex: 0 0 auto;
+  }
+
+  [data-stocks-search="true"] {
+    width: 240px;
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 768px) {
+  .table-toolbar > .relative {
+    width: 300px;
+  }
+
+  [data-stocks-search="true"] {
+    width: 300px;
+  }
+}
+
 .table-toolbar-actions button {
   min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
   touch-action: manipulation;
 }
 
@@ -150,7 +234,7 @@ img {
    ------------------------------------------------------------------------- */
 @media (max-width: 1023px) {
   .site-header-bar a span {
-    font-size: clamp(20px, 6vw, 26px) !important;
+    font-size: clamp(20px, 6vw, 25px) !important;
   }
 
   .section-chip {
@@ -162,47 +246,41 @@ img {
   }
 
   #card-breadth-sub {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .table-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
   }
 
   .table-toolbar > .relative {
-    width: 100%;
+    flex: 1 1 auto;
+    width: auto !important;
+    min-width: 0;
   }
 
   [data-stocks-search="true"] {
     width: 100% !important;
+    font-size: 14px;
   }
 
   .table-toolbar-actions {
     margin-left: 0 !important;
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 8px;
+    width: auto;
+    flex-shrink: 0;
+    gap: 6px;
   }
 
-  .table-toolbar-actions > div {
-    min-height: var(--touch-target-min);
-    display: inline-flex;
-    align-items: center;
+  #export-csv-btn {
+    padding-inline: 10px !important;
   }
 
-  .table-toolbar-actions button {
-    min-height: var(--touch-target-min) !important;
-    min-width: var(--touch-target-min) !important;
-    padding-inline: 12px;
-  }
-
-  /* Table structure on mobile: convert table rows into mobile cards */
+  /* Table structure on mobile: convert rows into crisp cards */
   .table-scroll-container {
     overflow-x: visible !important;
     padding-inline: 0 !important;
@@ -220,15 +298,18 @@ img {
     top: var(--header-height);
     z-index: 20;
     background: var(--ink-card, #211e1a);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    border-bottom: 1px solid var(--ink-rule, #3a3730);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   }
 
   .stocks-table thead tr {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
     width: 100%;
-    padding: 8px 12px;
+    padding: 4px 10px;
   }
 
   .stocks-table thead th:not(.hidden) {
@@ -238,23 +319,24 @@ img {
     align-items: center;
     justify-content: center;
     width: auto !important;
-    min-height: var(--touch-target-min);
-    min-width: var(--touch-target-min);
-    border: 1px solid var(--ink-rule, #3a3730) !important;
-    border-radius: 9999px;
-    background: var(--ink-well, #1c1a17) !important;
+    min-height: 40px;
+    min-width: 40px;
+    border: 0 !important;
+    border-radius: 8px;
+    background: transparent !important;
     box-shadow: none !important;
-    padding: 6px 14px !important;
+    padding: 4px 8px !important;
     text-align: center;
     touch-action: manipulation;
     user-select: none;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
   }
 
   .stocks-table thead th:not(.hidden):active {
-    background: var(--ink-card) !important;
-    border-color: var(--ink-sienna) !important;
+    background: var(--ink-well) !important;
+    color: var(--ink-sienna) !important;
   }
 
   .stocks-table thead th.hidden,
@@ -267,20 +349,20 @@ img {
     width: 100%;
   }
 
-  /* Row Card in Mobile/Tablet View */
+  /* Row Card in Mobile/Tablet View: Clean 2-column grid (no wasted rank gutter) */
   .stocks-table tbody tr {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "rank name price"
-      "rank name change"
-      "rank cap action";
-    column-gap: 8px;
-    row-gap: 3px;
+      "name price"
+      "name change"
+      "cap action";
+    column-gap: 10px;
+    row-gap: 2px;
     align-items: center;
     width: 100%;
     min-height: 76px;
-    padding: 12px 14px;
+    padding: 11px 14px;
     border-bottom: 1px solid var(--ink-rule);
     touch-action: manipulation;
     transition: background-color 150ms ease;
@@ -303,12 +385,9 @@ img {
     display: none !important;
   }
 
-  /* Rank */
+  /* Rank column collapses on mobile (rank shows inline next to symbol) */
   .stocks-table tbody td:nth-child(1) {
-    grid-area: rank;
-    text-align: center;
-    font-size: 11.5px;
-    color: var(--ink-muted);
+    display: none !important;
   }
 
   /* Name & Logo */
@@ -337,35 +416,36 @@ img {
     grid-area: change;
     text-align: right;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: 11.5px;
   }
 
   /* Market Cap */
   .stocks-table tbody td:nth-child(6) {
     grid-area: cap;
     color: var(--ink-muted, #8a8478);
-    font-size: 11.5px;
+    font-size: 11px;
     line-height: 1.4;
+    padding-top: 2px !important;
   }
 
   .stocks-table tbody td:nth-child(6)::before {
     content: "MCap ";
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+    opacity: 0.85;
   }
 
-  /* Action button (arrow link) */
+  /* Action buttons on mobile card: clean Watchlist + Compare buttons (row tap opens details) */
   .stocks-table tbody td:nth-child(12) {
     grid-area: action;
     justify-self: end;
-    min-width: var(--touch-target-min);
-    min-height: var(--touch-target-min);
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    padding-top: 2px !important;
   }
 
   .stocks-table tbody td:nth-child(12) > span {
@@ -373,23 +453,24 @@ img {
     transform: none !important;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .stocks-table tbody td:nth-child(12) .watchlist-toggle-btn,
+  .stocks-table tbody td:nth-child(12) .compare-toggle-btn {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    border: 1px solid var(--ink-rule);
+    background: var(--ink-well);
+    font-size: 14px;
+    touch-action: manipulation;
   }
 
   .stocks-table tbody td:nth-child(12) .stock-details-link {
-    width: var(--touch-target-min) !important;
-    height: var(--touch-target-min) !important;
-    min-width: var(--touch-target-min) !important;
-    min-height: var(--touch-target-min) !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    border-radius: 9999px !important;
-    background: var(--ink-well) !important;
-    border: 1px solid var(--ink-rule) !important;
-    color: var(--ink-sienna) !important;
-    font-size: 14px !important;
-    touch-action: manipulation;
+    display: none !important;
   }
 
   .stocks-table tbody tr:has(td[colspan]) {
@@ -399,6 +480,7 @@ img {
   }
 
   .stocks-table tbody tr:has(td[colspan]) td {
+    display: block !important;
     width: 100% !important;
     padding: 16px !important;
   }
@@ -413,8 +495,8 @@ img {
   .table-status-bar {
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: 6px;
+    padding: 10px 14px;
   }
 
   #showing-status {
@@ -435,22 +517,41 @@ img {
    ------------------------------------------------------------------------- */
 @media (max-width: 639px) {
   .site-wide-shell {
-    width: calc(100% - clamp(1rem, 3.5vw, 1.5rem));
+    width: calc(100% - clamp(0.875rem, 3.5vw, 1.5rem));
   }
 
+  /* Compact 2x2 + 1 Market Pulse Grid instead of 5-row vertical stack */
   .pulse-metrics {
-    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
-  .pulse-metrics > div {
+  .pulse-metrics > div:nth-child(1),
+  .pulse-metrics > div:nth-child(3) {
+    border-right-width: 1px !important;
+  }
+
+  .pulse-metrics > div:nth-child(2),
+  .pulse-metrics > div:nth-child(4) {
+    border-right-width: 0 !important;
+  }
+
+  .pulse-metrics > div:nth-child(1),
+  .pulse-metrics > div:nth-child(2),
+  .pulse-metrics > div:nth-child(3),
+  .pulse-metrics > div:nth-child(4) {
+    border-bottom-width: 1px !important;
+  }
+
+  .pulse-metrics > div:nth-child(5) {
     grid-column: 1 / -1 !important;
     border-right-width: 0 !important;
-    border-bottom-width: 1px !important;
-    padding: 14px 16px !important;
+    border-bottom-width: 0 !important;
   }
 
-  .pulse-metrics > div:last-child {
-    border-bottom-width: 0 !important;
+  #card-total-mcap,
+  #card-vix-val,
+  #card-near52-pct {
+    font-size: 17px !important;
   }
 
   /* Cap ranks segment labels on narrow mobile */
@@ -459,7 +560,7 @@ img {
   #card-seg-cnt-sml,
   #card-seg-cnt-mic,
   #card-seg-cnt-sme {
-    font-size: clamp(8.5px, 2.5vw, 9.5px);
+    font-size: clamp(8.5px, 2.4vw, 9.5px);
   }
 }
 
@@ -490,11 +591,6 @@ img {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-  }
-
-  .table-toolbar > .relative,
-  [data-stocks-search="true"] {
-    width: 220px !important;
   }
 
   .table-toolbar-actions {

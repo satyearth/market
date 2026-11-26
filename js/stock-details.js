@@ -371,6 +371,27 @@
     });
   }
 
+  async function fetchLiveStockHistory(isin) {
+    if (window.location.protocol === 'file:' || !window.location.host) return null;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`/api/market/history?isin=${encodeURIComponent(isin)}`, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!data?.ok || !Array.isArray(data.historical_prices)) return null;
+      return data;
+    } catch (_) {
+      return null;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
   async function init() {
     const isin = new URLSearchParams(window.location.search).get('isin');
     if (!isin || !/^[A-Z0-9]{12}$/i.test(isin.trim())) {
@@ -381,8 +402,21 @@
     const normalizedIsin = isin.trim().toUpperCase();
     const live = await fetchLiveStockByIsin(normalizedIsin);
     if (live?.stock) {
+      let resolvedStock = live.stock;
+      if (!Array.isArray(resolvedStock.historical_prices) || resolvedStock.historical_prices.length < 2) {
+        const histData = await fetchLiveStockHistory(normalizedIsin);
+        if (histData && Array.isArray(histData.historical_prices) && histData.historical_prices.length > 0) {
+          resolvedStock = {
+            ...resolvedStock,
+            historical_prices: histData.historical_prices,
+            return_1w: resolvedStock.return_1w ?? histData.return_1w ?? null,
+            return_1m: resolvedStock.return_1m ?? histData.return_1m ?? null,
+            return_3m: resolvedStock.return_3m ?? histData.return_3m ?? null
+          };
+        }
+      }
       try {
-        renderStock(live.stock, live.stats);
+        renderStock(resolvedStock, live.stats);
         return;
       } catch (_) {}
     }

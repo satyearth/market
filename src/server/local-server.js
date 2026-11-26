@@ -17,7 +17,7 @@ const { spawn } = require('child_process');
 const { ROOT_DIR, TARGET_DATA_PATH } = require('../config/constants');
 const { checkSessionFreshness, getLatestExpectedTradingDate } = require('../calendar/exchange-calendar');
 const { inspectStoredSessions } = require('../ingestion/bhavcopy-downloader');
-const { queryStocksAsync, loadMarketStatsAsync } = require('../query/stock-query-service');
+const { queryStocksAsync, loadMarketStatsAsync, queryStockHistoryAsync } = require('../query/stock-query-service');
 const storage = require('../storage/supabase-storage');
 
 const PORT = process.env.PORT || 8080;
@@ -218,7 +218,7 @@ async function handleRequest(req, res) {
     if (req.method !== 'GET') {
       return sendJson(res, 405, { ok: false, error: 'Method not allowed.' }, { Allow: 'GET' });
     }
-    const { stats, storageSource, storageVersionId } = await loadMarketStatsAsync();
+    const { stats, manifest, storageSource, storageVersionId } = await loadMarketStatsAsync();
     const currentTradingDate = stats?.tradingDate || null;
     const freshness = checkSessionFreshness(currentTradingDate);
     const stored = inspectStoredSessions();
@@ -237,6 +237,7 @@ async function handleRequest(req, res) {
       pipelineVersion: stats?.pipelineVersion || null,
       storageSource,
       storageVersionId,
+      historicalDataset: manifest?.historicalDataset || stats?.historicalDataset || null,
       isUpToDate: freshness.isFresh,
       needsSync: freshness.needsSync,
       freshnessStatus: freshness.freshnessStatus,
@@ -291,7 +292,7 @@ async function handleRequest(req, res) {
     if (req.method !== 'GET') {
       return sendJson(res, 405, { ok: false, error: 'Method not allowed.' }, { Allow: 'GET' });
     }
-    const { stats, storageSource, storageVersionId } = await loadMarketStatsAsync();
+    const { stats, manifest, storageSource, storageVersionId } = await loadMarketStatsAsync();
     if (!stats) {
       return sendJson(res, 404, { ok: false, error: 'Dataset not found' });
     }
@@ -301,8 +302,24 @@ async function handleRequest(req, res) {
       freshness: checkSessionFreshness(stats.tradingDate || null),
       storageSource,
       storageVersionId,
+      historicalDataset: manifest?.historicalDataset || stats?.historicalDataset || null,
       isSyncing
     });
+  }
+
+  if (pathname === '/api/market/history') {
+    if (req.method !== 'GET') {
+      return sendJson(res, 405, { ok: false, error: 'Method not allowed.' }, { Allow: 'GET' });
+    }
+    try {
+      const payload = await queryStockHistoryAsync(Object.fromEntries(parsedUrl.searchParams.entries()));
+      if (!payload.ok) {
+        return sendJson(res, payload.statusCode || 400, { ok: false, error: payload.error });
+      }
+      return sendJson(res, 200, payload);
+    } catch (err) {
+      return sendJson(res, 500, { ok: false, error: 'Unable to load historical price data.' });
+    }
   }
 
   if (pathname.startsWith('/api/')) {

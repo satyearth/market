@@ -119,9 +119,13 @@ async function loadMarketCapSources(options = {}) {
 
   const sources = {
     benchmarkBySymbol: new Map(),
+    benchmarkMetaByIsin: new Map(),
+    benchmarkMetaBySymbol: new Map(),
     bseSecByIsin: new Map(),
     catalogByIsin: new Map(),
     catalogByTicker: new Map(),
+    catalogMetaByIsin: new Map(),
+    catalogMetaByTicker: new Map(),
     screenerBySlug: new Map()
   };
 
@@ -132,6 +136,12 @@ async function loadMarketCapSources(options = {}) {
   );
   if (Array.isArray(bmRes.data)) {
     for (const s of bmRes.data) {
+      if (s.isin) {
+        sources.benchmarkMetaByIsin.set(String(s.isin).trim().toUpperCase(), s);
+      }
+      if (s.symbol) {
+        sources.benchmarkMetaBySymbol.set(String(s.symbol).trim().toUpperCase(), s);
+      }
       if (s.symbol && s.market_cap_cr != null && s.market_cap_cr > 0) {
         sources.benchmarkBySymbol.set(String(s.symbol).toUpperCase(), s);
       }
@@ -145,14 +155,16 @@ async function loadMarketCapSources(options = {}) {
   );
   if (Array.isArray(bseRes.data)) {
     for (const item of bseRes.data) {
-      if (item.ISIN_NUMBER && item.Mktcap) {
-        const cap = parseFloat(item.Mktcap);
-        if (!Number.isNaN(cap) && cap > 0) {
-          sources.bseSecByIsin.set(String(item.ISIN_NUMBER).toUpperCase(), {
-            mktcap: cap,
-            industry: item.INDUSTRY || null
-          });
-        }
+      if (!item.ISIN_NUMBER) continue;
+      const isinKey = String(item.ISIN_NUMBER).trim().toUpperCase();
+      const cap = item.Mktcap != null ? parseFloat(item.Mktcap) : NaN;
+      const hasValidCap = !Number.isNaN(cap) && cap > 0;
+      if (hasValidCap || item.INDUSTRY || item.SECTOR) {
+        sources.bseSecByIsin.set(isinKey, {
+          mktcap: hasValidCap ? cap : null,
+          industry: item.INDUSTRY || null,
+          sector: item.SECTOR || null
+        });
       }
     }
   }
@@ -163,13 +175,20 @@ async function loadMarketCapSources(options = {}) {
   });
   if (Array.isArray(catalogResult.data)) {
     for (const c of catalogResult.data) {
+      const isinKey = c.isin ? String(c.isin).trim().toUpperCase() : null;
+      const tickerKey = c.ticker ? String(c.ticker).trim().toUpperCase() : null;
+      const idKey = c.id && String(c.id).includes(':') ? String(c.id).trim().toUpperCase() : null;
+      if (c.sector || c.industry) {
+        const meta = { isin: isinKey, ticker: tickerKey, company: c.company || null, sector: c.sector || null, industry: c.industry || null };
+        if (isinKey) sources.catalogMetaByIsin.set(isinKey, meta);
+        if (tickerKey) sources.catalogMetaByTicker.set(tickerKey, meta);
+        if (idKey) sources.catalogMetaByTicker.set(idKey, meta);
+      }
       if (c.marketCap && c.marketCap > 0) {
         const capCr = parseFloat((c.marketCap / 1e7).toFixed(2));
-        if (c.isin) sources.catalogByIsin.set(String(c.isin).toUpperCase(), { ...c, capCr });
-        if (c.ticker) sources.catalogByTicker.set(String(c.ticker).toUpperCase(), { ...c, capCr });
-        if (c.id && String(c.id).includes(':')) {
-          sources.catalogByTicker.set(String(c.id).toUpperCase(), { ...c, capCr });
-        }
+        if (isinKey) sources.catalogByIsin.set(isinKey, { ...c, capCr });
+        if (tickerKey) sources.catalogByTicker.set(tickerKey, { ...c, capCr });
+        if (idKey) sources.catalogByTicker.set(idKey, { ...c, capCr });
       }
     }
   }

@@ -10,7 +10,7 @@
  *      - Atomic swap of pointer manifest at latest.json (preserving previousVersion)
  * 2. Distributed lockfile lease (locks/refresh.lock.json) preventing concurrent updates.
  * 3. Downgrade guard refusing to overwrite newer trading dates with older dates.
- * 4. Safe 30-trading-session retention (pruneOldDatasets) protecting latest, previousVersion,
+ * 4. Safe 90-trading-session retention (pruneOldDatasets) protecting latest, previousVersion,
  *    latest.json, locks/, and reference/ objects.
  * 5. Reference enrichment artifact read/write helpers under reference/<file>.json so
  *    ephemeral CI runners remain completely deterministic.
@@ -24,23 +24,37 @@ const {
   LATEST_POINTER_PATH,
   LOCK_OBJECT_PATH,
   REFERENCE_PREFIX,
-  DEFAULT_RETAIN_TRADING_SESSIONS
+  HISTORY_PREFIX,
+  DEFAULT_RETAIN_TRADING_SESSIONS,
+  DEFAULT_RETAIN_HISTORY_SESSIONS,
+  MAX_HISTORICAL_SESSIONS
 } = require('../config/constants');
 const { isTradingDay: defaultIsTradingDay } = require('../calendar/exchange-calendar');
+const {
+  DAILY_ENVELOPE_FORMAT,
+  HISTORY_ENVELOPE_FORMAT,
+  sha256Hex: storeSha256Hex,
+  encodeCompressedJson,
+  decodeCompressedJson,
+  stripInlineHistoricalPrices,
+  buildCompactHistoryPayload,
+  extractCompactHistoryFromStocks,
+  validateCompactHistoryPayload
+} = require('./historical-store');
 
 const DEFAULT_LOCK_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_LIST_LIMIT = 100;
 const DEFAULT_DELETE_BATCH_SIZE = 100;
-const MAX_TRACKED_PUBLISHED_SESSIONS = 120;
+const MAX_TRACKED_PUBLISHED_SESSIONS = 180;
 
 function defaultSleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function sha256Hex(content) {
-  return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+  return storeSha256Hex(content);
 }
 
 function encodeObjectPath(objectPath) {
@@ -123,6 +137,21 @@ function isSafeDatasetPrunePath(objectPath) {
   if (!normalized.startsWith('datasets/')) return false;
   if (normalized.split('/').some(seg => seg === '..' || seg === '.')) return false;
   return /^datasets\/\d{4}-\d{2}-\d{2}\/.+$/.test(normalized);
+}
+
+function isSafeHistoryPrunePath(objectPath) {
+  const normalized = normalizeObjectPath(objectPath);
+  if (!normalized) return false;
+  if (normalized === LATEST_POINTER_PATH) return false;
+  if (normalized.startsWith('locks/') || normalized === 'locks') return false;
+  if (normalized.startsWith(`${REFERENCE_PREFIX}/`) || normalized === REFERENCE_PREFIX) return false;
+  if (!normalized.startsWith(`${HISTORY_PREFIX}/`)) return false;
+  if (normalized.split('/').some(seg => seg === '..' || seg === '.')) return false;
+  return /^history\/\d{4}-\d{2}-\d{2}\/.+$/.test(normalized);
+}
+
+function isSafePrunePath(objectPath) {
+  return isSafeDatasetPrunePath(objectPath) || isSafeHistoryPrunePath(objectPath);
 }
 
 /**
@@ -379,8 +408,9 @@ function createStorageClient(config = {}) {
     return { ok: false, error: `Storage LIST exceeded max pagination depth (${maxPages} pages) for prefix "${normalizedPrefix}"`, items: [] };
   }
 
-  async function listDatasetObjects(options = {}) {
-    const topRes = await listObjects('datasets', options);
+  async function listPrefixedDateObjects(prefix, options = {}) {
+    const cleanPrefix = normalizeObjectPath(prefix);
+    const topRes = await listObjects(cleanPrefix, options);
     if (!topRes.ok) {
       return { ok: false, error: topRes.error, objects: [], dateFolders: [] };
     }
@@ -404,7 +434,7 @@ function createStorageClient(config = {}) {
     dateFolders.sort();
 
     for (const dateStr of dateFolders) {
-      const subPrefix = `datasets/${dateStr}`;
+      const subPrefix = `${cleanPrefix}/${dateStr}`;
       const subRes = await listObjects(subPrefix, options);
       if (!subRes.ok) {
         return { ok: false, error: subRes.error, objects: [], dateFolders };
@@ -431,6 +461,14 @@ function createStorageClient(config = {}) {
     return { ok: true, objects, dateFolders };
   }
 
+  async function listDatasetObjects(options = {}) {
+    return listPrefixedDateObjects('datasets', options);
+  }
+
+  async function listHistoryObjects(options = {}) {
+    return listPrefixedDateObjects(HISTORY_PREFIX, options);
+  }
+
   async function deleteObjects(objectPaths, options = {}) {
     if (!isWriteConfigured()) {
       return { ok: false, notConfigured: true, error: 'Supabase Storage write credentials are not configured', deletedPaths: [], failedPaths: [] };
@@ -442,7 +480,7 @@ function createStorageClient(config = {}) {
     }
 
     for (const p of uniquePaths) {
-      if (!isSafeDatasetPrunePath(p)) {
+      if (!isSafePrunePath(p)) {
         return {
           ok: false,
           error: `Refusing to delete protected or out-of-scope storage path: ${p}`,
@@ -494,18 +532,123 @@ function createStorageClient(config = {}) {
     return obj.name.startsWith(expectedPrefix) && obj.name.endsWith('.json');
   }
 
+  function isValidHistoryVersionFile(obj) {
+    if (!obj || !obj.tradingDate || !obj.name) return false;
+    if (obj.size != null && obj.size <= 0) return false;
+    const expectedPrefix = `historical-prices-${obj.tradingDate}-`;
+    return obj.name.startsWith(expectedPrefix) && obj.name.endsWith('.json');
+  }
+
+  function planExpiredSessionDeletions({
+    objects,
+    latestTradingDate,
+    retainCount,
+    protectedPaths,
+    isValidVersionFile,
+    isSafePath,
+    checkTradingDay,
+    ledgerSet = null,
+    ledgerComplete = false,
+    oldestLedgerDate = null
+  }) {
+    const objectsByDate = new Map();
+    for (const obj of objects || []) {
+      if (!objectsByDate.has(obj.tradingDate)) {
+        objectsByDate.set(obj.tradingDate, []);
+      }
+      objectsByDate.get(obj.tradingDate).push(obj);
+    }
+
+    const validPublishedDates = [];
+    const ignoredNonTradingDates = [];
+    const ignoredUnpublishedOrFailedDates = [];
+
+    for (const [dateStr, objs] of objectsByDate.entries()) {
+      if (!checkTradingDay(dateStr)) {
+        ignoredNonTradingDates.push(dateStr);
+        continue;
+      }
+      if (latestTradingDate && dateStr > latestTradingDate) {
+        ignoredUnpublishedOrFailedDates.push(dateStr);
+        continue;
+      }
+      const hasValidBlob = objs.some(o => isValidVersionFile(o) || protectedPaths.has(normalizeObjectPath(o.path)));
+      if (!hasValidBlob) {
+        ignoredUnpublishedOrFailedDates.push(dateStr);
+        continue;
+      }
+      if (ledgerSet) {
+        const isTracked = ledgerSet.has(dateStr);
+        const isLegacyPreLedger = !ledgerComplete && oldestLedgerDate && dateStr < oldestLedgerDate;
+        if (!isTracked && !isLegacyPreLedger) {
+          ignoredUnpublishedOrFailedDates.push(dateStr);
+          continue;
+        }
+      }
+      validPublishedDates.push(dateStr);
+    }
+
+    validPublishedDates.sort((a, b) => (a > b ? -1 : a < b ? 1 : 0));
+    const retainedTradingDates = validPublishedDates.slice(0, retainCount);
+    const cutoffDate = validPublishedDates.length > retainCount
+      ? retainedTradingDates[retainedTradingDates.length - 1]
+      : null;
+
+    if (!cutoffDate) {
+      return {
+        totalSuccessfulSessions: validPublishedDates.length,
+        cutoffDate: null,
+        retainedTradingDates,
+        expiredTradingDates: [],
+        ignoredNonTradingDates: ignoredNonTradingDates.sort(),
+        ignoredUnpublishedOrFailedDates: ignoredUnpublishedOrFailedDates.sort(),
+        deleteCandidates: []
+      };
+    }
+
+    const retainedSet = new Set(retainedTradingDates);
+    const deleteCandidates = [];
+    const expiredDateSet = new Set();
+
+    for (const [dateStr, objs] of objectsByDate.entries()) {
+      if (retainedSet.has(dateStr)) continue;
+      if (dateStr >= cutoffDate) continue;
+      for (const obj of objs) {
+        const normPath = normalizeObjectPath(obj.path);
+        if (!isSafePath(normPath)) continue;
+        if (protectedPaths.has(normPath)) continue;
+        deleteCandidates.push(normPath);
+        expiredDateSet.add(dateStr);
+      }
+    }
+
+    deleteCandidates.sort();
+    return {
+      totalSuccessfulSessions: validPublishedDates.length,
+      cutoffDate,
+      retainedTradingDates,
+      expiredTradingDates: [...expiredDateSet].sort(),
+      ignoredNonTradingDates: ignoredNonTradingDates.sort(),
+      ignoredUnpublishedOrFailedDates: ignoredUnpublishedOrFailedDates.sort(),
+      deleteCandidates
+    };
+  }
+
   async function pruneOldDatasets(options = {}) {
     const retainSessions = Number.isInteger(options.retainSessions) && options.retainSessions > 0
       ? options.retainSessions
       : DEFAULT_RETAIN_TRADING_SESSIONS;
+    const retainHistorySessions = Number.isInteger(options.retainHistorySessions) && options.retainHistorySessions > 0
+      ? options.retainHistorySessions
+      : DEFAULT_RETAIN_HISTORY_SESSIONS;
     const dryRun = Boolean(options.dryRun);
     const checkTradingDay = options.isTradingDay || defaultIsTradingDay;
 
     if (!isReadConfigured()) {
-      return { ok: false, notConfigured: true, dryRun, retainSessions, error: 'Supabase Storage URL is not configured', deletedCount: 0, plannedDeletions: [] };
+      return { ok: false, notConfigured: true, dryRun, retainSessions, retainHistorySessions, error: 'Supabase Storage URL is not configured', deletedCount: 0, plannedDeletions: [] };
     }
     if (!dryRun && !isWriteConfigured()) {
-      return { ok: false, notConfigured: true, dryRun, retainSessions, error: 'Supabase Storage write credentials (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) are required to delete expired objects', deletedCount: 0, plannedDeletions: [] };
+      return { ok: false, notConfigured: true, dryRun, retainSessions, retainHistorySessions, error: 'Supabase Storage write credentials (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) are required to delete expired objects', deletedCount: 0, plannedDeletions: [] };
     }
 
     let latestManifest = options.latestManifest || null;
@@ -516,16 +659,22 @@ function createStorageClient(config = {}) {
           ok: true,
           dryRun,
           retainSessions,
+          retainHistorySessions,
           retainedTradingDates: [],
           expiredTradingDates: [],
+          retainedHistoryDates: [],
+          expiredHistoryDates: [],
           plannedDeletions: [],
+          plannedHistoryDeletions: [],
           deletedPaths: [],
           deletedCount: 0,
+          deletedDatasetCount: 0,
+          deletedHistoryCount: 0,
           protectedPaths: []
         };
       }
       if (!mRes.ok) {
-        return { ok: false, phase: 'read_manifest', dryRun, retainSessions, error: `Cannot verify latest.json before pruning: ${mRes.error}`, deletedCount: 0, plannedDeletions: [] };
+        return { ok: false, phase: 'read_manifest', dryRun, retainSessions, retainHistorySessions, error: `Cannot verify latest.json before pruning: ${mRes.error}`, deletedCount: 0, plannedDeletions: [] };
       }
       latestManifest = mRes.manifest;
     }
@@ -533,28 +682,30 @@ function createStorageClient(config = {}) {
     const protectedPaths = new Set();
     const latestPath = normalizeObjectPath(latestManifest.datasetPath);
     const prevPath = normalizeObjectPath(latestManifest.previousVersion?.datasetPath);
+    const latestHistPath = normalizeObjectPath(latestManifest.historicalDataset?.datasetPath);
+    const prevHistPath = normalizeObjectPath(latestManifest.previousVersion?.historicalDataset?.datasetPath);
     if (latestPath) protectedPaths.add(latestPath);
     if (prevPath) protectedPaths.add(prevPath);
+    if (latestHistPath) protectedPaths.add(latestHistPath);
+    if (prevHistPath) protectedPaths.add(prevHistPath);
 
     const listRes = await listDatasetObjects(options);
     if (!listRes.ok) {
-      return { ok: false, phase: 'list_objects', dryRun, retainSessions, error: listRes.error, deletedCount: 0, plannedDeletions: [], protectedPaths: [...protectedPaths] };
+      return { ok: false, phase: 'list_objects', dryRun, retainSessions, retainHistorySessions, error: listRes.error, deletedCount: 0, plannedDeletions: [], protectedPaths: [...protectedPaths] };
     }
 
-    const objectsByDate = new Map();
-    for (const obj of listRes.objects) {
-      if (!objectsByDate.has(obj.tradingDate)) {
-        objectsByDate.set(obj.tradingDate, []);
-      }
-      objectsByDate.get(obj.tradingDate).push(obj);
+    const histListRes = await listHistoryObjects(options);
+    if (!histListRes.ok) {
+      return { ok: false, phase: 'list_history_objects', dryRun, retainSessions, retainHistorySessions, error: histListRes.error, deletedCount: 0, plannedDeletions: [], protectedPaths: [...protectedPaths] };
     }
 
     const hasLedger = Array.isArray(latestManifest.publishedSessions);
     const ledgerComplete = Boolean(latestManifest.publishedSessionsComplete);
-    const ledgerSet = new Set();
+    let ledgerSet = null;
     let oldestLedgerDate = null;
 
     if (hasLedger) {
+      ledgerSet = new Set();
       for (const dt of latestManifest.publishedSessions) {
         if (/^\d{4}-\d{2}-\d{2}$/.test(String(dt || '')) && checkTradingDay(dt)) {
           ledgerSet.add(dt);
@@ -571,110 +722,83 @@ function createStorageClient(config = {}) {
       }
     }
 
-    const validPublishedDates = [];
-    const ignoredNonTradingDates = [];
-    const ignoredUnpublishedOrFailedDates = [];
+    const datasetPlan = planExpiredSessionDeletions({
+      objects: listRes.objects,
+      latestTradingDate: latestManifest.tradingDate,
+      retainCount: retainSessions,
+      protectedPaths,
+      isValidVersionFile: isValidDatasetVersionFile,
+      isSafePath: isSafeDatasetPrunePath,
+      checkTradingDay,
+      ledgerSet,
+      ledgerComplete,
+      oldestLedgerDate
+    });
 
-    for (const [dateStr, objs] of objectsByDate.entries()) {
-      if (!checkTradingDay(dateStr)) {
-        ignoredNonTradingDates.push(dateStr);
-        continue;
-      }
-      if (latestManifest.tradingDate && dateStr > latestManifest.tradingDate) {
-        ignoredUnpublishedOrFailedDates.push(dateStr);
-        continue;
-      }
-      const hasValidBlob = objs.some(o => isValidDatasetVersionFile(o) || protectedPaths.has(normalizeObjectPath(o.path)));
-      if (!hasValidBlob) {
-        ignoredUnpublishedOrFailedDates.push(dateStr);
-        continue;
-      }
-      if (hasLedger) {
-        const isTracked = ledgerSet.has(dateStr);
-        const isLegacyPreLedger = !ledgerComplete && oldestLedgerDate && dateStr < oldestLedgerDate;
-        if (!isTracked && !isLegacyPreLedger) {
-          ignoredUnpublishedOrFailedDates.push(dateStr);
-          continue;
-        }
-      }
-      validPublishedDates.push(dateStr);
-    }
+    const historyPlan = planExpiredSessionDeletions({
+      objects: histListRes.objects,
+      latestTradingDate: latestManifest.tradingDate,
+      retainCount: retainHistorySessions,
+      protectedPaths,
+      isValidVersionFile: isValidHistoryVersionFile,
+      isSafePath: isSafeHistoryPrunePath,
+      checkTradingDay
+    });
 
-    validPublishedDates.sort((a, b) => (a > b ? -1 : a < b ? 1 : 0));
-    const retainedTradingDates = validPublishedDates.slice(0, retainSessions);
-    const cutoffDate = validPublishedDates.length > retainSessions
-      ? retainedTradingDates[retainedTradingDates.length - 1]
-      : null;
-
-    if (!cutoffDate) {
-      return {
-        ok: true,
-        dryRun,
-        retainSessions,
-        totalSuccessfulSessions: validPublishedDates.length,
-        retainedTradingDates,
-        expiredTradingDates: [],
-        ignoredNonTradingDates: ignoredNonTradingDates.sort(),
-        ignoredUnpublishedOrFailedDates: ignoredUnpublishedOrFailedDates.sort(),
-        plannedDeletions: [],
-        deletedPaths: [],
-        deletedCount: 0,
-        protectedPaths: [...protectedPaths]
-      };
-    }
-
-    const retainedSet = new Set(retainedTradingDates);
-    const deleteCandidates = [];
-    const expiredDateSet = new Set();
-
-    for (const [dateStr, objs] of objectsByDate.entries()) {
-      if (retainedSet.has(dateStr)) continue;
-      if (dateStr >= cutoffDate) continue;
-      for (const obj of objs) {
-        const normPath = normalizeObjectPath(obj.path);
-        if (!isSafeDatasetPrunePath(normPath)) continue;
-        if (protectedPaths.has(normPath)) continue;
-        deleteCandidates.push(normPath);
-        expiredDateSet.add(dateStr);
-      }
-    }
-
-    deleteCandidates.sort();
-    const expiredTradingDates = [...expiredDateSet].sort();
+    const deleteCandidates = [...datasetPlan.deleteCandidates, ...historyPlan.deleteCandidates];
 
     if (dryRun || deleteCandidates.length === 0) {
       return {
         ok: true,
         dryRun,
         retainSessions,
-        totalSuccessfulSessions: validPublishedDates.length,
-        cutoffDate,
-        retainedTradingDates,
-        expiredTradingDates,
-        ignoredNonTradingDates: ignoredNonTradingDates.sort(),
-        ignoredUnpublishedOrFailedDates: ignoredUnpublishedOrFailedDates.sort(),
+        retainHistorySessions,
+        totalSuccessfulSessions: datasetPlan.totalSuccessfulSessions,
+        cutoffDate: datasetPlan.cutoffDate,
+        retainedTradingDates: datasetPlan.retainedTradingDates,
+        expiredTradingDates: datasetPlan.expiredTradingDates,
+        ignoredNonTradingDates: datasetPlan.ignoredNonTradingDates,
+        ignoredUnpublishedOrFailedDates: datasetPlan.ignoredUnpublishedOrFailedDates,
+        totalHistorySessions: historyPlan.totalSuccessfulSessions,
+        historyCutoffDate: historyPlan.cutoffDate,
+        retainedHistoryDates: historyPlan.retainedTradingDates,
+        expiredHistoryDates: historyPlan.expiredTradingDates,
         plannedDeletions: deleteCandidates,
+        plannedDatasetDeletions: datasetPlan.deleteCandidates,
+        plannedHistoryDeletions: historyPlan.deleteCandidates,
         deletedPaths: [],
         deletedCount: 0,
+        deletedDatasetCount: 0,
+        deletedHistoryCount: 0,
         protectedPaths: [...protectedPaths]
       };
     }
 
     const delRes = await deleteObjects(deleteCandidates, options);
+    const deletedSet = new Set(delRes.deletedPaths);
     return {
       ok: delRes.ok,
       dryRun: false,
       retainSessions,
-      totalSuccessfulSessions: validPublishedDates.length,
-      cutoffDate,
-      retainedTradingDates,
-      expiredTradingDates,
-      ignoredNonTradingDates: ignoredNonTradingDates.sort(),
-      ignoredUnpublishedOrFailedDates: ignoredUnpublishedOrFailedDates.sort(),
+      retainHistorySessions,
+      totalSuccessfulSessions: datasetPlan.totalSuccessfulSessions,
+      cutoffDate: datasetPlan.cutoffDate,
+      retainedTradingDates: datasetPlan.retainedTradingDates,
+      expiredTradingDates: datasetPlan.expiredTradingDates,
+      ignoredNonTradingDates: datasetPlan.ignoredNonTradingDates,
+      ignoredUnpublishedOrFailedDates: datasetPlan.ignoredUnpublishedOrFailedDates,
+      totalHistorySessions: historyPlan.totalSuccessfulSessions,
+      historyCutoffDate: historyPlan.cutoffDate,
+      retainedHistoryDates: historyPlan.retainedTradingDates,
+      expiredHistoryDates: historyPlan.expiredTradingDates,
       plannedDeletions: deleteCandidates,
+      plannedDatasetDeletions: datasetPlan.deleteCandidates,
+      plannedHistoryDeletions: historyPlan.deleteCandidates,
       deletedPaths: delRes.deletedPaths,
       failedPaths: delRes.failedPaths,
       deletedCount: delRes.deletedPaths.length,
+      deletedDatasetCount: datasetPlan.deleteCandidates.filter(p => deletedSet.has(p)).length,
+      deletedHistoryCount: historyPlan.deleteCandidates.filter(p => deletedSet.has(p)).length,
       failedCount: delRes.failedPaths.length,
       error: delRes.error || null,
       protectedPaths: [...protectedPaths]
@@ -718,7 +842,8 @@ function createStorageClient(config = {}) {
     }
 
     try {
-      const parsed = JSON.parse(dataRes.text);
+      const decoded = decodeCompressedJson(dataRes.text);
+      const parsed = decoded.data;
       if (!parsed || !parsed.stats || !Array.isArray(parsed.stocks)) {
         return { ok: false, error: 'Downloaded dataset JSON missing stats or stocks array' };
       }
@@ -727,10 +852,77 @@ function createStorageClient(config = {}) {
         unchanged: false,
         manifest,
         stats: parsed.stats,
-        stocks: parsed.stocks
+        stocks: parsed.stocks,
+        historicalDatasetMeta: manifest.historicalDataset || parsed.stats?.historicalDataset || null,
+        bytes: dataRes.bytes,
+        rawBytes: decoded.rawBytes
       };
     } catch (err) {
       return { ok: false, error: `Dataset JSON parse error: ${err.message}` };
+    }
+  }
+
+  async function fetchHistoricalDataset(manifestOrMeta = null, options = {}) {
+    let meta;
+    if (manifestOrMeta && manifestOrMeta.historicalDataset) {
+      meta = manifestOrMeta.historicalDataset;
+    } else if (manifestOrMeta && manifestOrMeta.datasetPath && !Array.isArray(manifestOrMeta.publishedSessions)) {
+      meta = manifestOrMeta;
+    } else if (!manifestOrMeta) {
+      const mRes = await fetchLatestManifest();
+      if (!mRes.ok) return mRes;
+      meta = mRes.manifest?.historicalDataset || null;
+    } else {
+      meta = null;
+    }
+
+    if (!meta || !meta.datasetPath) {
+      return { ok: false, notFound: true, error: 'Manifest does not reference a separated historical dataset' };
+    }
+
+    if (options.knownVersionId && meta.versionId && options.knownVersionId === meta.versionId) {
+      return { ok: true, unchanged: true, meta };
+    }
+
+    const res = await downloadObject(meta.datasetPath);
+    if (!res.ok) return res;
+
+    if (meta.sha256) {
+      const actualSha = sha256Hex(res.text);
+      if (actualSha !== meta.sha256) {
+        return {
+          ok: false,
+          error: `Historical dataset checksum mismatch for ${meta.datasetPath}: expected ${meta.sha256}, got ${actualSha}`
+        };
+      }
+    }
+
+    try {
+      const decoded = decodeCompressedJson(res.text);
+      const historyObj = decoded.data;
+      if (meta.contentSha256 && historyObj?.contentSha256 && historyObj.contentSha256 !== meta.contentSha256) {
+        return {
+          ok: false,
+          error: `Historical dataset content checksum mismatch for ${meta.datasetPath}`
+        };
+      }
+      const check = validateCompactHistoryPayload(historyObj, {
+        tradingDate: meta.tradingDate || historyObj?.tradingDate,
+        maxSessions: meta.maxSessions || MAX_HISTORICAL_SESSIONS
+      });
+      if (!check.ok) {
+        return { ok: false, error: `Historical dataset validation failed: ${check.errors.join('; ')}` };
+      }
+      return {
+        ok: true,
+        unchanged: false,
+        meta,
+        history: historyObj,
+        bytes: res.bytes,
+        rawBytes: decoded.rawBytes
+      };
+    } catch (err) {
+      return { ok: false, error: `Historical dataset JSON parse error: ${err.message}` };
     }
   }
 
@@ -866,25 +1058,171 @@ function createStorageClient(config = {}) {
       const versionId = `${stats.tradingDate}-${safeTimestamp}`;
       const datasetPath = `datasets/${stats.tradingDate}/stocks-dataset-${versionId}.json`;
 
+      // Prepare separate compact 90-session historical dataset when available
+      let compactHistory = null;
+      if (options.historicalDataset) {
+        compactHistory = {
+          ...options.historicalDataset,
+          versionId: options.historicalDataset.versionId || `${stats.tradingDate}-hist-${safeTimestamp}`,
+          tradingDate: stats.tradingDate,
+          refreshedAtUtc: stats.refreshedAtUtc
+        };
+      } else if (options.historicalMatrix && options.historicalMatrix.priceHistoryByIsin) {
+        compactHistory = buildCompactHistoryPayload({
+          sessions: options.historicalMatrix.sessions || [],
+          priceHistoryByIsin: options.historicalMatrix.priceHistoryByIsin,
+          versionId: `${stats.tradingDate}-hist-${safeTimestamp}`,
+          tradingDate: stats.tradingDate,
+          refreshedAtUtc: stats.refreshedAtUtc,
+          maxSessions: options.maxHistoricalSessions || MAX_HISTORICAL_SESSIONS
+        });
+      } else {
+        compactHistory = extractCompactHistoryFromStocks(
+          stocks,
+          stats.tradingDate,
+          options.maxHistoricalSessions || MAX_HISTORICAL_SESSIONS
+        );
+        if (compactHistory) {
+          compactHistory.versionId = `${stats.tradingDate}-hist-${safeTimestamp}`;
+          compactHistory.refreshedAtUtc = stats.refreshedAtUtc;
+        }
+      }
+
+      let historicalMeta = null;
+      if (compactHistory) {
+        const histValidation = validateCompactHistoryPayload(compactHistory, {
+          tradingDate: stats.tradingDate,
+          maxSessions: compactHistory.maxSessions || MAX_HISTORICAL_SESSIONS
+        });
+        if (!histValidation.ok) {
+          return {
+            ok: false,
+            phase: 'validate_history',
+            error: `Historical dataset validation failed: ${histValidation.errors.join('; ')}`
+          };
+        }
+
+        const prevHistMeta = previousManifest?.historicalDataset || null;
+        let reusedExistingHistory = false;
+        if (
+          !options.forceHistoryUpload &&
+          prevHistMeta?.datasetPath &&
+          prevHistMeta.contentSha256 &&
+          prevHistMeta.contentSha256 === compactHistory.contentSha256
+        ) {
+          const checkPrevHist = await downloadObject(prevHistMeta.datasetPath);
+          if (checkPrevHist.ok && (!prevHistMeta.sha256 || sha256Hex(checkPrevHist.text) === prevHistMeta.sha256)) {
+            historicalMeta = prevHistMeta;
+            reusedExistingHistory = true;
+          }
+        }
+
+        if (!reusedExistingHistory) {
+          const histVersionId = compactHistory.versionId || `${stats.tradingDate}-hist-${safeTimestamp}`;
+          const historyPath = `${HISTORY_PREFIX}/${stats.tradingDate}/historical-prices-${histVersionId}.json`;
+          const encodedHistory = encodeCompressedJson(compactHistory, {
+            format: HISTORY_ENVELOPE_FORMAT,
+            versionId: histVersionId,
+            tradingDate: stats.tradingDate,
+            startDate: compactHistory.startDate,
+            endDate: compactHistory.endDate,
+            sessionCount: compactHistory.sessionCount,
+            maxSessions: compactHistory.maxSessions,
+            isinCount: compactHistory.isinCount,
+            contentSha256: compactHistory.contentSha256
+          });
+
+          // Phase 1A: Upload immutable separated compact historical dataset
+          const histUploadRes = await uploadObject(historyPath, encodedHistory.text, {
+            upsert: false,
+            cacheControl: '31536000'
+          });
+          if (!histUploadRes.ok) {
+            return { ok: false, phase: 'upload_history', error: histUploadRes.error };
+          }
+
+          // Phase 2A: Read-back SHA-256 & schema verification for historical dataset
+          const histVerifyRes = await downloadObject(historyPath);
+          if (!histVerifyRes.ok) {
+            return { ok: false, phase: 'verify_history_upload', error: `Historical read-back verification failed: ${histVerifyRes.error}` };
+          }
+          const histReadBackSha = sha256Hex(histVerifyRes.text);
+          if (histReadBackSha !== encodedHistory.sha256) {
+            return {
+              ok: false,
+              phase: 'verify_history_checksum',
+              error: `Uploaded historical dataset checksum mismatch (expected ${encodedHistory.sha256}, got ${histReadBackSha}); latest.json NOT updated`
+            };
+          }
+          try {
+            const histDecoded = decodeCompressedJson(histVerifyRes.text);
+            const verifiedHist = histDecoded.data;
+            const histCheck = validateCompactHistoryPayload(verifiedHist, {
+              tradingDate: stats.tradingDate,
+              maxSessions: compactHistory.maxSessions || MAX_HISTORICAL_SESSIONS
+            });
+            if (!histCheck.ok || verifiedHist.contentSha256 !== compactHistory.contentSha256) {
+              return {
+                ok: false,
+                phase: 'verify_history_structure',
+                error: 'Uploaded historical dataset structure or content digest mismatch; latest.json NOT updated'
+              };
+            }
+          } catch (histErr) {
+            return {
+              ok: false,
+              phase: 'verify_history_structure',
+              error: `Uploaded historical dataset decode error: ${histErr.message}; latest.json NOT updated`
+            };
+          }
+
+          historicalMeta = {
+            schemaVersion: 2,
+            versionId: histVersionId,
+            tradingDate: stats.tradingDate,
+            datasetPath: historyPath,
+            encoding: 'gzip+base64',
+            sha256: encodedHistory.sha256,
+            contentSha256: compactHistory.contentSha256,
+            bytes: encodedHistory.bytes,
+            rawBytes: encodedHistory.rawBytes,
+            startDate: compactHistory.startDate,
+            endDate: compactHistory.endDate,
+            sessionCount: compactHistory.sessionCount,
+            maxSessions: compactHistory.maxSessions,
+            isinCount: compactHistory.isinCount
+          };
+        }
+      }
+
+      // Daily snapshot stores latest stock info ONLY (no 90-session historical_prices matrix)
+      const dailyStocks = stripInlineHistoricalPrices(stocks);
+
       const storageStats = {
         ...stats,
         storageProvider: 'supabase',
         storageBucket: getCfg().bucket,
-        storageVersionId: versionId
+        storageVersionId: versionId,
+        ...(historicalMeta ? { historicalDataset: historicalMeta } : {})
       };
 
-      const datasetPayload = JSON.stringify({
-        schemaVersion: 1,
+      const encodedDaily = encodeCompressedJson({
+        schemaVersion: 2,
         versionId,
         tradingDate: stats.tradingDate,
         refreshedAtUtc: stats.refreshedAtUtc,
         stats: storageStats,
-        stocks
+        stocks: dailyStocks
+      }, {
+        format: DAILY_ENVELOPE_FORMAT,
+        versionId,
+        tradingDate: stats.tradingDate,
+        stockCount: dailyStocks.length,
+        hasInlineHistory: false
       });
-      const checksum = sha256Hex(datasetPayload);
 
-      // Phase 1: Upload immutable versioned dataset
-      const uploadRes = await uploadObject(datasetPath, datasetPayload, {
+      // Phase 1B: Upload immutable versioned daily dataset
+      const uploadRes = await uploadObject(datasetPath, encodedDaily.text, {
         upsert: false,
         cacheControl: '31536000'
       });
@@ -892,25 +1230,33 @@ function createStorageClient(config = {}) {
         return { ok: false, phase: 'upload_dataset', error: uploadRes.error };
       }
 
-      // Phase 2: Read-back verification
+      // Phase 2B: Read-back verification
       const verifyRes = await downloadObject(datasetPath);
       if (!verifyRes.ok) {
         return { ok: false, phase: 'verify_upload', error: `Read-back verification failed: ${verifyRes.error}` };
       }
       const readBackSha = sha256Hex(verifyRes.text);
-      if (readBackSha !== checksum) {
+      if (readBackSha !== encodedDaily.sha256) {
         return {
           ok: false,
           phase: 'verify_checksum',
-          error: `Uploaded dataset checksum mismatch (expected ${checksum}, got ${readBackSha}); latest.json NOT updated`
+          error: `Uploaded dataset checksum mismatch (expected ${encodedDaily.sha256}, got ${readBackSha}); latest.json NOT updated`
         };
       }
-      const readBackParsed = JSON.parse(verifyRes.text);
-      if (!Array.isArray(readBackParsed.stocks) || readBackParsed.stocks.length !== stocks.length) {
+      const readBackDecoded = decodeCompressedJson(verifyRes.text);
+      const readBackParsed = readBackDecoded.data;
+      if (!Array.isArray(readBackParsed?.stocks) || readBackParsed.stocks.length !== dailyStocks.length) {
         return {
           ok: false,
           phase: 'verify_count',
           error: 'Uploaded dataset stock count mismatch; latest.json NOT updated'
+        };
+      }
+      if (readBackParsed.stocks.some(s => Object.prototype.hasOwnProperty.call(s || {}, 'historical_prices'))) {
+        return {
+          ok: false,
+          phase: 'verify_schema',
+          error: 'Uploaded daily dataset unexpectedly contains inline historical_prices matrix'
         };
       }
 
@@ -939,25 +1285,34 @@ function createStorageClient(config = {}) {
 
       // Phase 3: Atomic pointer swap
       const manifestObj = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         versionId,
         tradingDate: stats.tradingDate,
         nseSourceDate: stats.nseSourceDate || stats.tradingDate,
         bseSourceDate: stats.bseSourceDate || stats.tradingDate,
         refreshedAtUtc: stats.refreshedAtUtc,
         istDisplayTime: stats.istDisplayTime,
-        totalStocks: stocks.length,
+        totalStocks: dailyStocks.length,
         pipelineVersion: stats.pipelineVersion || '2.0.0',
         datasetPath,
-        sha256: checksum,
-        bytes: Buffer.byteLength(datasetPayload, 'utf8'),
+        encoding: 'gzip+base64',
+        sha256: encodedDaily.sha256,
+        bytes: encodedDaily.bytes,
+        rawBytes: encodedDaily.rawBytes,
+        historicalDataset: historicalMeta,
         publishedSessions,
         publishedSessionsComplete,
         previousVersion: previousManifest ? {
           versionId: previousManifest.versionId,
           tradingDate: previousManifest.tradingDate,
           datasetPath: previousManifest.datasetPath,
-          sha256: previousManifest.sha256 || null
+          sha256: previousManifest.sha256 || null,
+          historicalDataset: previousManifest.historicalDataset ? {
+            versionId: previousManifest.historicalDataset.versionId || null,
+            tradingDate: previousManifest.historicalDataset.tradingDate || previousManifest.tradingDate,
+            datasetPath: previousManifest.historicalDataset.datasetPath,
+            sha256: previousManifest.historicalDataset.sha256 || null
+          } : null
         } : null,
         stats: storageStats
       };
@@ -971,13 +1326,14 @@ function createStorageClient(config = {}) {
         return { ok: false, phase: 'swap_pointer', error: pointerRes.error };
       }
 
-      // Phase 4: Non-fatal 30-trading-session retention cleanup
+      // Phase 4: Non-fatal retention cleanup (90 daily sessions, rolling history snapshots)
       let retention = null;
       if (!options.skipRetention) {
         try {
           retention = await pruneOldDatasets({
             latestManifest: manifestObj,
             retainSessions: options.retainSessions,
+            retainHistorySessions: options.retainHistorySessions,
             dryRun: Boolean(options.retentionDryRun),
             isTradingDay: options.isTradingDay
           });
@@ -996,8 +1352,10 @@ function createStorageClient(config = {}) {
         ok: true,
         versionId,
         datasetPath,
-        sha256: checksum,
-        bytes: Buffer.byteLength(datasetPayload, 'utf8'),
+        sha256: encodedDaily.sha256,
+        bytes: encodedDaily.bytes,
+        rawBytes: encodedDaily.rawBytes,
+        historicalDataset: historicalMeta,
         previousVersionId: previousManifest?.versionId || null,
         retention
       };
@@ -1017,9 +1375,11 @@ function createStorageClient(config = {}) {
     deleteObjects,
     listObjects,
     listDatasetObjects,
+    listHistoryObjects,
     pruneOldDatasets,
     fetchLatestManifest,
     fetchLatestDataset,
+    fetchHistoricalDataset,
     downloadReferenceJson,
     uploadReferenceJson,
     acquireStorageLock,
@@ -1041,9 +1401,13 @@ module.exports = {
   LATEST_POINTER_PATH,
   LOCK_OBJECT_PATH,
   REFERENCE_PREFIX,
+  HISTORY_PREFIX,
   DEFAULT_RETAIN_TRADING_SESSIONS,
+  DEFAULT_RETAIN_HISTORY_SESSIONS,
   sha256Hex,
   isSafeDatasetPrunePath,
+  isSafeHistoryPrunePath,
+  isSafePrunePath,
   isObjectNotFoundResponse,
   getStorageConfigFromEnv,
   createStorageClient,

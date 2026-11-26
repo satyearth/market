@@ -54,68 +54,70 @@
     <main id="main-content" class="flex-1">
       <div class="site-wide-shell">
         <!-- Hero Section -->
-        <div class="pt-5 pb-2">
-          <div class="mb-2 flex max-w-full items-start gap-2 font-mono text-[12px] uppercase tracking-[0.05em] text-ink-muted">
-            <span class="relative mt-[0.35em] inline-block size-[7px] shrink-0 rounded-full bg-ink-faint" aria-hidden="true"></span>
-            <span id="market-status-badge" class="min-w-0">Loading latest verified EOD session…</span>
+        <div class="pt-3.5 pb-1 sm:pt-5 sm:pb-2">
+          <div class="hero-status-row mb-1.5 flex flex-wrap items-center gap-2 font-mono text-[11px] uppercase tracking-[0.04em] text-ink-muted">
+            <span class="inline-flex items-center gap-1.5 min-w-0">
+              <span class="relative inline-block size-[7px] shrink-0 rounded-full bg-ink-faint" aria-hidden="true"></span>
+              <span id="market-status-badge" class="min-w-0 truncate">Loading EOD session…</span>
+            </span>
+            <div id="eod-sync-indicator" class="inline-flex items-center gap-1.5 rounded-full border border-ink-rule bg-ink-well px-2.5 py-0.5 font-mono text-[10px] normal-case tracking-normal text-ink-muted" role="status" aria-live="polite">
+              <span id="eod-sync-dot" class="relative inline-block shrink-0 rounded-full bg-amber-500" aria-hidden="true"></span>
+              <span id="eod-sync-text">Checking EOD data date…</span>
+              <span id="eod-sync-time" class="text-ink-faint hidden sm:inline"></span>
+            </div>
           </div>
-          <div id="eod-sync-indicator" class="mb-2 inline-flex items-center gap-1.5 rounded-full border border-ink-rule bg-ink-well px-2.5 py-1 font-mono text-[10px] text-ink-muted" role="status" aria-live="polite">
-            <span id="eod-sync-dot" class="relative inline-block size-[7px] shrink-0 rounded-full bg-amber-500" aria-hidden="true"></span>
-            <span id="eod-sync-text">Checking EOD data date…</span>
-            <span id="eod-sync-time" class="text-ink-faint"></span>
-          </div>
-          <h1 class="hero-heading font-display text-[clamp(24px,5.5vw,36px)] font-[750] leading-[1.12] tracking-[-0.025em] text-ink-ink">
+          <h1 class="hero-heading font-display text-[clamp(22px,5.2vw,34px)] font-[750] leading-[1.12] tracking-[-0.025em] text-ink-ink">
             Every stock, <em class="not-italic text-ink-sienna">ranked</em>.
           </h1>
-          <p class="hero-subtitle mt-2 text-sm text-ink-muted">Search Indian stocks. Compare returns, valuations and market size.</p>
+          <p class="hero-subtitle mt-1.5 text-[13px] sm:text-sm text-ink-muted">Search Indian stocks. Compare returns, valuations and market cap.</p>
         </div>
 
         <!-- Market Pulse Overview Cards -->
-        <div id="pulse-metrics" class="mt-3">
+        <div id="pulse-metrics" class="mt-2.5 sm:mt-3">
           <div data-slot="pulse-card" class="pulse-card overflow-hidden rounded-xl border border-ink-rule bg-ink-card shadow-soft">
             <div class="pulse-metrics grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.25fr_1fr_1fr_1fr_1.35fr]">
               <!-- Card 1: Verified Market Cap -->
-              <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-r border-ink-rule xl:border-b-0">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Verified Market Cap</span>
-                <span id="card-total-mcap" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">—</span>
-                <span id="card-mcap-sub" class="text-[11.5px] text-ink-muted">Verified Equities (NSE + BSE)</span>
+              <div class="flex flex-col px-3 py-2.5 sm:px-[22px] sm:py-4 border-b border-r border-ink-rule xl:border-b-0">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Verified Market Cap</span>
+                <span id="card-total-mcap" class="font-display font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">—</span>
+                <span id="card-mcap-sub" class="text-[11px] sm:text-[11.5px] text-ink-muted truncate">Verified Equities (NSE + BSE)</span>
               </div>
 
               <!-- Card 2: India VIX -->
-              <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-ink-rule xl:border-r xl:border-b-0">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">India VIX</span>
+              <div class="flex flex-col px-3 py-2.5 sm:px-[22px] sm:py-4 border-b border-ink-rule xl:border-r xl:border-b-0">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">India VIX</span>
                 <span class="flex items-baseline gap-2">
-                  <span id="card-vix-val" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">—</span>
-                  <span id="card-vix-chg" class="font-mono text-[12px] font-semibold tabular-nums text-ink-muted">—</span>
+                  <span id="card-vix-val" class="font-display font-semibold tabular-nums tracking-[-0.02em] text-ink-ink">—</span>
+                  <span id="card-vix-chg" class="font-mono text-[11px] sm:text-[12px] font-semibold tabular-nums text-ink-muted">—</span>
                 </span>
-                <span id="card-vix-sub" class="text-[11.5px] text-ink-muted">Volatility index</span>
+                <span id="card-vix-sub" class="text-[11px] sm:text-[11.5px] text-ink-muted truncate">Volatility index</span>
               </div>
 
               <!-- Card 3: Market Breadth -->
-              <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-r border-ink-rule lg:border-r-0 xl:border-r xl:border-b-0">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Market Breadth</span>
-                <div id="card-breadth-bar" class="relative h-3.5 overflow-hidden rounded-full bg-ink-bearish/10 mt-0.5" role="img" aria-label="Market Breadth">
+              <div class="flex flex-col px-3 py-2.5 sm:px-[22px] sm:py-4 border-b border-r border-ink-rule lg:border-r-0 xl:border-r xl:border-b-0">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Market Breadth</span>
+                <div id="card-breadth-bar" class="relative h-3 sm:h-3.5 overflow-hidden rounded-full bg-ink-bearish/10 mt-0.5" role="img" aria-label="Market Breadth">
                   <div id="card-breadth-fill" class="absolute inset-y-0 left-0 rounded-l-full bg-ink-bullish" style="width:50%;transition:width 1200ms var(--ease-pulse)"></div>
-                  <div id="card-breadth-indicator" class="absolute top-1/2 h-[22px] w-1 -translate-x-1/2 -translate-y-1/2 rounded-[3px] bg-ink-ink shadow-[0_0_0_3px_var(--ink-bg)]" style="left:50%;transition:left 1200ms var(--ease-pulse)"></div>
+                  <div id="card-breadth-indicator" class="absolute top-1/2 h-[20px] w-1 -translate-x-1/2 -translate-y-1/2 rounded-[3px] bg-ink-ink shadow-[0_0_0_3px_var(--ink-bg)]" style="left:50%;transition:left 1200ms var(--ease-pulse)"></div>
                 </div>
-                <div class="flex items-center justify-between font-mono text-[12px] tabular-nums">
+                <div class="flex items-center justify-between font-mono text-[11px] sm:text-[12px] tabular-nums">
                   <span id="card-breadth-adv" class="text-ink-bullish">— ▴</span>
                   <span id="card-breadth-dec" class="text-ink-bearish">— ▾</span>
                 </div>
-                <span id="card-breadth-sub" class="text-[11px] text-ink-muted truncate">Breadth data unavailable</span>
+                <span id="card-breadth-sub" class="text-ink-muted truncate">Breadth unavailable</span>
               </div>
 
               <!-- Card 4: Near 52W High -->
-              <div class="flex flex-col gap-[7px] px-[22px] py-4 border-b border-ink-rule lg:border-b-0 lg:border-r xl:border-r">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Surveyed BSE Groups A & B via BSE MCP. NSE-only and other BSE groups not included.">Near 52W High</span>
-                <span id="card-near52-pct" class="font-display text-[21px] font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">—</span>
-                <span id="card-near52-sub" class="text-[11.5px] text-ink-muted leading-tight">No verified session data</span>
+              <div class="flex flex-col px-3 py-2.5 sm:px-[22px] sm:py-4 border-b border-ink-rule lg:border-b-0 lg:border-r xl:border-r">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted" title="Surveyed BSE Groups A & B. NSE-only and other BSE groups not included.">Near 52W High</span>
+                <span id="card-near52-pct" class="font-display font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">—</span>
+                <span id="card-near52-sub" class="text-[11px] sm:text-[11.5px] text-ink-muted truncate leading-tight">No verified data</span>
               </div>
 
               <!-- Card 5: Verified Cap Ranks -->
-              <div class="flex flex-col gap-[7px] px-[22px] py-4 col-span-2 lg:col-span-1">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted" title="Internal ranking of verified market caps. Not official SEBI classification.">Verified Cap Ranks</span>
-                <div class="mt-0.5 flex items-end gap-[3px] h-[26px]">
+              <div class="flex flex-col px-3 py-2.5 sm:px-[22px] sm:py-4 col-span-2 lg:col-span-1">
+                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted" title="Internal ranking of verified market caps. Not official SEBI classification.">Verified Cap Ranks</span>
+                <div class="mt-0.5 flex items-end gap-[3px] h-[22px] sm:h-[26px]">
                   <div class="relative h-full flex-1 rounded-t-[4px] bg-ink-inset" title="Top 100 Verified Equities">
                     <div id="card-seg-bar-lrg" class="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-ink-sienna transition-all duration-500" style="height:0%;min-height:6px"></div>
                   </div>
@@ -145,7 +147,7 @@
         </div>
 
         <!-- Filter Buttons Bar -->
-        <div id="market-filters" class="py-3">
+        <div id="market-filters" class="py-2.5 sm:py-3">
           <div class="filter-buttons-scroll-container flex flex-wrap gap-1.5">
             <button aria-pressed="true" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft">ALL</button>
             <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TOP GAINERS</button>
@@ -153,63 +155,54 @@
             <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">NEAR 52W HIGH</button>
             <button aria-pressed="false" id="filter-watchlist-btn" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-amber-400"><span class="text-amber-400">★</span> WATCHLIST</button>
             <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">HIGH VOLUME</button>
-            <!-- Sector filter separator -->
-            <span class="h-4 w-px bg-ink-rule mx-0.5 self-center shrink-0" aria-hidden="true"></span>
-            <button aria-pressed="false" data-sector="Financial Services" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">FINANCIALS</button>
-            <button aria-pressed="false" data-sector="Information Technology" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">IT</button>
-            <button aria-pressed="false" data-sector="Healthcare" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">HEALTHCARE</button>
-            <button aria-pressed="false" data-sector="Automobile and Auto Components" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">AUTO</button>
-            <button aria-pressed="false" data-sector="Fast Moving Consumer Goods" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">FMCG</button>
-            <button aria-pressed="false" data-sector="Capital Goods" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">CAPITAL GOODS</button>
-            <button aria-pressed="false" data-sector="Power" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">POWER</button>
-            <button aria-pressed="false" data-sector="Metals &amp; Mining" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">METALS</button>
-            <button aria-pressed="false" data-sector="Chemicals" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">CHEMICALS</button>
-            <button aria-pressed="false" data-sector="Realty" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">REALTY</button>
-            <button aria-pressed="false" data-sector="Telecommunication" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TELECOM</button>
-            <button aria-pressed="false" data-sector="Oil Gas &amp; Consumable Fuels" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">OIL &amp; GAS</button>
+            <button id="mobile-sector-toggle" type="button" aria-expanded="false" aria-controls="sector-filter-group" class="sm:hidden inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-ink-rule bg-ink-well px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-muted hover:text-ink-text">Sectors <span aria-hidden="true">▾</span></button>
+            <div id="sector-filter-group" class="hidden">
+              <!-- Sector filter separator -->
+              <span class="hidden sm:inline-block h-4 w-px bg-ink-rule mx-0.5 self-center shrink-0" aria-hidden="true"></span>
+              <button aria-pressed="false" data-sector="Financial Services" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">FINANCIALS</button>
+              <button aria-pressed="false" data-sector="Information Technology" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">IT</button>
+              <button aria-pressed="false" data-sector="Healthcare" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">HEALTHCARE</button>
+              <button aria-pressed="false" data-sector="Automobile and Auto Components" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">AUTO</button>
+              <button aria-pressed="false" data-sector="Fast Moving Consumer Goods" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">FMCG</button>
+              <button aria-pressed="false" data-sector="Capital Goods" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">CAPITAL GOODS</button>
+              <button aria-pressed="false" data-sector="Power" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">POWER</button>
+              <button aria-pressed="false" data-sector="Metals &amp; Mining" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">METALS</button>
+              <button aria-pressed="false" data-sector="Chemicals" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">CHEMICALS</button>
+              <button aria-pressed="false" data-sector="Realty" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">REALTY</button>
+              <button aria-pressed="false" data-sector="Telecommunication" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TELECOM</button>
+              <button aria-pressed="false" data-sector="Oil Gas &amp; Consumable Fuels" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">OIL &amp; GAS</button>
+            </div>
           </div>
         </div>
 
         <!-- Table Card Container -->
-        <div class="pt-4 pb-12">
+        <div class="pt-2 pb-10 sm:pt-3 sm:pb-12">
           <div id="stocks-table-card" data-slot="pulse-card" class="pulse-card rounded-xl border border-ink-rule bg-ink-card shadow-soft">
             <!-- Search & Table Controls Toolbar -->
-            <div class="table-toolbar flex flex-wrap items-center gap-3 p-3 sm:p-[18px] border-b border-ink-rule">
+            <div class="table-toolbar flex items-center gap-2 p-2.5 sm:p-4 border-b border-ink-rule">
               <!-- Search Input -->
-              <div class="relative w-full sm:w-auto flex-1 sm:flex-initial">
-                <input data-stocks-search="true" type="text" placeholder="Search stocks..." class="bg-ink-well border border-ink-rule rounded-full text-ink-ink font-ui text-[13px] px-3.5 py-1.5 pr-7 w-full sm:w-[170px] md:w-[220px] outline-none transition-colors focus:border-ink-sienna placeholder:text-ink-faint" name="stocks-search" value="" />
-                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-faint bg-ink-inset rounded px-1 hidden sm:inline-block">/</span>
+              <div class="relative flex-1 sm:flex-initial min-w-0">
+                <input data-stocks-search="true" type="text" placeholder="Search symbol, name or ISIN..." class="bg-ink-well border border-ink-rule rounded-full text-ink-ink font-ui text-[13px] px-3.5 py-1.5 pr-7 w-full outline-none transition-colors focus:border-ink-sienna placeholder:text-ink-faint" name="stocks-search" value="" />
+                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-ink-faint bg-ink-inset rounded px-1 hidden sm:inline-block">/</span>
               </div>
 
-              <!-- Controls on the right -->
-              <div class="table-toolbar-actions ml-auto flex items-center gap-2.5">
-                <div class="inline-flex gap-[3px] rounded-full bg-ink-well border border-ink-rule p-[3px]">
-                  <button aria-pressed="true" title="Sort only the rows on this page" class="rounded-full px-[11px] py-[3px] font-ui text-[10px] font-semibold whitespace-nowrap transition-all text-ink-ink bg-ink-card shadow-soft">This page</button>
-                  <button aria-pressed="false" title="Sort all matching stocks before pagination" class="flex items-center gap-1 rounded-full px-[11px] py-[3px] font-ui text-[10px] font-semibold whitespace-nowrap transition-all text-ink-muted hover:text-ink-text">All results</button>
-                </div>
-
+              <!-- Compact Utility Actions -->
+              <div class="table-toolbar-actions ml-auto flex items-center gap-2 shrink-0">
                 <!-- Export CSV -->
-                <button id="export-csv-btn" class="inline-flex items-center gap-1.5 rounded-full border border-ink-rule bg-ink-well px-3 py-1 font-ui text-[11px] font-semibold text-ink-muted hover:text-ink-sienna hover:border-ink-sienna transition-colors shadow-soft" title="Export currently loaded stocks as CSV">
+                <button id="export-csv-btn" type="button" class="inline-flex items-center justify-center gap-1.5 rounded-full border border-ink-rule bg-ink-well px-3 py-1 font-ui text-[11px] font-semibold text-ink-muted hover:text-ink-sienna hover:border-ink-sienna transition-colors shadow-soft" title="Export currently loaded stocks as CSV" aria-label="Export CSV">
                   <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                   <span class="hidden sm:inline">Export CSV</span>
                 </button>
 
                 <!-- Density Toggle -->
-                <button id="density-toggle-btn" class="w-[28px] h-[28px] flex items-center justify-center rounded-full border border-ink-rule bg-ink-well text-ink-muted transition-colors hover:text-ink-sienna hover:border-ink-sienna" title="Switch between default and dense rows">
+                <button id="density-toggle-btn" type="button" class="flex items-center justify-center rounded-full border border-ink-rule bg-ink-well text-ink-muted transition-colors hover:text-ink-sienna hover:border-ink-sienna" title="Toggle compact rows" aria-label="Toggle compact rows">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list w-3.5 h-3.5" aria-hidden="true"><path d="M3 5h.01"></path><path d="M3 12h.01"></path><path d="M3 19h.01"></path><path d="M8 5h13"></path><path d="M8 12h13"></path><path d="M8 19h13"></path></svg>
                 </button>
-
-                <!-- Customize Columns -->
-                <div class="relative hidden md:block">
-                  <button class="w-[28px] h-[28px] flex items-center justify-center rounded-full border bg-ink-well transition-colors border-ink-rule text-ink-muted hover:text-ink-sienna hover:border-ink-sienna" title="Customize columns">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings w-3.5 h-3.5" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  </button>
-                </div>
               </div>
             </div>
 
             <!-- Table View -->
-            <div class="table-scroll-container overflow-x-auto lg:overflow-x-visible px-1.5">
+            <div class="table-scroll-container overflow-x-auto px-1.5 sm:px-2">
               <table class="stocks-table w-full border-collapse" role="grid" aria-rowcount="5389">
                 <thead class="sticky top-[57px] z-20 bg-ink-card shadow-sm">
                   <tr>
@@ -224,7 +217,7 @@
                     <th data-sortable="true" data-col="3M" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0" title="Data not available yet">3M</th>
                     <th data-sortable="true" data-col="Vol" class="hidden xl:table-cell text-right text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">Vol</th>
                     <th class="hidden xl:table-cell text-left text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted w-[64px] px-1 py-2 border-b border-ink-rule-strong sticky top-[57px] bg-ink-card z-20">7D</th>
-                    <th class="w-[32px] px-1.5 py-2 border-b border-ink-rule-strong sticky top-[57px] bg-ink-card z-20"></th>
+                    <th class="action-col-th px-2 py-2 border-b border-ink-rule-strong sticky top-[57px] bg-ink-card z-20" aria-label="Actions"></th>
                   </tr>
                 </thead>
                 <tbody id="stocks-tbody">

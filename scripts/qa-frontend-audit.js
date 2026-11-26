@@ -218,14 +218,19 @@ assert(formatMarketCap(1883296.8) === '₹18.8L Cr', 'formatMarketCap for Relian
 
 // 2. Missing data handling: 1W return
 const null1wStocks = STOCKS_DATA.filter(s => s.return_1w === null);
-assert(null1wStocks.every(s => !s.historical_prices || s.historical_prices.length < 2 || s.current_price == null), 'Null 1W return only occurs when <2 sessions or unpriced', `Count: ${null1wStocks.length}`);
+const active1wSet = new Set(MARKET_STATS.historicalSessions?.activeWindowSessions || MARKET_STATS.historicalSessions?.sessions?.slice(-6) || []);
+assert(null1wStocks.every(s => {
+  const in1w = Array.isArray(s.historical_prices) ? s.historical_prices.filter(h => !active1wSet.size || active1wSet.has(h.date)) : [];
+  return in1w.length < 2 || s.current_price == null;
+}), 'Null 1W return only occurs when <2 sessions in 1W window or unpriced', `Count: ${null1wStocks.length}`);
 
-// 3. Multi-month returns audit (1M, 3M, 1Y are strictly null since only 6 daily sessions are verified)
+// 3. Multi-month returns audit (strictly null when insufficient verified history, valid finite numbers when supported)
+const histSessionCount = MARKET_STATS.historicalSessions?.sessionCount || 0;
 const nonNull1m = STOCKS_DATA.filter(s => s.return_1m != null).length;
 const nonNull3m = STOCKS_DATA.filter(s => s.return_3m != null).length;
 const nonNull1y = STOCKS_DATA.filter(s => s.return_1y != null).length;
-assert(nonNull1m === 0, '1M returns are strictly null (0 unverified values displayed)', `Count: ${nonNull1m}`);
-assert(nonNull3m === 0, '3M returns are strictly null (0 unverified values displayed)', `Count: ${nonNull3m}`);
+assert(histSessionCount < 22 ? nonNull1m === 0 : nonNull1m > 0, '1M returns match verified session availability (~22+ sessions)', `Sessions: ${histSessionCount}, Populated: ${nonNull1m}`);
+assert(histSessionCount < 66 ? nonNull3m === 0 : nonNull3m > 0, '3M returns match verified session availability (~66+ sessions)', `Sessions: ${histSessionCount}, Populated: ${nonNull3m}`);
 assert(nonNull1y === 0, '1Y returns are strictly null (0 unverified values displayed)', `Count: ${nonNull1y}`);
 
 // 4. Exchange Badges
@@ -269,11 +274,11 @@ assert(MARKET_STATS.near52WeekHighTradingDate === MARKET_STATS.tradingDate, 'Car
 console.log('\n[Section 5: Historical Price Data Preservation]');
 
 const reliance = STOCKS_DATA.find(s => s.symbol === 'RELIANCE');
-assert(reliance.historical_prices.length === 6, 'RELIANCE has 6 historical session records');
+const expectedDates = MARKET_STATS.historicalSessions.sessions;
+assert(reliance.historical_prices.length >= 6 && reliance.historical_prices.length <= 90 && reliance.historical_prices.length === expectedDates.length, `RELIANCE has ${expectedDates.length} historical session records (<= 90)`);
 
 const dates = reliance.historical_prices.map(p => p.date);
-const expectedDates = MARKET_STATS.historicalSessions.sessions;
-assert(JSON.stringify(dates) === JSON.stringify(expectedDates), 'Dates are strictly chronological 6 sessions', dates.join(', '));
+assert(JSON.stringify(dates) === JSON.stringify(expectedDates), `Dates are strictly chronological (${expectedDates.length} sessions)`, `${dates[0]} .. ${dates[dates.length - 1]}`);
 
 // The new details page intentionally has no historical chart.
 assert(!detailContent.includes('<svg'), 'Dedicated stock details page contains no chart SVG');

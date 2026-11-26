@@ -4,10 +4,10 @@
  * Dataset Compiler, Atomic Local/Remote Publisher & Pipeline Orchestrator
  *
  * Replaces monolithic scripts/sync-stock-universe.js & scripts/refresh.js orchestration:
- * - Resolves expected trading session & historical 6-session trailing window
+ * - Resolves expected trading session & trailing historical window (up to 90 sessions)
  * - Validates NSE & BSE BhavCopy archives cleanly before compiling
  * - Hydrates cold runners from Supabase Storage (`reference/`) when local JSON caches are absent
- * - Merges NSE + BSE universe on ISIN, resolves market caps & fundamentals, validates invariants
+ * - Merges NSE + BSE universe on ISIN, resolves market caps, fundamentals & 1W/1M/3M returns, validates invariants
  * - Atomically writes js/stocks-data.js (via temp file + read-back verification + backup)
  * - Atomically publishes versioned snapshot + latest.json pointer to Supabase Storage
  * - Supports --dry-run, --retention-dry-run, and --sync-reference flags cleanly
@@ -19,7 +19,12 @@ const {
   DOWNLOADS_DIR,
   TARGET_DATA_PATH,
   BACKUP_DATA_PATH,
-  REFERENCE_FILES
+  REFERENCE_FILES,
+  MAX_HISTORICAL_SESSIONS,
+  DOWNLOAD_WINDOW_SESSIONS,
+  RETURN_WINDOW_1W_SESSIONS,
+  RETURN_WINDOW_1M_SESSIONS,
+  RETURN_WINDOW_3M_SESSIONS
 } = require('../config/constants');
 const {
   getLatestExpectedTradingDate,
@@ -43,6 +48,7 @@ const {
 } = require('../enrichment/fundamentals');
 const { mergeExchangeUniverse, buildUniverseDiff } = require('../processing/universe-merger');
 const { validateMergedDataset } = require('../validation/dataset-validator');
+const { buildCompactHistoryPayload } = require('../storage/historical-store');
 const defaultStorage = require('../storage/supabase-storage');
 
 const PIPELINE_VERSION = '2.0.0';
@@ -144,13 +150,14 @@ function resolveTargetTradingDate(options = {}) {
 }
 
 function writeLocalDatasetAtomically(targetPath, backupPath, marketStats, mergedStocks, istFormattedString, compileTime) {
+  const serializedStocks = mergedStocks.map(s => `  ${JSON.stringify(s)}`).join(',\n');
   const outputJs = `/* machli bazarr - Complete Stock Market Dataset (NSE + BSE) */
 /* Trading Date: ${marketStats.tradingDate} | Compiled UTC: ${compileTime.toISOString()} | IST: ${istFormattedString} */
 /* Data Status: End-of-day official exchange Bhavcopy (NSE + BSE) */
 
 const MARKET_STATS = ${JSON.stringify(marketStats, null, 2)};
 
-const STOCKS_DATA = ${JSON.stringify(mergedStocks, null, 2)};
+const STOCKS_DATA = [${serializedStocks ? `\n${serializedStocks}\n` : ''}];
 `;
 
   const tmpPath = `${targetPath}.tmp.${process.pid}`;
@@ -238,10 +245,19 @@ async function syncUniverse(options = {}) {
   const TARGET_TRADING_DATE = resolution.targetDate;
 
   let remoteDataset = null;
+  let remoteHistoryDataset = null;
   if (!skipStorage && storageClient.isReadConfigured()) {
     const remoteRes = await storageClient.fetchLatestDataset();
     if (remoteRes.ok) {
       remoteDataset = remoteRes;
+      if (remoteRes.historicalDatasetMeta?.datasetPath && typeof storageClient.fetchHistoricalDataset === 'function') {
+        const histRes = await storageClient.fetchHistoricalDataset(remoteRes.manifest || remoteRes.historicalDatasetMeta);
+        if (histRes.ok && histRes.history) {
+          remoteHistoryDataset = histRes.history;
+        } else if (!histRes.notFound) {
+          throw new Error(`Failed to recover prior historical dataset (${remoteRes.historicalDatasetMeta.datasetPath}): ${histRes.error}`);
+        }
+      }
     }
   }
 
@@ -261,7 +277,12 @@ async function syncUniverse(options = {}) {
     );
   }
 
-  const HISTORICAL_DATES = getRecentTradingSessions(TARGET_TRADING_DATE, 6);
+  const rawHistCount = Number.parseInt(options.historySessionCount, 10);
+  const historySessionCount = Number.isInteger(rawHistCount) && rawHistCount > 0
+    ? Math.min(rawHistCount, MAX_HISTORICAL_SESSIONS)
+    : MAX_HISTORICAL_SESSIONS;
+  const HISTORICAL_DATES = getRecentTradingSessions(TARGET_TRADING_DATE, historySessionCount);
+  const ACTIVE_WINDOW_DATES = HISTORICAL_DATES.slice(-DOWNLOAD_WINDOW_SESSIONS);
 
   logger.log('================================================================');
   logger.log(` MACHII BAZZAR — STOCK UNIVERSE SYNCHRONIZATION (v${PIPELINE_VERSION})`);
@@ -344,7 +365,7 @@ async function syncUniverse(options = {}) {
     storageClient: skipStorage ? null : storageClient
   });
 
-  const { mergedStocks, rankingResult, counts } = mergeExchangeUniverse({
+  const { mergedStocks, rankingResult, populatedHistoricalDates, priceHistoryByIsin, counts } = mergeExchangeUniverse({
     targetDate: TARGET_TRADING_DATE,
     nseRaw,
     bseRaw,
@@ -352,6 +373,7 @@ async function syncUniverse(options = {}) {
     historicalDates: HISTORICAL_DATES,
     marketCapSources,
     previousUniverseByIsin,
+    previousHistoryDataset: remoteHistoryDataset || null,
     nse52Week,
     bse52Week,
     fetchStartTime
@@ -413,6 +435,18 @@ async function syncUniverse(options = {}) {
 
   const nseFileStat = fs.statSync(nseTodayFile);
   const bseFileStat = fs.statSync(bseTodayFile);
+
+  const recordedHistorySessions = Array.isArray(populatedHistoricalDates) && populatedHistoricalDates.length > 0
+    ? populatedHistoricalDates
+    : [...ACTIVE_WINDOW_DATES];
+
+  const compactHistoryDataset = buildCompactHistoryPayload({
+    sessions: recordedHistorySessions,
+    priceHistoryByIsin,
+    tradingDate: TARGET_TRADING_DATE,
+    refreshedAtUtc: compileTime.toISOString(),
+    maxSessions: historySessionCount
+  });
 
   const marketStats = {
     tradingDate: TARGET_TRADING_DATE,
@@ -520,13 +554,25 @@ async function syncUniverse(options = {}) {
     near52WeekHighTradingDate: near52SurveyedCount > 0 ? TARGET_TRADING_DATE : null,
     near52WeekHighExchangeTimestamp: null,
     near52WeekHighStatus: near52SourceStatus,
-    historicalSessions: {
-      sessionCount: HISTORICAL_DATES.length,
-      startDate: HISTORICAL_DATES[0],
-      endDate: HISTORICAL_DATES[HISTORICAL_DATES.length - 1],
-      sessions: [...HISTORICAL_DATES],
-      methodology: `Chronological EOD closing prices across ${HISTORICAL_DATES.length} consecutive verified trading sessions (${HISTORICAL_DATES[0]} to ${HISTORICAL_DATES[HISTORICAL_DATES.length - 1]}). 1-Week return is computed from Session 1 close to Session ${HISTORICAL_DATES.length} close.`
-    },
+    historicalSessions: (() => {
+      const recordedSessions = Array.isArray(populatedHistoricalDates) && populatedHistoricalDates.length > 0
+        ? populatedHistoricalDates
+        : [...ACTIVE_WINDOW_DATES];
+      return {
+        maxSessions: historySessionCount,
+        sessionCount: recordedSessions.length,
+        startDate: recordedSessions[0],
+        endDate: recordedSessions[recordedSessions.length - 1],
+        sessions: recordedSessions,
+        activeWindowSessions: [...ACTIVE_WINDOW_DATES],
+        returnWindows: {
+          oneWeek: RETURN_WINDOW_1W_SESSIONS,
+          oneMonth: RETURN_WINDOW_1M_SESSIONS,
+          threeMonth: RETURN_WINDOW_3M_SESSIONS
+        },
+        methodology: `Chronological EOD closing prices across up to ${historySessionCount} consecutive verified trading sessions (${recordedSessions[0]} to ${recordedSessions[recordedSessions.length - 1]}; ${recordedSessions.length} verified session(s) populated). 1W, ~1M, and ~3M returns use ${RETURN_WINDOW_1W_SESSIONS}, ${RETURN_WINDOW_1M_SESSIONS}, and ${RETURN_WINDOW_3M_SESSIONS} trading sessions when sufficient verified history is available.`
+      };
+    })(),
     changeLogSummary: changeLog.summary,
     changeLogFile: `downloads/universe-changes-${TARGET_TRADING_DATE}.json`,
     automationStatus: {
@@ -539,6 +585,8 @@ async function syncUniverse(options = {}) {
   const integrity = validateMergedDataset(mergedStocks, marketStats, {
     minUniverseSize: options.minUniverseSize ?? minSourceRows,
     previousCount: previousUniverseByIsin.size,
+    maxHistoricalSessions: historySessionCount,
+    historyDataset: compactHistoryDataset,
     force
   });
 
@@ -568,6 +616,8 @@ async function syncUniverse(options = {}) {
     storageResult = await storageClient.publishDatasetToStorage(marketStats, mergedStocks, {
       allowDowngrade,
       force,
+      historicalDataset: compactHistoryDataset,
+      maxHistoricalSessions: historySessionCount,
       retentionDryRun: Boolean(options.retentionDryRun || process.argv.includes('--retention-dry-run')),
       skipRetention: Boolean(options.skipRetention)
     });
@@ -790,7 +840,7 @@ async function runRefresh(options = {}) {
         });
         stored = downloader.inspectStoredSessions();
       } else {
-        const windowSessions = getRecentTradingSessions(targetDate, 6);
+        const windowSessions = getRecentTradingSessions(targetDate, DOWNLOAD_WINDOW_SESSIONS);
         for (const histDate of windowSessions.slice(0, -1)) {
           await downloader.downloadSession(histDate, { includeSupplementary: false });
         }
@@ -895,6 +945,7 @@ async function runRefresh(options = {}) {
       storageClient,
       minSourceRows: options.minSourceRows,
       minUniverseSize: options.minUniverseSize,
+      historySessionCount: options.historySessionCount,
       minBytes,
       marketCapSources: options.marketCapSources,
       now

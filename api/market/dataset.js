@@ -10,7 +10,7 @@ module.exports = async function marketDatasetApi(req, res) {
   }
 
   try {
-    const { stats, storageSource, storageVersionId } = await loadMarketStatsAsync();
+    const { stats, manifest, storageSource, storageVersionId } = await loadMarketStatsAsync();
     if (!stats) {
       return res.status(404).json({ ok: false, error: 'Dataset not found' });
     }
@@ -22,6 +22,7 @@ module.exports = async function marketDatasetApi(req, res) {
       freshness,
       storageSource,
       storageVersionId,
+      historicalDataset: manifest?.historicalDataset || stats?.historicalDataset || null,
       isSyncing: false
     });
   } catch (err) {

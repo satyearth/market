@@ -50,6 +50,40 @@ async function run() {
   assert.strictEqual(fund.sector, 'Financial Services');
   assert.strictEqual(fund.pe_ratio, 12.3);
   assert.strictEqual(fund.roce, 18.4);
+
+  // Corrupt benchmark placeholder ("General | Diversified" or "Specialized Sector") is bypassed cleanly via ISIN catalog
+  const fundPower = enrichFundamentalsForStock({
+    isin: 'INE245A01021',
+    symbol: 'TATAPOWER',
+    nseSymbol: 'TATAPOWER',
+    currentPrice: 400,
+    benchmark: { sector: 'Financial Services', industry: 'Specialized Sector' },
+    catalogEntry: { sector: 'Utilities', industry: 'Electric Utilities' },
+    prevStock: { sector: 'Financial Services', industry: 'Specialized Sector' }
+  });
+  assert.strictEqual(fundPower.sector, 'Power', 'Corrupted Specialized Sector benchmark must fall back to ISIN catalog Power');
+  assert.strictEqual(fundPower.industry, 'Electric Utilities');
+
+  const fundPharma = enrichFundamentalsForStock({
+    isin: 'INE168P01015',
+    symbol: 'EMCURE',
+    nseSymbol: 'EMCURE',
+    currentPrice: 1400,
+    benchmark: { sector: 'General', industry: 'Diversified' },
+    catalogEntry: { sector: 'Health Technology', industry: 'Pharmaceuticals: Major' },
+    prevStock: { sector: 'Unclassified', industry: 'Diversified' }
+  });
+  assert.strictEqual(fundPharma.sector, 'Healthcare', 'General/Unclassified benchmark must resolve via ISIN catalog');
+  assert.strictEqual(fundPharma.industry, 'Pharmaceuticals: Major');
+
+  // Ambiguous or unmapped metadata stays Unclassified (zero guessing)
+  const fundUnknown = enrichFundamentalsForStock({
+    isin: 'INE000Z99999',
+    symbol: 'UNKTEST',
+    currentPrice: 50,
+    catalogEntry: { sector: 'Miscellaneous', industry: 'Miscellaneous' }
+  });
+  assert.strictEqual(fundUnknown.sector, 'Unclassified');
 }
 
 module.exports = { name: 'enrichment.test.js', run };

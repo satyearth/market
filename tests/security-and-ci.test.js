@@ -69,6 +69,11 @@ async function run() {
     const postStocks = await httpRequest(port, '/api/stocks', 'POST');
     assert.strictEqual(postStocks.statusCode, 405);
 
+    const histMeta = await httpRequest(port, '/api/market/history', 'GET');
+    assert.strictEqual(histMeta.statusCode, 200);
+    const postHist = await httpRequest(port, '/api/market/history', 'POST');
+    assert.strictEqual(postHist.statusCode, 405);
+
     const getRefresh = await httpRequest(port, '/api/market/refresh', 'GET');
     assert.strictEqual(getRefresh.statusCode, 405);
   } finally {

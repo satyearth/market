@@ -62,10 +62,12 @@ const {
 } = require('./sync-stock-universe');
 const { runRefresh } = require('./refresh');
 const { createStorageClient, isSafeDatasetPrunePath } = require('../lib/dataset-storage');
+const { expandHistoricalPricesForIsin } = require('../src/storage/historical-store');
 const {
   loadDatasetAsync,
   loadMarketStatsAsync,
   queryStocksAsync,
+  queryStockHistoryAsync,
   resetCacheForTests
 } = require('../lib/stocks-query');
 
@@ -1461,10 +1463,10 @@ async function runAll() {
     return [...store.keys()].filter(k => k.startsWith(`datasets/${dateStr}/`)).sort();
   }
 
-  const consecutiveSessions32 = cal.getRecentTradingSessions('2026-12-24', 32);
+  const consecutiveSessions92 = cal.getRecentTradingSessions('2026-12-24', 92);
 
-  // 25. Retention: exactly 30 distinct trading sessions retained with zero deletions
-  await runTest('25. Retention: 30 distinct trading sessions retained without deletions', async () => {
+  // 25. Retention: exactly 90 distinct trading sessions retained with zero deletions
+  await runTest('25. Retention: 90 distinct trading sessions retained without deletions', async () => {
     const mock = makeMockSupabaseHttp();
     const storage = createStorageClient({
       url: 'https://mock.supabase.co',
@@ -1474,23 +1476,24 @@ async function runAll() {
       sleep: async () => {}
     });
 
-    const first30 = consecutiveSessions32.slice(0, 30);
+    const first90 = consecutiveSessions92.slice(0, 90);
     let lastRes = null;
-    for (let i = 0; i < first30.length; i++) {
-      const { stats, stocks } = makeSamplePublishData(first30[i], 1300 + i);
+    for (let i = 0; i < first90.length; i++) {
+      const { stats, stocks } = makeSamplePublishData(first90[i], 1300 + i);
       lastRes = await storage.publishDatasetToStorage(stats, stocks);
       assert.strictEqual(lastRes.ok, true);
     }
 
-    assert.strictEqual(mock.batchDeleteCalls.length, 0, '30 sessions must never trigger deletions');
+    assert.strictEqual(mock.batchDeleteCalls.length, 0, '90 sessions must never trigger deletions');
     assert.strictEqual(lastRes.retention.ok, true);
+    assert.strictEqual(lastRes.retention.retainSessions, 90);
     assert.strictEqual(lastRes.retention.deletedCount, 0);
-    assert.strictEqual(lastRes.retention.retainedTradingDates.length, 30);
-    assert.deepStrictEqual(listStoreDatasetDates(mock.store), first30);
+    assert.strictEqual(lastRes.retention.retainedTradingDates.length, 90);
+    assert.deepStrictEqual(listStoreDatasetDates(mock.store), first90);
   });
 
-  // 26. Retention: 31st session removes only the oldest session
-  await runTest('26. Retention: 31st trading session prunes oldest session and retains latest 30', async () => {
+  // 26. Retention: 91st session removes only the oldest session
+  await runTest('26. Retention: 91st trading session prunes oldest session and retains latest 90', async () => {
     const mock = makeMockSupabaseHttp();
     const storage = createStorageClient({
       url: 'https://mock.supabase.co',
@@ -1502,19 +1505,19 @@ async function runAll() {
 
     mock.store.set('reference/benchmark_stocks_verified.json', '{"seed":true}');
 
-    const sessions31 = consecutiveSessions32.slice(0, 31);
+    const sessions91 = consecutiveSessions92.slice(0, 91);
     let lastRes = null;
-    for (let i = 0; i < sessions31.length; i++) {
-      const { stats, stocks } = makeSamplePublishData(sessions31[i], 1300 + i);
+    for (let i = 0; i < sessions91.length; i++) {
+      const { stats, stocks } = makeSamplePublishData(sessions91[i], 1300 + i);
       lastRes = await storage.publishDatasetToStorage(stats, stocks);
       assert.strictEqual(lastRes.ok, true);
     }
 
     assert.strictEqual(lastRes.retention.ok, true);
-    assert.deepStrictEqual(lastRes.retention.expiredTradingDates, [sessions31[0]]);
+    assert.deepStrictEqual(lastRes.retention.expiredTradingDates, [sessions91[0]]);
     assert.strictEqual(lastRes.retention.deletedCount, 1);
-    assert.strictEqual(lastRes.retention.retainedTradingDates.length, 30);
-    assert.deepStrictEqual(listStoreDatasetDates(mock.store), sessions31.slice(1));
+    assert.strictEqual(lastRes.retention.retainedTradingDates.length, 90);
+    assert.deepStrictEqual(listStoreDatasetDates(mock.store), sessions91.slice(1));
     assert(mock.store.has('latest.json'), 'latest.json must never be deleted');
     assert(mock.store.has('reference/benchmark_stocks_verified.json'), 'reference/ objects must never be deleted');
   });
@@ -1530,8 +1533,8 @@ async function runAll() {
       sleep: async () => {}
     });
 
-    // Publish session 0 three separate times (3 versions on day 1), then sessions 1..29 (total 30 distinct sessions)
-    const d0 = consecutiveSessions32[0];
+    // Publish session 0 three separate times (3 versions on day 1), then sessions 1..89 (total 90 distinct sessions)
+    const d0 = consecutiveSessions92[0];
     for (const h of ['12-00-00-000Z', '13-00-00-000Z', '14-00-00-000Z']) {
       const { stats, stocks } = makeSamplePublishData(d0, 1300, h);
       const res = await storage.publishDatasetToStorage(stats, stocks);
@@ -1539,22 +1542,22 @@ async function runAll() {
     }
     assert.strictEqual(listStoreDatasetPathsForDate(mock.store, d0).length, 3);
 
-    for (let i = 1; i < 30; i++) {
-      const { stats, stocks } = makeSamplePublishData(consecutiveSessions32[i], 1300 + i);
+    for (let i = 1; i < 90; i++) {
+      const { stats, stocks } = makeSamplePublishData(consecutiveSessions92[i], 1300 + i);
       const res = await storage.publishDatasetToStorage(stats, stocks);
       assert.strictEqual(res.ok, true);
-      assert.strictEqual(res.retention.deletedCount, 0, 'Duplicate versions on day 0 must still count as only 30 distinct sessions');
+      assert.strictEqual(res.retention.deletedCount, 0, 'Duplicate versions on day 0 must still count as only 90 distinct sessions');
     }
-    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, d0).length, 3, 'All 3 versions kept while within 30 distinct trading dates');
+    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, d0).length, 3, 'All 3 versions kept while within 90 distinct trading dates');
 
-    // Now publish 31st distinct session -> all 3 obsolete versions belonging to d0 must be removed
-    const { stats, stocks } = makeSamplePublishData(consecutiveSessions32[30], 1400);
-    const res31 = await storage.publishDatasetToStorage(stats, stocks);
-    assert.strictEqual(res31.ok, true);
-    assert.strictEqual(res31.retention.ok, true);
-    assert.strictEqual(res31.retention.deletedCount, 3, 'All 3 obsolete versions of expired session d0 must be pruned');
+    // Now publish 91st distinct session -> all 3 obsolete versions belonging to d0 must be removed
+    const { stats, stocks } = makeSamplePublishData(consecutiveSessions92[90], 1400);
+    const res91 = await storage.publishDatasetToStorage(stats, stocks);
+    assert.strictEqual(res91.ok, true);
+    assert.strictEqual(res91.retention.ok, true);
+    assert.strictEqual(res91.retention.deletedCount, 3, 'All 3 obsolete versions of expired session d0 must be pruned');
     assert.strictEqual(listStoreDatasetPathsForDate(mock.store, d0).length, 0);
-    assert.strictEqual(listStoreDatasetDates(mock.store).length, 30);
+    assert.strictEqual(listStoreDatasetDates(mock.store).length, 90);
   });
 
   // 28. Retention: failed publication triggers zero deletions and failed refreshes never count as retained sessions
@@ -1584,41 +1587,41 @@ async function runAll() {
       maxRetries: 1
     });
 
-    // Publish 29 sessions cleanly, attempt 1 failed session (checksum mismatch on session 29 index), then publish session 30
-    for (let i = 0; i < 29; i++) {
-      const { stats, stocks } = makeSamplePublishData(consecutiveSessions32[i], 1300 + i);
+    // Publish 89 sessions cleanly, attempt 1 failed session (checksum mismatch on session index 89), then publish session index 90
+    for (let i = 0; i < 89; i++) {
+      const { stats, stocks } = makeSamplePublishData(consecutiveSessions92[i], 1300 + i);
       assert.strictEqual((await storage.publishDatasetToStorage(stats, stocks)).ok, true);
     }
 
-    // Attempt failed checksum publish on consecutiveSessions32[29] -> Phase 1 uploaded file, Phase 2 failed
-    corruptChecksumOn = consecutiveSessions32[29];
+    // Attempt failed checksum publish on consecutiveSessions92[89] -> Phase 1 uploaded file, Phase 2 failed
+    corruptChecksumOn = consecutiveSessions92[89];
     const failedChecksumRes = await storage.publishDatasetToStorage(
-      makeSamplePublishData(consecutiveSessions32[29], 1350).stats,
-      makeSamplePublishData(consecutiveSessions32[29], 1350).stocks
+      makeSamplePublishData(consecutiveSessions92[89], 1350).stats,
+      makeSamplePublishData(consecutiveSessions92[89], 1350).stocks
     );
     assert.strictEqual(failedChecksumRes.ok, false);
     assert.strictEqual(failedChecksumRes.phase, 'verify_checksum');
     assert.strictEqual(mock.batchDeleteCalls.length, 0, 'Failed publication must perform zero deletions');
     corruptChecksumOn = null;
 
-    // Publish 30th actual session on consecutiveSessions32[30] -> total distinct successful sessions = 30
-    // (failed consecutiveSessions32[29] orphan still sits under datasets/ but MUST NOT count toward the 30!)
-    const ok30 = await storage.publishDatasetToStorage(
-      makeSamplePublishData(consecutiveSessions32[30], 1360).stats,
-      makeSamplePublishData(consecutiveSessions32[30], 1360).stocks
+    // Publish 90th actual session on consecutiveSessions92[90] -> total distinct successful sessions = 90
+    // (failed consecutiveSessions92[89] orphan still sits under datasets/ but MUST NOT count toward the 90!)
+    const ok90 = await storage.publishDatasetToStorage(
+      makeSamplePublishData(consecutiveSessions92[90], 1360).stats,
+      makeSamplePublishData(consecutiveSessions92[90], 1360).stocks
     );
-    assert.strictEqual(ok30.ok, true);
-    assert.strictEqual(ok30.retention.deletedCount, 0, 'Failed refresh artifact must not steal a slot or trigger pruning');
-    assert(ok30.retention.ignoredUnpublishedOrFailedDates.includes(consecutiveSessions32[29]));
-    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, consecutiveSessions32[0]).length, 1);
+    assert.strictEqual(ok90.ok, true);
+    assert.strictEqual(ok90.retention.deletedCount, 0, 'Failed refresh artifact must not steal a slot or trigger pruning');
+    assert(ok90.retention.ignoredUnpublishedOrFailedDates.includes(consecutiveSessions92[89]));
+    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, consecutiveSessions92[0]).length, 1);
 
-    // Even with 30 successful sessions + 1 future failed pointer swap on consecutiveSessions32[31], zero deletions occur
+    // Even with 90 successful sessions + 1 future failed pointer swap on consecutiveSessions92[91], zero deletions occur
     failOnUpload = true;
     const latestSnapshotBefore = mock.store.get('latest.json');
     const batchesBefore = mock.batchDeleteCalls.length;
     const failedSwapRes = await storage.publishDatasetToStorage(
-      makeSamplePublishData(consecutiveSessions32[31], 1370).stats,
-      makeSamplePublishData(consecutiveSessions32[31], 1370).stocks
+      makeSamplePublishData(consecutiveSessions92[91], 1370).stats,
+      makeSamplePublishData(consecutiveSessions92[91], 1370).stocks
     );
     assert.strictEqual(failedSwapRes.ok, false);
     assert.strictEqual(failedSwapRes.phase, 'swap_pointer');
@@ -1646,14 +1649,14 @@ async function runAll() {
     mock.store.set('locks/manual.lock.json', '{"ownerId":"x"}');
     mock.store.set('reference/seed.json', '{"ok":true}');
 
-    // Publish 30 sessions so sessions[0] would normally expire once session[30] arrives
-    for (let i = 0; i < 31; i++) {
-      const { stats, stocks } = makeSamplePublishData(consecutiveSessions32[i], 1300 + i);
+    // Publish 91 sessions so sessions[0] would normally expire once session[90] arrives
+    for (let i = 0; i < 91; i++) {
+      const { stats, stocks } = makeSamplePublishData(consecutiveSessions92[i], 1300 + i);
       await storage.publishDatasetToStorage(stats, stocks, { skipRetention: true });
     }
 
     // Add a duplicate obsolete file on sessions[0], then manipulate latest.json so previousVersion points inside expired sessions[0]
-    const oldestDate = consecutiveSessions32[0];
+    const oldestDate = consecutiveSessions92[0];
     const latestManifest = JSON.parse(mock.store.get('latest.json'));
     const oldestProtectedPath = listStoreDatasetPathsForDate(mock.store, oldestDate)[0];
     const oldestExtraObsolete = `datasets/${oldestDate}/stocks-dataset-${oldestDate}-obsolete-extra.json`;
@@ -1669,7 +1672,7 @@ async function runAll() {
     const pruneRes = await storage.pruneOldDatasets();
     assert.strictEqual(pruneRes.ok, true);
     assert(mock.store.has(latestManifest.datasetPath), 'Current latest dataset must stay intact');
-    assert(mock.store.has(oldestProtectedPath), 'previousVersion referenced by latest.json must NEVER be deleted even if older than 30 sessions');
+    assert(mock.store.has(oldestProtectedPath), 'previousVersion referenced by latest.json must NEVER be deleted even if older than 90 sessions');
     assert(!mock.store.has(oldestExtraObsolete), 'Unprotected extra file in expired session IS deleted');
     assert(mock.store.has('latest.json'));
     assert(mock.store.has('locks/manual.lock.json'));
@@ -1677,7 +1680,7 @@ async function runAll() {
   });
 
   // 30. Retention: weekends and exchange holidays do not count as trading sessions
-  await runTest('30. Retention: weekends and exchange holidays do not count toward 30 trading sessions', async () => {
+  await runTest('30. Retention: weekends and exchange holidays do not count toward 90 trading sessions', async () => {
     const mock = makeMockSupabaseHttp();
     const storage = createStorageClient({
       url: 'https://mock.supabase.co',
@@ -1687,13 +1690,13 @@ async function runAll() {
       sleep: async () => {}
     });
 
-    // Inject non-trading weekend & 2026 holiday folders into storage alongside 30 real trading sessions
-    // (Wait: include Muhurat Sunday 2026-11-08 which IS a trading session, inside 30 real sessions!)
-    const first30WithMuhurat = cal.getRecentTradingSessions('2026-12-10', 30);
-    assert(first30WithMuhurat.includes('2026-11-08'), 'Sanity check: 30-session slice includes Nov 8 Muhurat trading session');
+    // Inject non-trading weekend & 2026 holiday folders into storage alongside 90 real trading sessions
+    // (Include Muhurat Sunday 2026-11-08 which IS a trading session, inside 90 real sessions!)
+    const first90WithMuhurat = cal.getRecentTradingSessions('2026-12-10', 90);
+    assert(first90WithMuhurat.includes('2026-11-08'), 'Sanity check: 90-session slice includes Nov 8 Muhurat trading session');
 
-    for (let i = 0; i < first30WithMuhurat.length; i++) {
-      const dt = first30WithMuhurat[i];
+    for (let i = 0; i < first90WithMuhurat.length; i++) {
+      const dt = first90WithMuhurat[i];
       const { stats, stocks } = makeSamplePublishData(dt, 1300 + i);
       const res = await storage.publishDatasetToStorage(stats, stocks, { skipRetention: true });
       assert.strictEqual(res.ok, true);
@@ -1705,23 +1708,23 @@ async function runAll() {
     mock.store.set('datasets/2026-11-22/stocks-dataset-2026-11-22-12-00-00.json', '{"weekend":true}');
     mock.store.set('datasets/2026-11-24/stocks-dataset-2026-11-24-12-00-00.json', '{"holiday":true}');
 
-    const prune30 = await storage.pruneOldDatasets();
-    assert.strictEqual(prune30.ok, true);
-    assert.strictEqual(prune30.totalSuccessfulSessions, 30, 'Only 30 real trading dates count (Muhurat Sun included; holidays/regular weekends excluded)');
-    assert.strictEqual(prune30.deletedCount, 0, 'Holidays/weekends must NOT push the 30th trading session out');
-    assert(prune30.ignoredNonTradingDates.includes('2026-11-10'));
-    assert(prune30.ignoredNonTradingDates.includes('2026-11-21'));
-    assert(prune30.ignoredNonTradingDates.includes('2026-11-24'));
-    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, first30WithMuhurat[0]).length, 1);
+    const prune90 = await storage.pruneOldDatasets();
+    assert.strictEqual(prune90.ok, true);
+    assert.strictEqual(prune90.totalSuccessfulSessions, 90, 'Only 90 real trading dates count (Muhurat Sun included; holidays/regular weekends excluded)');
+    assert.strictEqual(prune90.deletedCount, 0, 'Holidays/weekends must NOT push the 90th trading session out');
+    assert(prune90.ignoredNonTradingDates.includes('2026-11-10'));
+    assert(prune90.ignoredNonTradingDates.includes('2026-11-21'));
+    assert(prune90.ignoredNonTradingDates.includes('2026-11-24'));
+    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, first90WithMuhurat[0]).length, 1);
 
-    // Publish 31st valid trading session -> oldest real trading session IS deleted while 30 valid sessions stay
+    // Publish 91st valid trading session -> oldest real trading session IS deleted while 90 valid sessions stay
     const nextSession = '2026-12-11';
     const { stats, stocks } = makeSamplePublishData(nextSession, 1400);
-    const res31 = await storage.publishDatasetToStorage(stats, stocks);
-    assert.strictEqual(res31.ok, true);
-    assert.strictEqual(res31.retention.deletedCount, 1);
-    assert.deepStrictEqual(res31.retention.expiredTradingDates, [first30WithMuhurat[0]]);
-    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, first30WithMuhurat[0]).length, 0);
+    const res91 = await storage.publishDatasetToStorage(stats, stocks);
+    assert.strictEqual(res91.ok, true);
+    assert.strictEqual(res91.retention.deletedCount, 1);
+    assert.deepStrictEqual(res91.retention.expiredTradingDates, [first90WithMuhurat[0]]);
+    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, first90WithMuhurat[0]).length, 0);
   });
 
   // 31. Retention: failed cleanup preserves newly published latest dataset and can be safely retried idempotently
@@ -1744,34 +1747,34 @@ async function runAll() {
       maxRetries: 1
     });
 
-    for (let i = 0; i < 30; i++) {
-      const { stats, stocks } = makeSamplePublishData(consecutiveSessions32[i], 1300 + i);
+    for (let i = 0; i < 90; i++) {
+      const { stats, stocks } = makeSamplePublishData(consecutiveSessions92[i], 1300 + i);
       assert.strictEqual((await storage.publishDatasetToStorage(stats, stocks)).ok, true);
     }
 
     failDeletes = true;
-    const day31 = consecutiveSessions32[30];
-    const pub31 = await storage.publishDatasetToStorage(
-      makeSamplePublishData(day31, 1555).stats,
-      makeSamplePublishData(day31, 1555).stocks
+    const day91 = consecutiveSessions92[90];
+    const pub91 = await storage.publishDatasetToStorage(
+      makeSamplePublishData(day91, 1555).stats,
+      makeSamplePublishData(day91, 1555).stocks
     );
 
     // Publish must STILL succeed and expose latest dataset, while reporting retention failure separately
-    assert.strictEqual(pub31.ok, true, 'Cleanup error must NOT fail the already-swapped publish');
-    assert.strictEqual(pub31.retention.ok, false, 'Retention failure must be reported clearly');
-    assert(pub31.retention.error.includes('500'));
+    assert.strictEqual(pub91.ok, true, 'Cleanup error must NOT fail the already-swapped publish');
+    assert.strictEqual(pub91.retention.ok, false, 'Retention failure must be reported clearly');
+    assert(pub91.retention.error.includes('500'));
     const liveLatest = await storage.fetchLatestDataset();
     assert.strictEqual(liveLatest.ok, true);
-    assert.strictEqual(liveLatest.manifest.tradingDate, day31);
+    assert.strictEqual(liveLatest.manifest.tradingDate, day91);
     assert.strictEqual(liveLatest.stocks[0].current_price, 1555);
-    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, consecutiveSessions32[0]).length, 1);
+    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, consecutiveSessions92[0]).length, 1);
 
     // Clear storage fault & retry cleanup -> completes deletion and second retry is idempotent no-op
     failDeletes = false;
     const retry1 = await storage.pruneOldDatasets();
     assert.strictEqual(retry1.ok, true);
     assert.strictEqual(retry1.deletedCount, 1);
-    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, consecutiveSessions32[0]).length, 0);
+    assert.strictEqual(listStoreDatasetPathsForDate(mock.store, consecutiveSessions92[0]).length, 0);
 
     const retry2 = await storage.pruneOldDatasets();
     assert.strictEqual(retry2.ok, true);
@@ -1789,26 +1792,239 @@ async function runAll() {
       sleep: async () => {}
     });
 
-    for (let i = 0; i < 32; i++) {
-      const { stats, stocks } = makeSamplePublishData(consecutiveSessions32[i], 1300 + i);
+    for (let i = 0; i < 92; i++) {
+      const { stats, stocks } = makeSamplePublishData(consecutiveSessions92[i], 1300 + i);
       assert.strictEqual((await storage.publishDatasetToStorage(stats, stocks, { skipRetention: true })).ok, true);
     }
-    assert.strictEqual(listStoreDatasetDates(mock.store).length, 32);
+    assert.strictEqual(listStoreDatasetDates(mock.store).length, 92);
 
     const dry = await storage.pruneOldDatasets({ dryRun: true });
     assert.strictEqual(dry.ok, true);
     assert.strictEqual(dry.dryRun, true);
     assert.strictEqual(dry.deletedCount, 0);
-    assert.deepStrictEqual(dry.expiredTradingDates, [consecutiveSessions32[0], consecutiveSessions32[1]]);
+    assert.deepStrictEqual(dry.expiredTradingDates, [consecutiveSessions92[0], consecutiveSessions92[1]]);
     assert.strictEqual(dry.plannedDeletions.length, 2);
     assert.strictEqual(mock.batchDeleteCalls.length, 0, 'Dry-run must send zero DELETE requests');
-    assert.strictEqual(listStoreDatasetDates(mock.store).length, 32, 'All 32 dates must remain untouched after dry-run');
+    assert.strictEqual(listStoreDatasetDates(mock.store).length, 92, 'All 92 dates must remain untouched after dry-run');
 
     const actual = await storage.pruneOldDatasets({ dryRun: false });
     assert.strictEqual(actual.ok, true);
     assert.strictEqual(actual.deletedCount, 2);
     assert.deepStrictEqual(actual.deletedPaths, dry.plannedDeletions);
-    assert.strictEqual(listStoreDatasetDates(mock.store).length, 30);
+    assert.strictEqual(listStoreDatasetDates(mock.store).length, 90);
+  });
+
+  // 33. Cold runner accumulates up to 90-session per-stock history via Supabase carryover & computes 1W/1M/3M returns
+  await runTest('33. Cold runner preserves 90-session per-stock history via Supabase carryover & computes 1W/1M/3M returns', async () => {
+    const ws = makeTempWorkspace('mb-90hist-');
+    try {
+      const mock = makeMockSupabaseHttp();
+      const storage = createStorageClient({
+        url: 'https://mock.supabase.co',
+        serviceKey: 'mock-service-key',
+        bucket: 'test-bucket',
+        httpRequest: mock.httpRequest,
+        sleep: async () => {}
+      });
+
+      const sessions90 = consecutiveSessions92.slice(0, 90);
+      const day89 = sessions90[88];
+      const day90 = sessions90[89];
+
+      // Build 89-session prior dataset in Supabase with deterministic closes:
+      // pos 65 from end (index 24) = 200, pos 21 from end (index 68) = 250, pos 5 from end (index 84) = 300
+      const baseStocks = Array.from({ length: 10 }, (_, idx) => {
+        const isin = idx === 0 ? 'INE002A01018' : `INE000A000${String(idx).padStart(2, '0')}`;
+        const sym = idx === 0 ? 'RELIANCE' : `SYM${idx}`;
+        const hist = sessions90.slice(0, 89).map((dt, j) => {
+          let close = 150 + idx;
+          if (idx === 0) {
+            if (j === 24) close = 200;
+            else if (j === 68) close = 250;
+            else if (j === 84) close = 300;
+            else close = 180 + (j % 10);
+          }
+          return { date: dt, close };
+        });
+        return {
+          isin,
+          symbol: sym,
+          company_name: `${sym} Limited`,
+          exchanges: ['NSE', 'BSE'],
+          segment: 'Mainboard',
+          series: 'EQ',
+          current_price: hist[hist.length - 1].close,
+          close_price: hist[hist.length - 1].close,
+          prev_close: hist[hist.length - 2].close,
+          volume: 1000,
+          market_cap_cr: 10000 - idx * 100,
+          trading_date: day89,
+          historical_prices: hist
+        };
+      });
+
+      const seedStats = {
+        tradingDate: day89,
+        nseSourceDate: day89,
+        bseSourceDate: day89,
+        refreshedAtUtc: `${day89}T12:00:00.000Z`,
+        istDisplayTime: `${day89} IST`,
+        stockCount: baseStocks.length,
+        totalStocks: baseStocks.length
+      };
+      const firstPub = await storage.publishDatasetToStorage(seedStats, baseStocks, { skipRetention: true });
+      assert.strictEqual(firstPub.ok, true);
+
+      // Cold runner only downloads trailing 6 sessions (indices 84..89) for day90
+      const downloader = createDownloader({
+        downloadsDir: ws.downloadsDir,
+        minNseRows: 10,
+        minBseRows: 10,
+        minBytes: 200,
+        rateLimitMs: 0,
+        sleep: async () => {},
+        logger: silentLogger,
+        httpGet: async (url) => {
+          const matchedDate = sessions90.slice(-6).find(d => url.includes(d.replace(/-/g, '')));
+          if (matchedDate) {
+            const jIdx = sessions90.indexOf(matchedDate);
+            const relPrice = matchedDate === day90 ? 330 : (jIdx === 84 ? 300 : 305);
+            const buildWithCustomRel = (ex) => {
+              const csv = buildBhavcopyCsv(ex, matchedDate);
+              return csv.replace(
+                /1300\.00,1325\.00,1295\.00,1320\.00,1320\.00,1310\.00,,1320\.00/,
+                `${relPrice},${relPrice + 5},${relPrice - 5},${relPrice},${relPrice},${relPrice - 2},,${relPrice}`
+              );
+            };
+            if (url.includes('BhavCopy_NSE_CM') && url.endsWith('.zip')) {
+              return { ok: true, statusCode: 200, headers: { 'content-type': 'application/zip' }, buffer: buildZipBuffer(getNseFilename(matchedDate), buildWithCustomRel('NSE')) };
+            }
+            if (url.includes('BhavCopy_BSE_CM')) {
+              return { ok: true, statusCode: 200, headers: { 'content-type': 'application/octet-stream' }, buffer: Buffer.from(buildWithCustomRel('BSE')) };
+            }
+          }
+          return { ok: false, statusCode: 404, headers: {}, buffer: Buffer.alloc(0) };
+        }
+      });
+
+      const refreshOut = await runRefresh({
+        downloadsDir: ws.downloadsDir,
+        targetPath: ws.targetPath,
+        backupPath: ws.backupPath,
+        downloader,
+        storageClient: storage,
+        minRows: 10,
+        minBytes: 200,
+        minSourceRows: 10,
+        minUniverseSize: 10,
+        skipReport: true,
+        marketCapSources: emptyMcapSources,
+        now: new Date(`${day90}T20:00:00+05:30`),
+        logger: silentLogger
+      });
+
+      assert.strictEqual(refreshOut.ok, true);
+      assert.strictEqual(refreshOut.tradingDate, day90);
+      assert.strictEqual(refreshOut.marketStats.historicalSessions.sessionCount, 90);
+      assert.strictEqual(refreshOut.marketStats.historicalSessions.maxSessions, 90);
+
+      const latestAfter = await storage.fetchLatestDataset();
+      assert.strictEqual(latestAfter.ok, true);
+      const relDaily = latestAfter.stocks.find(s => s.isin === 'INE002A01018');
+      assert.strictEqual(relDaily.historical_prices, undefined, 'Daily snapshot in storage must NOT duplicate 90-session historical_prices');
+      assert.strictEqual(relDaily.sparkline_7d.length, 6);
+      assert.strictEqual(relDaily.return_1w, 10, '300 -> 330 over 6 sessions = +10%');
+      assert.strictEqual(relDaily.return_1m, 32, '250 -> 330 over 22 sessions = +32%');
+      assert.strictEqual(relDaily.return_3m, 65, '200 -> 330 over 66 sessions = +65%');
+
+      const histAfter = await storage.fetchHistoricalDataset(latestAfter.manifest);
+      assert.strictEqual(histAfter.ok, true);
+      const relExpanded = expandHistoricalPricesForIsin(histAfter.history, 'INE002A01018');
+      assert.strictEqual(relExpanded.length, 90);
+      assert.strictEqual(relExpanded[0].date, sessions90[0]);
+      assert.strictEqual(relExpanded[89].date, day90);
+      assert.strictEqual(relExpanded[89].close, 330);
+
+      // Verify read-only query layer hydrates historical_prices cleanly for stock details & /api/market/history
+      resetCacheForTests();
+      const apiDetail = await queryStocksAsync({ isin: 'INE002A01018', limit: '1' }, { storageClient: storage });
+      assert.strictEqual(apiDetail.ok, true);
+      assert.strictEqual(apiDetail.stocks[0].historical_prices.length, 90);
+      const apiHistory = await queryStockHistoryAsync({ isin: 'INE002A01018' }, { storageClient: storage });
+      assert.strictEqual(apiHistory.ok, true);
+      assert.strictEqual(apiHistory.sessionCount, 90);
+      assert.strictEqual(apiHistory.historical_prices[89].close, 330);
+      resetCacheForTests();
+    } finally {
+      ws.cleanup();
+    }
+  });
+
+  // 34. Incremental daily history updates, duplicate prevention, rolling history cleanup & illiquid gaps
+  await runTest('34. Incremental history updates, duplicate reuse, illiquid null preservation & failure-safe cleanup', async () => {
+    const mock = makeMockSupabaseHttp();
+    const storage = createStorageClient({
+      url: 'https://mock.supabase.co',
+      serviceKey: 'mock-service-key',
+      bucket: 'test-bucket',
+      httpRequest: mock.httpRequest,
+      sleep: async () => {}
+    });
+
+    const sess4 = consecutiveSessions92.slice(0, 4);
+    for (let idx = 0; idx < 3; idx++) {
+      const dt = sess4[idx];
+      const histRel = sess4.slice(0, idx + 1).map((d, j) => ({ date: d, close: 100 + j }));
+      const stocks = [
+        {
+          isin: 'INE002A01018',
+          symbol: 'RELIANCE',
+          company_name: 'Reliance Industries Ltd',
+          current_price: 100 + idx,
+          exchanges: ['NSE', 'BSE'],
+          trading_date: dt,
+          historical_prices: histRel
+        },
+        {
+          // Illiquid equity skipped sess4[1] intentionally (gap preserved, never fabricated)
+          isin: 'INE000A00099',
+          symbol: 'ILLIQ',
+          company_name: 'Illiquid Co Ltd',
+          current_price: 50,
+          exchanges: ['BSE'],
+          trading_date: dt,
+          historical_prices: idx === 0
+            ? [{ date: sess4[0], close: 50 }]
+            : [{ date: sess4[0], close: 50 }, { date: sess4[idx], close: 50 }]
+        }
+      ];
+      const stats = {
+        tradingDate: dt,
+        nseSourceDate: dt,
+        bseSourceDate: dt,
+        refreshedAtUtc: `${dt}T15:00:00.000Z`,
+        istDisplayTime: `${dt} 20:30:00 IST`,
+        stockCount: 2,
+        totalStocks: 2
+      };
+      const pub = await storage.publishDatasetToStorage(stats, stocks, {
+        retainSessions: 90,
+        retainHistorySessions: 2
+      });
+      assert.strictEqual(pub.ok, true);
+    }
+
+    // Only 2 history versions remain after 3 publishes with retainHistorySessions: 2, while all 3 daily datasets remain
+    const historyKeys = [...mock.store.keys()].filter(k => k.startsWith('history/'));
+    const datasetKeys = [...mock.store.keys()].filter(k => k.startsWith('datasets/'));
+    assert.strictEqual(datasetKeys.length, 3, 'All 3 daily snapshots stay within 90-session limit');
+    assert.strictEqual(historyKeys.length, 2, 'Oldest history snapshot pruned while keeping active + previousVersion');
+    assert.ok(!historyKeys.some(k => k.includes(sess4[0])));
+
+    const latestHist = await storage.fetchHistoricalDataset();
+    assert.strictEqual(latestHist.ok, true);
+    const illiqPrices = expandHistoricalPricesForIsin(latestHist.history, 'INE000A00099');
+    assert.strictEqual(illiqPrices.length, 2, 'Missing middle day must remain null and never be fabricated');
   });
 
   console.log('\n================================================================');

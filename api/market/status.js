@@ -10,7 +10,7 @@ module.exports = async function marketStatusApi(req, res) {
   }
 
   try {
-    const { stats, storageSource, storageVersionId } = await loadMarketStatsAsync();
+    const { stats, manifest, storageSource, storageVersionId } = await loadMarketStatsAsync();
     const currentTradingDate = stats?.tradingDate || null;
     const freshness = checkSessionFreshness(currentTradingDate);
     const marketCalendar = getLatestExpectedTradingDate();
@@ -28,6 +28,7 @@ module.exports = async function marketStatusApi(req, res) {
       pipelineVersion: stats?.pipelineVersion || null,
       storageSource,
       storageVersionId,
+      historicalDataset: manifest?.historicalDataset || stats?.historicalDataset || null,
       isUpToDate: freshness.isFresh,
       needsSync: freshness.needsSync,
       freshnessStatus: freshness.freshnessStatus,

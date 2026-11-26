@@ -138,16 +138,24 @@
   function renderMarketPulse() {
     if (!marketStats) return;
 
-    // Header Market Status Badge
+    // Header Market Status Badge (concise single line, no duplicate timestamp clutter)
     const badge = document.getElementById('market-status-badge');
     if (badge && marketStats.stockCount) {
       const dt = marketStats.tradingDate || 'date unavailable';
-      const istInfo = marketStats.istDisplayTime ? ` · <span class="text-ink-muted text-[11px] font-normal">Refreshed ${escapeHtml(marketStats.istDisplayTime)}</span>` : '';
-      badge.innerHTML = `Market closed · EOD <span class="text-ink-ink font-semibold">${escapeHtml(dt)}</span>${istInfo} · <span class="tabular-nums text-ink-text font-bold">${marketStats.stockCount.toLocaleString('en-IN')}</span> listed companies (NSE + BSE)`;
+      badge.innerHTML = `EOD <span class="text-ink-ink font-semibold">${escapeHtml(dt)}</span> · <span class="tabular-nums text-ink-text font-bold">${marketStats.stockCount.toLocaleString('en-IN')}</span> equities (NSE + BSE)`;
     }
     const gridTable = document.querySelector('table[role="grid"]');
     if (gridTable && marketStats.stockCount) {
       gridTable.setAttribute('aria-rowcount', String(marketStats.stockCount));
+    }
+    const histSessionCnt = Number(marketStats.historicalSessions?.sessionCount || 0);
+    const th1m = document.querySelector('th[data-col="1M"]');
+    const th3m = document.querySelector('th[data-col="3M"]');
+    if (th1m) {
+      th1m.setAttribute('title', histSessionCnt >= 22 ? '1-Month Return (22 trading sessions)' : 'Data not available yet (requires 22 trading sessions)');
+    }
+    if (th3m) {
+      th3m.setAttribute('title', histSessionCnt >= 66 ? '3-Month Return (66 trading sessions)' : 'Data not available yet (requires 66 trading sessions)');
     }
 
     // Card 1: Verified Market Cap (Explicit partial coverage note)
@@ -157,7 +165,11 @@
       if (marketStats.verifiedMarketCapCr) {
         mcapEl.innerHTML = formatMarketCap(marketStats.verifiedMarketCapCr);
         if (mcapSub) {
-          mcapSub.innerText = marketStats.marketCapCoverageNote || '5,375 Verified Equities (NSE + BSE)';
+          const cnt = marketStats.marketCapCoverageCount;
+          const pct = marketStats.marketCapCoveragePct;
+          mcapSub.innerText = cnt != null && pct != null
+            ? `${cnt.toLocaleString('en-IN')} Verified Equities · ${pct}%`
+            : (marketStats.marketCapCoverageNote || 'Verified Equities (NSE + BSE)');
         }
       } else {
         mcapEl.innerText = '—';
@@ -173,11 +185,11 @@
         vixVal.innerText = Number(marketStats.vix).toFixed(2);
         if (vixChg && marketStats.vixChangePct != null) {
           const isPos = marketStats.vixChangePct > 0;
-          vixChg.className = `font-mono text-[12px] font-semibold tabular-nums ${isPos ? 'text-ink-bearish' : 'text-ink-bullish'}`;
+          vixChg.className = `font-mono text-[11px] sm:text-[12px] font-semibold tabular-nums ${isPos ? 'text-ink-bearish' : 'text-ink-bullish'}`;
           vixChg.innerText = formatPercent(marketStats.vixChangePct);
         }
         if (vixSub && marketStats.vixDate) {
-          vixSub.innerText = `Volatility index · ${marketStats.vixDate}`;
+          vixSub.innerText = `VIX · ${marketStats.vixDate}`;
         }
       } else {
         vixVal.innerText = '—';
@@ -207,7 +219,7 @@
       if (breadthBar) breadthBar.setAttribute('aria-label', `${adv} advancing, ${dec} declining, ${unc} unchanged`);
       if (breadthSub) {
         const adRatio = marketStats.adRatio || (dec > 0 ? (adv / dec).toFixed(2) : '—');
-        breadthSub.innerText = `A/D: ${adRatio} · ${unc} Unch · ${unp} Unpriced`;
+        breadthSub.innerText = unp > 0 ? `A/D ${adRatio} · ${unc} Unch · ${unp} Unp` : `A/D ${adRatio} · ${unc} Unch`;
       }
     }
 
@@ -219,13 +231,13 @@
         nearPct.innerText = String(marketStats.near52WeekHighCount);
         if (nearSub) {
           const tradingDate = marketStats.tradingDate || 'date unavailable';
-          nearSub.innerHTML = `<span class="block">${marketStats.near52WeekHighCount.toLocaleString('en-IN')} verified BSE Group A/B equities</span><span class="block text-[10px] text-ink-faint mt-0.5">Source: BSE data (${escapeHtml(marketStats.near52WeekHighTradingDate || tradingDate)})</span>`;
+          nearSub.textContent = `BSE A/B · ${marketStats.near52WeekHighTradingDate || tradingDate}`;
           nearSub.title = `Surveyed BSE Groups A & B; ${marketStats.near52WeekHighCount} within 8% of 52W high. NSE-only and other BSE groups not included.`;
         }
       } else {
         nearPct.innerText = '—';
         if (nearSub) {
-          nearSub.innerHTML = 'No verified data for this session';
+          nearSub.textContent = 'No verified data';
           nearSub.title = '52-week high data was not verified for this trading session.';
         }
       }
@@ -364,8 +376,10 @@
       ['Daily change', stock => `<span class="${getReturnColorClass(stock.change_percent)}">${formatPercent(stock.change_percent)}</span>`],
       ['Market cap', stock => formatMarketCap(stock.market_cap_cr)],
       ['1 week return', stock => `<span class="${getReturnColorClass(stock.return_1w)}">${formatPercent(stock.return_1w)}</span>`],
+      ['1 month return', stock => `<span class="${getReturnColorClass(stock.return_1m)}">${formatPercent(stock.return_1m)}</span>`],
+      ['3 month return', stock => `<span class="${getReturnColorClass(stock.return_3m)}">${formatPercent(stock.return_3m)}</span>`],
       ['Volume', stock => escapeHtml(formatVolume(stock.volume))],
-      ['Sector', stock => escapeHtml(stock.sector || 'Unclassified')],
+      ['Sector', stock => escapeHtml((!stock.sector || String(stock.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : stock.sector)],
       ['Exchange', stock => escapeHtml((stock.exchanges || []).join(' + ') || '—')]
     ];
     content.innerHTML = `<div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Metric</th>${stocks.map(stock => `<th><span class="compare-symbol">${escapeHtml(stock.symbol || '—')}</span><span class="compare-company">${escapeHtml(stock.company_name || '')}</span></th>`).join('')}</tr></thead><tbody>${metrics.map(([label, value]) => `<tr><th scope="row">${label}</th>${stocks.map(stock => `<td>${value(stock)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="compare-data-note">End-of-day data · Missing values are shown as —</p>`;
@@ -404,12 +418,13 @@
       const sectorText = (!s.sector || String(s.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : s.sector;
       const isStarred = s.isin && watchlist.has(String(s.isin).toUpperCase());
       const isCompared = s.isin && comparisonStocks.has(String(s.isin).toUpperCase());
+      const mobileRankHtml = s.rank != null ? `<span class="mobile-inline-rank text-[10px] font-mono text-ink-muted mr-1 lg:hidden">#${s.rank}</span>` : '';
       return `
         <tr data-row-isin="${escapeHtml(s.isin)}" tabindex="0" aria-label="Open details for ${escapeHtml(s.company_name || s.symbol)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna focus-visible:outline-offset-[-1px] pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
           <td class="text-right font-mono tabular-nums text-[13px] text-ink-muted px-2" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
           <td class="px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <a class="flex items-center gap-2.5 min-w-0 group/link rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}">
-              ${getLogoHtml(s, 'sm')}<div class="min-w-0"><div class="flex items-center gap-1.5 flex-wrap"><span class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>${getExchangeBadgesHtml(s)}</div>
+              ${getLogoHtml(s, 'sm')}<div class="min-w-0"><div class="flex items-center gap-1.5 flex-wrap">${mobileRankHtml}<span class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>${getExchangeBadgesHtml(s)}</div>
               <div class="stock-company-name text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${escapeHtml(s.company_name)}">${escapeHtml(s.company_name)}</div></div>
             </a>
           </td>
@@ -418,15 +433,15 @@
           <td class="text-right font-mono tabular-nums text-[12px] font-medium px-2" style="padding-top:${padY};padding-bottom:${padY}"><span class="inline-flex items-baseline gap-1 font-mono tabular-nums [letter-spacing:-0.02em] ${chgColor} justify-end text-[12px]"><span aria-hidden="true">${chgArrow}</span>${formatPercent(s.change_percent)}</span></td>
           <td class="text-right font-mono tabular-nums text-[12px] text-ink-text px-2" style="padding-top:${padY};padding-bottom:${padY}">${formatMarketCap(s.market_cap_cr)}</td>
           <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 ${getReturnColorClass(s.return_1w)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1w)}">${formatPercent(s.return_1w)}</td>
-          <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}" title="Data not available yet">${formatPercent(s.return_1m)}</td>
-          <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 text-ink-muted" style="padding-top:${padY};padding-bottom:${padY}" title="Data not available yet">${formatPercent(s.return_3m)}</td>
+          <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 ${getReturnColorClass(s.return_1m)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_1m)}"${s.return_1m == null ? ' title="Data not available yet"' : ''}>${formatPercent(s.return_1m)}</td>
+          <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] px-2 ${getReturnColorClass(s.return_3m)}" style="padding-top:${padY};padding-bottom:${padY};${getReturnBgStyle(s.return_3m)}"${s.return_3m == null ? ' title="Data not available yet"' : ''}>${formatPercent(s.return_3m)}</td>
           <td class="hidden xl:table-cell text-right font-mono tabular-nums text-[11px] text-ink-text px-2" style="padding-top:${padY};padding-bottom:${padY}" title="Volume: ${s.volume != null ? Number(s.volume).toLocaleString('en-IN') : '—'}">${formatVolume(s.volume)}</td>
           <td class="hidden xl:table-cell w-[64px] px-1" style="padding-top:${padY};padding-bottom:${padY}">${createSparklineSvg(s)}</td>
-          <td class="text-right px-1.5 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px">
-            <span class="inline-flex items-center gap-0.5 ${isStarred ? 'opacity-100' : 'opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 focus-within:opacity-100 focus-within:translate-x-0'} transition-all duration-150">
-              <button type="button" class="watchlist-toggle-btn w-6 h-6 flex items-center justify-center rounded-full text-[13px] transition-colors ${isStarred ? 'text-amber-400' : 'text-ink-muted/50 hover:text-amber-400'}" data-isin="${escapeHtml(s.isin)}" title="${isStarred ? 'Remove from Watchlist' : 'Add to Watchlist'}" aria-label="Toggle watchlist for ${escapeHtml(s.symbol)}">★</button>
-              <button type="button" class="compare-toggle-btn w-6 h-6 flex items-center justify-center rounded-full text-[12px] transition-colors ${isCompared ? 'is-selected' : ''}" data-isin="${escapeHtml(s.isin)}" title="${isCompared ? 'Remove from comparison' : 'Add to comparison'}" aria-label="${isCompared ? 'Remove' : 'Compare'} ${escapeHtml(s.symbol)}">⇄</button>
-              <a class="stock-details-link w-6 h-6 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">↗</a>
+          <td class="row-actions-cell text-right px-2 whitespace-nowrap" style="padding-top:7px;padding-bottom:7px">
+            <span class="row-actions-group inline-flex items-center justify-end gap-1 ${isStarred || isCompared ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'} transition-opacity duration-150">
+              <button type="button" class="watchlist-toggle-btn w-7 h-7 flex items-center justify-center rounded-full text-[13px] transition-colors ${isStarred ? 'text-amber-400 bg-amber-400/10' : 'text-ink-muted/60 hover:text-amber-400 hover:bg-ink-inset'}" data-isin="${escapeHtml(s.isin)}" title="${isStarred ? 'Remove from Watchlist' : 'Add to Watchlist'}" aria-label="Toggle watchlist for ${escapeHtml(s.symbol)}">★</button>
+              <button type="button" class="compare-toggle-btn w-7 h-7 flex items-center justify-center rounded-full text-[12px] transition-colors ${isCompared ? 'is-selected' : 'hover:bg-ink-inset'}" data-isin="${escapeHtml(s.isin)}" title="${isCompared ? 'Remove from comparison' : 'Add to comparison'}" aria-label="${isCompared ? 'Remove' : 'Compare'} ${escapeHtml(s.symbol)}">⇄</button>
+              <a class="stock-details-link w-7 h-7 flex items-center justify-center rounded-full text-[13px] text-ink-sienna hover:bg-ink-sienna-muted transition-colors" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}" title="View stock details">↗</a>
             </span>
           </td>
         </tr>`;
@@ -601,7 +616,7 @@
           escapeCsv(s.isin || ''),
           escapeCsv(Array.isArray(s.exchanges) ? s.exchanges.join('/') : (s.exchanges || '')),
           escapeCsv(s.segment || 'MAINBOARD'),
-          escapeCsv(s.sector || 'Unclassified'),
+          escapeCsv((!s.sector || String(s.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : s.sector),
           escapeCsv(s.current_price != null ? s.current_price : ''),
           escapeCsv(s.change != null ? s.change : ''),
           escapeCsv(s.change_percent != null ? s.change_percent : ''),
@@ -628,7 +643,17 @@
       });
     }
 
-    // Filter pills
+    // Filter pills & mobile sector collapse toggle
+    const mobileSectorToggle = document.getElementById('mobile-sector-toggle');
+    const sectorFilterGroup = document.getElementById('sector-filter-group');
+    if (mobileSectorToggle && sectorFilterGroup) {
+      mobileSectorToggle.addEventListener('click', () => {
+        const isHidden = sectorFilterGroup.classList.toggle('hidden');
+        mobileSectorToggle.setAttribute('aria-expanded', String(!isHidden));
+        mobileSectorToggle.innerHTML = isHidden ? 'Sectors <span aria-hidden="true">▾</span>' : 'Sectors <span aria-hidden="true">▴</span>';
+      });
+    }
+
     filterButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         // Visual reset — all pills to inactive state
@@ -729,14 +754,19 @@
         const starBtn = e.target.closest('.watchlist-toggle-btn');
         if (starBtn) {
           e.stopPropagation();
-          const isin = starBtn.getAttribute('data-isin');
+          const isin = String(starBtn.getAttribute('data-isin') || '').toUpperCase();
           const isNowStarred = toggleWatchlist(isin);
           starBtn.classList.toggle('text-amber-400', isNowStarred);
-          starBtn.classList.toggle('text-ink-muted/50', !isNowStarred);
+          starBtn.classList.toggle('bg-amber-400/10', isNowStarred);
+          starBtn.classList.toggle('text-ink-muted/60', !isNowStarred);
+          starBtn.classList.toggle('hover:text-amber-400', !isNowStarred);
+          starBtn.classList.toggle('hover:bg-ink-inset', !isNowStarred);
           starBtn.setAttribute('title', isNowStarred ? 'Remove from Watchlist' : 'Add to Watchlist');
-          const parentSpan = starBtn.closest('span');
+          const parentSpan = starBtn.closest('.row-actions-group');
           if (parentSpan) {
-            parentSpan.classList.toggle('opacity-100', isNowStarred);
+            const keepVisible = isNowStarred || comparisonStocks.has(isin);
+            parentSpan.classList.toggle('opacity-100', keepVisible);
+            parentSpan.classList.toggle('opacity-0', !keepVisible);
           }
           if (activeFilter === 'WATCHLIST' && !isNowStarred) {
             applyFilters();
@@ -841,12 +871,12 @@
   }
 
   function formatStatusDetails(data) {
-    const tradingDate = data?.tradingDate || marketStats?.tradingDate || 'unknown';
+    const tradingDate = data?.tradingDate || marketStats?.tradingDate || '';
     const refreshTime = data?.istDisplayTime || marketStats?.istDisplayTime || '';
     const expectedDate = data?.latestExpectedDate || data?.marketCalendar?.latestExpectedDate;
-    const base = `EOD ${tradingDate}${refreshTime ? ` · Refreshed ${refreshTime}` : ''}`;
-    if (expectedDate && tradingDate !== expectedDate && data?.needsSync) {
-      return `${base} · Expected ${expectedDate}`;
+    const base = refreshTime ? `Refreshed ${refreshTime}` : (tradingDate ? `EOD ${tradingDate}` : '');
+    if (expectedDate && tradingDate && tradingDate !== expectedDate && data?.needsSync) {
+      return base ? `${base} · Exp ${expectedDate}` : `Exp ${expectedDate}`;
     }
     return base;
   }
