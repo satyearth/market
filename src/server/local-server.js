@@ -17,8 +17,21 @@ const { spawn } = require('child_process');
 const { ROOT_DIR, TARGET_DATA_PATH } = require('../config/constants');
 const { checkSessionFreshness, getLatestExpectedTradingDate } = require('../calendar/exchange-calendar');
 const { inspectStoredSessions } = require('../ingestion/bhavcopy-downloader');
-const { queryStocksAsync, loadMarketStatsAsync, queryStockHistoryAsync } = require('../query/stock-query-service');
+const {
+  queryStocksAsync,
+  loadMarketStatsAsync,
+  queryStockHistoryAsync,
+  readLocalStatsSafe
+} = require('../query/stock-query-service');
 const storage = require('../storage/supabase-storage');
+const {
+  applySecurityHeaders,
+  getClientIp,
+  sharedStocksRateLimiter,
+  sharedRefreshRateLimiter,
+  authorizeRefreshRequest,
+  LOCAL_ORIGIN_RE
+} = require('./security-utils');
 
 const PORT = process.env.PORT || 8080;
 
@@ -48,20 +61,11 @@ const ALLOWED_STATIC_PATHS = new Set([
   '/js/stock-details.js',
   '/js/company-logo.js',
   '/js/company-logo-manifest.js',
-  '/js/stocks-data.js',
-  '/js/logo-aliases.js'
+  '/js/stocks-data.js'
 ]);
 
 function readMarketStatsFromDataset() {
-  try {
-    if (!fs.existsSync(TARGET_DATA_PATH)) return null;
-    const content = fs.readFileSync(TARGET_DATA_PATH, 'utf8');
-    const match = content.match(/const MARKET_STATS = (\{[\s\S]*?\});\s*(?:window\.MARKET_STATS|const STOCKS_DATA)/);
-    return match ? JSON.parse(match[1]) : null;
-  } catch (err) {
-    console.error('Error reading MARKET_STATS from dataset:', err.message);
-    return null;
-  }
+  return readLocalStatsSafe(TARGET_DATA_PATH);
 }
 
 function triggerSyncJob(customDate = null) {
@@ -138,6 +142,7 @@ function triggerSyncJob(customDate = null) {
 }
 
 function sendJson(res, statusCode, payload, extraHeaders = {}) {
+  applySecurityHeaders(res);
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -148,16 +153,24 @@ function sendJson(res, statusCode, payload, extraHeaders = {}) {
 
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin;
-  if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+  if (origin && LOCAL_ORIGIN_RE.test(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Refresh-Secret');
 }
 
 async function handleRequest(req, res) {
-  const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  applySecurityHeaders(res);
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  } catch (_) {
+    return sendJson(res, 400, { ok: false, error: 'Malformed request URL.' });
+  }
+
   let pathname = parsedUrl.pathname;
   try {
     pathname = decodeURIComponent(pathname);
@@ -197,7 +210,8 @@ async function handleRequest(req, res) {
         timestampUtc: new Date().toISOString()
       });
     } catch (err) {
-      return sendJson(res, 500, { ok: false, status: 'error', error: err.message });
+      console.error('Local /api/health error:', err);
+      return sendJson(res, 500, { ok: false, status: 'error', error: 'Unable to determine server health.' });
     }
   }
 
@@ -205,12 +219,28 @@ async function handleRequest(req, res) {
     if (req.method !== 'GET') {
       return sendJson(res, 405, { ok: false, error: 'Method not allowed.' }, { Allow: 'GET' });
     }
+    const rate = sharedStocksRateLimiter.check(getClientIp(req));
+    const rateHeaders = {
+      'X-RateLimit-Limit': String(rate.limit),
+      'X-RateLimit-Remaining': String(rate.remaining)
+    };
+    if (!rate.allowed) {
+      return sendJson(
+        res,
+        429,
+        { ok: false, error: 'Too many requests. Please slow down and try again shortly.' },
+        { ...rateHeaders, 'Retry-After': String(rate.retryAfterSec) }
+      );
+    }
     try {
       const payload = await queryStocksAsync(Object.fromEntries(parsedUrl.searchParams.entries()));
-      return sendJson(res, 200, payload);
+      if (!payload.ok) {
+        return sendJson(res, payload.statusCode || 400, { ok: false, error: payload.error || 'Invalid query parameters.' }, rateHeaders);
+      }
+      return sendJson(res, 200, payload, rateHeaders);
     } catch (err) {
-      console.error('Stock page query failed:', err.message);
-      return sendJson(res, 500, { ok: false, error: 'Unable to load stocks right now.' });
+      console.error('Stock page query failed:', err);
+      return sendJson(res, 500, { ok: false, error: 'Unable to load stocks right now.' }, rateHeaders);
     }
   }
 
@@ -218,93 +248,152 @@ async function handleRequest(req, res) {
     if (req.method !== 'GET') {
       return sendJson(res, 405, { ok: false, error: 'Method not allowed.' }, { Allow: 'GET' });
     }
-    const { stats, manifest, storageSource, storageVersionId } = await loadMarketStatsAsync();
-    const currentTradingDate = stats?.tradingDate || null;
-    const freshness = checkSessionFreshness(currentTradingDate);
-    const stored = inspectStoredSessions();
+    try {
+      const { stats, manifest, storageSource, storageVersionId } = await loadMarketStatsAsync();
+      const currentTradingDate = stats?.tradingDate || null;
+      const freshness = checkSessionFreshness(currentTradingDate);
+      const stored = inspectStoredSessions();
 
-    return sendJson(res, 200, {
-      ok: true,
-      canTriggerSync: true,
-      isSyncing,
-      syncStartedAt,
-      tradingDate: currentTradingDate,
-      istDisplayTime: stats?.istDisplayTime || null,
-      refreshedAtUtc: stats?.refreshedAtUtc || null,
-      nseSourceDate: stats?.nseSourceDate || currentTradingDate,
-      bseSourceDate: stats?.bseSourceDate || currentTradingDate,
-      stockCount: stats?.stockCount || stats?.totalStocks || null,
-      pipelineVersion: stats?.pipelineVersion || null,
-      storageSource,
-      storageVersionId,
-      historicalDataset: manifest?.historicalDataset || stats?.historicalDataset || null,
-      isUpToDate: freshness.isFresh,
-      needsSync: freshness.needsSync,
-      freshnessStatus: freshness.freshnessStatus,
-      isDelayed: freshness.isDelayed,
-      isStale: freshness.isStale,
-      missingSessionsCount: freshness.missingSessionsCount,
-      latestExpectedDate: freshness.latestExpectedDate,
-      latestDownloadedDate: stored.latestCompleteDate || stats?.pipelineDates?.latestDownloadedDate || currentTradingDate,
-      latestProcessedDate: stats?.pipelineDates?.latestProcessedDate || currentTradingDate,
-      latestPublishedDate: currentTradingDate,
-      reason: freshness.reason,
-      marketCalendar: getLatestExpectedTradingDate(),
-      changeLogSummary: stats?.changeLogSummary || null
-    });
+      return sendJson(res, 200, {
+        ok: true,
+        canTriggerSync: true,
+        isSyncing,
+        syncStartedAt,
+        lastSyncResult,
+        tradingDate: currentTradingDate,
+        istDisplayTime: stats?.istDisplayTime || null,
+        refreshedAtUtc: stats?.refreshedAtUtc || null,
+        nseSourceDate: stats?.nseSourceDate || currentTradingDate,
+        bseSourceDate: stats?.bseSourceDate || currentTradingDate,
+        stockCount: stats?.stockCount || stats?.totalStocks || null,
+        pipelineVersion: stats?.pipelineVersion || null,
+        storageSource,
+        storageVersionId,
+        historicalDataset: manifest?.historicalDataset || stats?.historicalDataset || null,
+        isUpToDate: freshness.isFresh,
+        needsSync: freshness.needsSync,
+        freshnessStatus: freshness.freshnessStatus,
+        isDelayed: freshness.isDelayed,
+        isStale: freshness.isStale,
+        missingSessionsCount: freshness.missingSessionsCount,
+        latestExpectedDate: freshness.latestExpectedDate,
+        latestDownloadedDate: stored.latestCompleteDate || stats?.pipelineDates?.latestDownloadedDate || currentTradingDate,
+        latestProcessedDate: stats?.pipelineDates?.latestProcessedDate || currentTradingDate,
+        latestPublishedDate: currentTradingDate,
+        reason: freshness.reason,
+        calendarVerified: freshness.calendarVerified,
+        calendarWarning: freshness.calendarWarning,
+        marketCalendar: getLatestExpectedTradingDate(),
+        changeLogSummary: stats?.changeLogSummary || null
+      });
+    } catch (err) {
+      console.error('Local /api/market/status error:', err);
+      return sendJson(res, 500, { ok: false, error: 'Unable to check market status.' });
+    }
   }
 
   if (pathname === '/api/market/refresh') {
     if (req.method !== 'POST') {
       return sendJson(res, 405, { ok: false, status: 'method_not_allowed', error: 'Method not allowed.' }, { Allow: 'POST' });
     }
-    if (isSyncing) {
-      const { stats } = await loadMarketStatsAsync();
-      return sendJson(res, 200, {
-        ok: true,
-        status: 'in_progress',
-        message: 'Synchronization is already running in background',
-        tradingDate: stats?.tradingDate,
-        startedAt: syncStartedAt
+    const auth = authorizeRefreshRequest(req, {
+      requireSecret: process.env.NODE_ENV === 'production'
+    });
+    if (!auth.ok) {
+      const statusLabel = auth.statusCode === 503
+        ? 'misconfigured'
+        : (auth.statusCode === 401 ? 'unauthorized' : 'forbidden');
+      return sendJson(res, auth.statusCode, {
+        ok: false,
+        status: statusLabel,
+        error: auth.error
       });
     }
+    const rate = sharedRefreshRateLimiter.check(getClientIp(req));
+    const rateHeaders = {
+      'X-RateLimit-Limit': String(rate.limit),
+      'X-RateLimit-Remaining': String(rate.remaining)
+    };
+    if (!rate.allowed) {
+      return sendJson(
+        res,
+        429,
+        { ok: false, status: 'rate_limited', error: 'Too many refresh requests. Please try again shortly.' },
+        { ...rateHeaders, 'Retry-After': String(rate.retryAfterSec) }
+      );
+    }
 
-    const { stats } = await loadMarketStatsAsync({ force: true });
-    const currentTradingDate = stats?.tradingDate || null;
-    const freshness = checkSessionFreshness(currentTradingDate);
+    try {
+      if (isSyncing) {
+        const { stats } = await loadMarketStatsAsync();
+        return sendJson(res, 202, {
+          ok: true,
+          status: 'in_progress',
+          message: 'Synchronization is already running in background.',
+          tradingDate: stats?.tradingDate || null,
+          startedAt: syncStartedAt
+        }, rateHeaders);
+      }
 
-    if (freshness.isFresh) {
-      return sendJson(res, 200, {
+      const { stats } = await loadMarketStatsAsync({ force: true });
+      const currentTradingDate = stats?.tradingDate || null;
+      const freshness = checkSessionFreshness(currentTradingDate);
+
+      if (freshness.isFresh) {
+        return sendJson(res, 200, {
+          ok: true,
+          status: 'up_to_date',
+          message: freshness.reason,
+          tradingDate: currentTradingDate,
+          istDisplayTime: stats?.istDisplayTime || null
+        }, rateHeaders);
+      }
+
+      const requestedDate = parsedUrl.searchParams.get('date');
+      if (requestedDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+        return sendJson(res, 400, { ok: false, status: 'invalid_date', error: 'Parameter "date" must be in YYYY-MM-DD format.' }, rateHeaders);
+      }
+
+      triggerSyncJob(requestedDate).catch((syncErr) => {
+        console.error('Background sync job error:', syncErr);
+      });
+
+      return sendJson(res, 202, {
         ok: true,
-        status: 'up_to_date',
-        message: freshness.reason,
+        status: 'accepted',
+        message: 'Market synchronization accepted and running in background.',
         tradingDate: currentTradingDate,
-        istDisplayTime: stats?.istDisplayTime
-      });
+        istDisplayTime: stats?.istDisplayTime || null,
+        startedAt: syncStartedAt
+      }, rateHeaders);
+    } catch (err) {
+      console.error('Local /api/market/refresh error:', err);
+      return sendJson(res, 500, { ok: false, status: 'error', error: 'Unable to trigger market synchronization.' }, rateHeaders);
     }
-
-    const requestedDate = parsedUrl.searchParams.get('date');
-    const syncOutcome = await triggerSyncJob(requestedDate);
-    return sendJson(res, syncOutcome.ok ? 200 : 500, syncOutcome);
   }
 
   if (pathname === '/api/market/dataset') {
     if (req.method !== 'GET') {
       return sendJson(res, 405, { ok: false, error: 'Method not allowed.' }, { Allow: 'GET' });
     }
-    const { stats, manifest, storageSource, storageVersionId } = await loadMarketStatsAsync();
-    if (!stats) {
-      return sendJson(res, 404, { ok: false, error: 'Dataset not found' });
+    try {
+      const { stats, manifest, storageSource, storageVersionId } = await loadMarketStatsAsync();
+      if (!stats) {
+        return sendJson(res, 404, { ok: false, error: 'Dataset not found' });
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        stats,
+        freshness: checkSessionFreshness(stats.tradingDate || null),
+        storageSource,
+        storageVersionId,
+        historicalDataset: manifest?.historicalDataset || stats?.historicalDataset || null,
+        isSyncing
+      });
+    } catch (err) {
+      console.error('Local /api/market/dataset error:', err);
+      return sendJson(res, 500, { ok: false, error: 'Unable to load market dataset metadata.' });
     }
-    return sendJson(res, 200, {
-      ok: true,
-      stats,
-      freshness: checkSessionFreshness(stats.tradingDate || null),
-      storageSource,
-      storageVersionId,
-      historicalDataset: manifest?.historicalDataset || stats?.historicalDataset || null,
-      isSyncing
-    });
   }
 
   if (pathname === '/api/market/history') {
@@ -318,6 +407,7 @@ async function handleRequest(req, res) {
       }
       return sendJson(res, 200, payload);
     } catch (err) {
+      console.error('Local /api/market/history error:', err);
       return sendJson(res, 500, { ok: false, error: 'Unable to load historical price data.' });
     }
   }
@@ -354,8 +444,9 @@ async function handleRequest(req, res) {
 
   fs.readFile(resolvedPath, (err, content) => {
     if (err) {
+      console.error('Static asset read error:', err);
       res.writeHead(500, { 'Content-Type': 'text/plain' });
-      return res.end(`Server Error: ${err.message}`);
+      return res.end('Internal Server Error');
     }
     res.setHeader(
       'Cache-Control',
@@ -370,7 +461,16 @@ async function handleRequest(req, res) {
 }
 
 function createAppServer() {
-  return http.createServer(handleRequest);
+  return http.createServer((req, res) => {
+    Promise.resolve(handleRequest(req, res)).catch((err) => {
+      console.error('Unhandled request error:', err);
+      if (!res.headersSent) {
+        sendJson(res, 500, { ok: false, error: 'Internal server error.' });
+      } else if (!res.writableEnded) {
+        res.end();
+      }
+    });
+  });
 }
 
 function startBackgroundScheduler() {

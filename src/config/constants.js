@@ -27,11 +27,20 @@ const RETURN_WINDOW_1M_SESSIONS = 22;
 const RETURN_WINDOW_3M_SESSIONS = 66;
 const POINTER_CACHE_TTL_MS = 15 * 1000;
 
-const NSE_ELIGIBLE_SERIES = new Set(['EQ', 'BE', 'BZ', 'SM', 'ST', 'SZ']);
-const BSE_INCLUDED_GROUPS = new Set([
-  'A', 'B', 'T', 'X', 'XT', 'M', 'MT', 'Z', 'ZP', 'P', 'R', 'SS', 'MS', 'TS', 'IF', 'IT', 'E'
-]);
+const NSE_MAINBOARD_SERIES = new Set(['EQ', 'BE', 'BZ']);
+const NSE_SME_SERIES = new Set(['SM', 'ST', 'SZ']);
+const NSE_ELIGIBLE_SERIES = new Set([...NSE_MAINBOARD_SERIES, ...NSE_SME_SERIES]);
+const NSE_EQUITY_SERIES = NSE_ELIGIBLE_SERIES;
+
+const BSE_MAINBOARD_GROUPS = new Set(['A', 'B', 'T', 'X', 'XT', 'Z', 'ZP', 'P', 'R', 'SS', 'TS', 'IF', 'IT', 'E']);
+const BSE_SME_GROUPS = new Set(['M', 'MT', 'MS']);
+const BSE_INCLUDED_GROUPS = new Set([...BSE_MAINBOARD_GROUPS, ...BSE_SME_GROUPS]);
+const BSE_EQUITY_GROUPS = BSE_INCLUDED_GROUPS;
 const BSE_EXCLUDED_GROUPS = new Set(['F', 'G', 'D', 'GC', 'C', 'W', 'H', 'Q']);
+
+function isEligibleIsin(isin) {
+  return Boolean(isin && (isin.startsWith('INE') || isin.startsWith('IN9')));
+}
 
 const REFERENCE_FILES = [
   'benchmark_stocks_verified.json',
@@ -171,9 +180,16 @@ module.exports = {
   RETURN_WINDOW_1M_SESSIONS,
   RETURN_WINDOW_3M_SESSIONS,
   POINTER_CACHE_TTL_MS,
+  NSE_MAINBOARD_SERIES,
+  NSE_SME_SERIES,
   NSE_ELIGIBLE_SERIES,
+  NSE_EQUITY_SERIES,
+  BSE_MAINBOARD_GROUPS,
+  BSE_SME_GROUPS,
   BSE_INCLUDED_GROUPS,
+  BSE_EQUITY_GROUPS,
   BSE_EXCLUDED_GROUPS,
+  isEligibleIsin,
   REFERENCE_FILES,
   SORTABLE_FIELDS,
   SECTOR_OVERRIDES

@@ -223,6 +223,8 @@ function enrichFundamentalsForStock({
   currentPrice,
   benchmark,
   catalogEntry,
+  screenerEntry,
+  screenerSnapshotDate = '2026-11-04',
   prevStock,
   bseMasterEntry,
   nse52Week,
@@ -272,20 +274,46 @@ function enrichFundamentalsForStock({
     sector = 'Unclassified';
   }
 
-  const pickNum = (bmVal, prevVal) => {
-    if (bmVal != null && Number.isFinite(Number(bmVal))) return Number(bmVal);
-    if (prevVal != null && Number.isFinite(Number(prevVal))) return Number(prevVal);
+  const pickNum = (...candidates) => {
+    for (const candidate of candidates) {
+      if (candidate != null && candidate !== '' && Number.isFinite(Number(candidate))) {
+        return Number(candidate);
+      }
+    }
     return null;
   };
 
-  const peRatio = pickNum(benchmark?.pe_ratio, prevStock?.pe_ratio);
+  const peRatio = pickNum(benchmark?.pe_ratio, screenerEntry?.pe, prevStock?.pe_ratio);
   const pbRatio = pickNum(benchmark?.pb_ratio, prevStock?.pb_ratio);
-  const roce = pickNum(benchmark?.roce, prevStock?.roce);
+  const roce = pickNum(benchmark?.roce, screenerEntry?.roce, prevStock?.roce);
   const debtToEquity = pickNum(benchmark?.debt_to_equity, prevStock?.debt_to_equity);
   const volumeRatio = benchmark?.volume_ratio != null
     ? Number(benchmark.volume_ratio)
     : (prevStock?.volume_ratio != null ? Number(prevStock.volume_ratio) : 1.0);
-  const logoUrl = benchmark?.logo_url || prevStock?.logo_url || null;
+  // BUG-007: Never generate or propagate dead local /stock-logos/ links
+  const rawPrevLogo = prevStock?.logo_url;
+  const logoUrl = typeof rawPrevLogo === 'string' && rawPrevLogo.startsWith('https://')
+    ? rawPrevLogo
+    : null;
+  const description = catalogEntry?.oneLine && String(catalogEntry.oneLine).trim()
+    ? String(catalogEntry.oneLine).trim()
+    : (prevStock?.description && String(prevStock.description).trim()
+      ? String(prevStock.description).trim()
+      : null);
+
+  const hasVerifiedFundamentals = peRatio != null || pbRatio != null || roce != null || debtToEquity != null;
+  const fromBenchmarkOrScreener = (benchmark && (benchmark.pe_ratio != null || benchmark.pb_ratio != null || benchmark.roce != null || benchmark.debt_to_equity != null)) ||
+    (screenerEntry && (screenerEntry.pe != null || screenerEntry.roce != null));
+  const fundamentalsSource = !hasVerifiedFundamentals
+    ? null
+    : (fromBenchmarkOrScreener
+      ? 'Benchmark & Screener Disclosures'
+      : (prevStock?.fundamentals_source || null));
+  const fundamentalsAsOfDate = !hasVerifiedFundamentals
+    ? null
+    : (fromBenchmarkOrScreener
+      ? screenerSnapshotDate
+      : (prevStock?.fundamentals_as_of_date || null));
 
   let week52High = null;
   let week52Low = null;
@@ -313,10 +341,13 @@ function enrichFundamentalsForStock({
   return {
     sector: sector || null,
     industry: industry || null,
+    description,
     pe_ratio: peRatio,
     pb_ratio: pbRatio,
     roce,
     debt_to_equity: debtToEquity,
+    fundamentals_source: fundamentalsSource,
+    fundamentals_as_of_date: fundamentalsAsOfDate,
     volume_ratio: volumeRatio,
     logo_url: logoUrl,
     week52_high: week52High,

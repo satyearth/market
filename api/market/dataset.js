@@ -2,8 +2,10 @@
 
 const { loadMarketStatsAsync } = require('../../src/query/stock-query-service');
 const { checkSessionFreshness } = require('../../src/calendar/exchange-calendar');
+const { applySecurityHeaders } = require('../../src/server/security-utils');
 
 module.exports = async function marketDatasetApi(req, res) {
+  applySecurityHeaders(res);
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, error: 'Method not allowed.' });
@@ -26,6 +28,7 @@ module.exports = async function marketDatasetApi(req, res) {
       isSyncing: false
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
+    console.error('Market dataset API error:', err);
+    return res.status(500).json({ ok: false, error: 'Unable to load market dataset metadata.' });
   }
 };

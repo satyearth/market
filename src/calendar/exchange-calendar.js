@@ -32,6 +32,78 @@ const SPECIAL_TRADING_SESSIONS_2026 = new Set([
   '2026-11-08' // Sunday Diwali Laxmi Pujan Muhurat Trading Session
 ]);
 
+// Official 2027 NSE & BSE equity trading holiday / Muhurat circulars are typically
+// published in December. Keep sets empty rather than inventing tentative dates.
+const EXCHANGE_HOLIDAYS_2027 = new Set();
+const SPECIAL_TRADING_SESSIONS_2027 = new Set();
+
+const EXCHANGE_CALENDAR_BY_YEAR = {
+  2026: {
+    verified: true,
+    source: 'NSE & BSE official 2026 Equity Trading Holiday & Muhurat circulars',
+    warning: null,
+    holidays: EXCHANGE_HOLIDAYS_2026,
+    specialSessions: SPECIAL_TRADING_SESSIONS_2026
+  },
+  2027: {
+    verified: false,
+    source: null,
+    warning: 'Official 2027 NSE & BSE equity trading holiday and special-session circulars are not yet published; unknown future holidays are unverified.',
+    holidays: EXCHANGE_HOLIDAYS_2027,
+    specialSessions: SPECIAL_TRADING_SESSIONS_2027
+  }
+};
+
+function extractYearFromDateString(dateString) {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(String(dateString || ''));
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/**
+ * Returns calendar support and verification metadata for a calendar year.
+ */
+function getCalendarCoverageForYear(year) {
+  const numericYear = Number.parseInt(year, 10);
+  const entry = Number.isInteger(numericYear) ? EXCHANGE_CALENDAR_BY_YEAR[numericYear] : null;
+  if (!entry) {
+    return {
+      year: Number.isInteger(numericYear) ? numericYear : null,
+      supported: false,
+      verified: false,
+      holidayCount: 0,
+      specialSessionCount: 0,
+      source: null,
+      warning: `Exchange holiday schedule for ${Number.isInteger(numericYear) ? numericYear : year} is not configured and is unverified.`
+    };
+  }
+  return {
+    year: numericYear,
+    supported: true,
+    verified: Boolean(entry.verified),
+    holidayCount: entry.holidays.size,
+    specialSessionCount: entry.specialSessions.size,
+    source: entry.source,
+    warning: entry.warning
+  };
+}
+
+function isCalendarVerifiedForDate(dateString) {
+  const year = extractYearFromDateString(dateString);
+  return year !== null && getCalendarCoverageForYear(year).verified;
+}
+
+function hasExchangeHoliday(dateString) {
+  const year = extractYearFromDateString(dateString);
+  if (year === null) return false;
+  return Boolean(EXCHANGE_CALENDAR_BY_YEAR[year]?.holidays?.has(dateString));
+}
+
+function hasSpecialTradingSession(dateString) {
+  const year = extractYearFromDateString(dateString);
+  if (year === null) return false;
+  return Boolean(EXCHANGE_CALENDAR_BY_YEAR[year]?.specialSessions?.has(dateString));
+}
+
 /**
  * Converts a Date object into Asia/Kolkata (IST) calendar fields.
  */
@@ -62,7 +134,9 @@ function getIstTime(dateObj = new Date()) {
 
   const istDate = new Date(Date.UTC(year, month - 1, day, hours, minutes));
   const dayOfWeek = istDate.getUTCDay();
-  const isSpecialSession = SPECIAL_TRADING_SESSIONS_2026.has(dateString);
+  const isSpecialSession = hasSpecialTradingSession(dateString);
+  const isHoliday = hasExchangeHoliday(dateString);
+  const coverage = getCalendarCoverageForYear(year);
 
   return {
     year,
@@ -74,8 +148,73 @@ function getIstTime(dateObj = new Date()) {
     dayOfWeek,
     isWeekend: (dayOfWeek === 0 || dayOfWeek === 6) && !isSpecialSession,
     isRawWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-    isHoliday: EXCHANGE_HOLIDAYS_2026.has(dateString),
-    isSpecialSession
+    isHoliday,
+    isSpecialSession,
+    calendarSupported: coverage.supported,
+    calendarVerified: coverage.verified,
+    calendarWarning: coverage.warning
+  };
+}
+
+/**
+ * Returns full session classification and calendar verification status for YYYY-MM-DD.
+ */
+function classifyTradingSession(dateString) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateString || ''))) {
+    return {
+      dateString: String(dateString || ''),
+      valid: false,
+      isTradingDay: false,
+      isWeekend: false,
+      isRawWeekend: false,
+      isHoliday: false,
+      isSpecialSession: false,
+      calendarSupported: false,
+      calendarVerified: false,
+      calendarWarning: 'Invalid YYYY-MM-DD date string.'
+    };
+  }
+
+  const [y, m, d] = dateString.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const validCalendarDate = !Number.isNaN(dt.getTime()) &&
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() + 1 === m &&
+    dt.getUTCDate() === d;
+  if (!validCalendarDate) {
+    return {
+      dateString,
+      valid: false,
+      isTradingDay: false,
+      isWeekend: false,
+      isRawWeekend: false,
+      isHoliday: false,
+      isSpecialSession: false,
+      calendarSupported: false,
+      calendarVerified: false,
+      calendarWarning: 'Invalid calendar date.'
+    };
+  }
+
+  const dow = dt.getUTCDay();
+  const isRawWeekend = dow === 0 || dow === 6;
+  const isSpecialSession = hasSpecialTradingSession(dateString);
+  const isHoliday = hasExchangeHoliday(dateString);
+  const isWeekend = isRawWeekend && !isSpecialSession;
+  const tradingDay = isSpecialSession || (!isHoliday && !isRawWeekend);
+  const coverage = getCalendarCoverageForYear(y);
+
+  return {
+    dateString,
+    valid: true,
+    isTradingDay: tradingDay,
+    isWeekend,
+    isRawWeekend,
+    isHoliday,
+    isSpecialSession,
+    calendarSupported: coverage.supported,
+    calendarVerified: coverage.verified,
+    calendarWarning: coverage.warning
   };
 }
 
@@ -83,16 +222,7 @@ function getIstTime(dateObj = new Date()) {
  * Returns true if the given YYYY-MM-DD date is a valid exchange trading day.
  */
 function isTradingDay(dateString) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateString || ''))) return false;
-  if (SPECIAL_TRADING_SESSIONS_2026.has(dateString)) return true;
-  if (EXCHANGE_HOLIDAYS_2026.has(dateString)) return false;
-
-  const [y, m, d] = dateString.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (Number.isNaN(dt.getTime())) return false;
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() + 1 !== m || dt.getUTCDate() !== d) return false;
-  const dow = dt.getUTCDay();
-  return dow !== 0 && dow !== 6;
+  return classifyTradingSession(dateString).isTradingDay;
 }
 
 /**
@@ -157,9 +287,16 @@ function getLatestExpectedTradingDate(now = new Date()) {
     currentMinutes >= marketOpenMinutes &&
     currentMinutes < marketCloseMinutes;
 
+  const calendarBase = {
+    calendarSupported: ist.calendarSupported,
+    calendarVerified: ist.calendarVerified,
+    calendarWarning: ist.calendarWarning
+  };
+
   if (ist.isWeekend) {
     const prevTradingDay = getPreviousTradingDay(ist.dateString);
     return {
+      ...calendarBase,
       latestExpectedDate: prevTradingDay,
       currentIstDate: ist.dateString,
       isMarketOpenNow: false,
@@ -174,6 +311,7 @@ function getLatestExpectedTradingDate(now = new Date()) {
   if (ist.isHoliday) {
     const prevTradingDay = getPreviousTradingDay(ist.dateString);
     return {
+      ...calendarBase,
       latestExpectedDate: prevTradingDay,
       currentIstDate: ist.dateString,
       isMarketOpenNow: false,
@@ -188,6 +326,7 @@ function getLatestExpectedTradingDate(now = new Date()) {
   if (currentMinutes < eodPublishMinutes) {
     const prevTradingDay = getPreviousTradingDay(ist.dateString);
     return {
+      ...calendarBase,
       latestExpectedDate: prevTradingDay,
       currentIstDate: ist.dateString,
       isMarketOpenNow,
@@ -202,6 +341,7 @@ function getLatestExpectedTradingDate(now = new Date()) {
   }
 
   return {
+    ...calendarBase,
     latestExpectedDate: ist.dateString,
     currentIstDate: ist.dateString,
     isMarketOpenNow: false,
@@ -218,10 +358,17 @@ function getLatestExpectedTradingDate(now = new Date()) {
  */
 function checkSessionFreshness(datasetTradingDate, now = new Date()) {
   const calendar = getLatestExpectedTradingDate(now);
-  const { latestExpectedDate, reason } = calendar;
+  const { latestExpectedDate, reason, calendarSupported, calendarVerified, calendarWarning } = calendar;
+  const targetVerified = datasetTradingDate ? isCalendarVerifiedForDate(datasetTradingDate) : calendarVerified;
+  const calendarMeta = {
+    calendarSupported,
+    calendarVerified: Boolean(calendarVerified && targetVerified),
+    calendarWarning: calendarWarning || (targetVerified ? null : `Calendar schedule for ${datasetTradingDate} is not yet officially verified.`)
+  };
 
   if (!datasetTradingDate || !/^\d{4}-\d{2}-\d{2}$/.test(String(datasetTradingDate))) {
     return {
+      ...calendarMeta,
       isFresh: false,
       needsSync: true,
       freshnessStatus: 'unknown',
@@ -235,6 +382,7 @@ function checkSessionFreshness(datasetTradingDate, now = new Date()) {
 
   if (!isTradingDay(datasetTradingDate)) {
     return {
+      ...calendarMeta,
       isFresh: false,
       needsSync: true,
       freshnessStatus: 'invalid',
@@ -248,6 +396,7 @@ function checkSessionFreshness(datasetTradingDate, now = new Date()) {
 
   if (datasetTradingDate > calendar.currentIstDate) {
     return {
+      ...calendarMeta,
       isFresh: false,
       needsSync: true,
       freshnessStatus: 'future',
@@ -261,6 +410,7 @@ function checkSessionFreshness(datasetTradingDate, now = new Date()) {
 
   if (datasetTradingDate >= latestExpectedDate) {
     return {
+      ...calendarMeta,
       isFresh: true,
       needsSync: false,
       freshnessStatus: 'current',
@@ -282,6 +432,7 @@ function checkSessionFreshness(datasetTradingDate, now = new Date()) {
     datasetTradingDate === prevExpected;
 
   return {
+    ...calendarMeta,
     isFresh: false,
     needsSync: true,
     freshnessStatus: isDelayed ? 'delayed' : 'stale',
@@ -299,6 +450,12 @@ function checkSessionFreshness(datasetTradingDate, now = new Date()) {
 module.exports = {
   EXCHANGE_HOLIDAYS_2026,
   SPECIAL_TRADING_SESSIONS_2026,
+  EXCHANGE_HOLIDAYS_2027,
+  SPECIAL_TRADING_SESSIONS_2027,
+  EXCHANGE_CALENDAR_BY_YEAR,
+  getCalendarCoverageForYear,
+  isCalendarVerifiedForDate,
+  classifyTradingSession,
   getIstTime,
   isTradingDay,
   getPreviousTradingDay,

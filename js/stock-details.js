@@ -104,15 +104,25 @@
     document.getElementById('stock-listing-status').textContent = valueOrNA(stock.listing_status);
 
     const sectorVal = (!stock.sector || String(stock.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : stock.sector;
+    const capDisplay = stock.market_cap_cr == null
+      ? null
+      : (stock.market_cap_as_of_date
+        ? `${formatMarketCap(stock.market_cap_cr)} (as of ${stock.market_cap_as_of_date})`
+        : formatMarketCap(stock.market_cap_cr));
+    const descriptionVal = stock.description && String(stock.description).trim()
+      ? String(stock.description).trim()
+      : null;
+
     document.getElementById('company-info-grid').innerHTML = [
-      field('Market capitalization', stock.market_cap_cr == null ? null : formatMarketCap(stock.market_cap_cr)),
+      field('Market capitalization', capDisplay),
       field('Sector', sectorVal),
       field('Industry', stock.industry),
       field('52-week high', stock.week52_high == null ? null : formatPrice(stock.week52_high)),
       field('52-week low', stock.week52_low == null ? null : formatPrice(stock.week52_low)),
       field('Segment', stock.segment),
       field('Series / group', stock.series),
-      field('Company description', null)
+      field('Data source', stock.market_cap_source || null),
+      field('Company description', descriptionVal)
     ].join('');
 
     const listingMarkup = [];
@@ -186,6 +196,13 @@
       }
     });
     if (fundSection && visibleFunds > 0) fundSection.classList.remove('hidden');
+    const fundNoteEl = document.getElementById('stock-fundamentals-source-note');
+    if (fundNoteEl && (stock.fundamentals_source || stock.fundamentals_as_of_date)) {
+      const parts = [];
+      if (stock.fundamentals_source) parts.push(`Source: ${stock.fundamentals_source}`);
+      if (stock.fundamentals_as_of_date) parts.push(`As of: ${stock.fundamentals_as_of_date}`);
+      fundNoteEl.textContent = `Fundamental metrics (${parts.join(' · ')}). Unavailable fields remain N/A.`;
+    }
 
     // ── Historical Price Table (last 6 sessions) ──
     const histSection = document.getElementById('stock-history-section');

@@ -109,7 +109,7 @@
 
               <!-- Card 4: Near 52W High -->
               <div class="flex flex-col px-3 py-2.5 sm:px-[22px] sm:py-4 border-b border-ink-rule lg:border-b-0 lg:border-r xl:border-r">
-                <span class="font-ui text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted" title="Surveyed BSE Groups A & B. NSE-only and other BSE groups not included.">Near 52W High</span>
+                <span id="card-near52-label" class="font-ui text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted" title="Equities within 8% of their verified 52-week high for the active trading session.">Near 52W High</span>
                 <span id="card-near52-pct" class="font-display font-semibold tabular-nums tracking-[-0.02em] text-ink-bullish">—</span>
                 <span id="card-near52-sub" class="text-[11px] sm:text-[11.5px] text-ink-muted truncate leading-tight">No verified data</span>
               </div>
@@ -189,9 +189,9 @@
               <!-- Compact Utility Actions -->
               <div class="table-toolbar-actions ml-auto flex items-center gap-2 shrink-0">
                 <!-- Export CSV -->
-                <button id="export-csv-btn" type="button" class="inline-flex items-center justify-center gap-1.5 rounded-full border border-ink-rule bg-ink-well px-3 py-1 font-ui text-[11px] font-semibold text-ink-muted hover:text-ink-sienna hover:border-ink-sienna transition-colors shadow-soft" title="Export currently loaded stocks as CSV" aria-label="Export CSV">
+                <button id="export-csv-btn" type="button" class="inline-flex items-center justify-center gap-1.5 rounded-full border border-ink-rule bg-ink-well px-3 py-1 font-ui text-[11px] font-semibold text-ink-muted hover:text-ink-sienna hover:border-ink-sienna transition-colors shadow-soft" title="Export currently loaded rows as CSV" aria-label="Export loaded rows as CSV">
                   <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  <span class="hidden sm:inline">Export CSV</span>
+                  <span class="hidden sm:inline">Export loaded rows</span>
                 </button>
 
                 <!-- Density Toggle -->
@@ -203,7 +203,7 @@
 
             <!-- Table View -->
             <div class="table-scroll-container overflow-x-auto px-1.5 sm:px-2">
-              <table class="stocks-table w-full border-collapse" role="grid" aria-rowcount="5389">
+              <table class="stocks-table w-full border-collapse" role="grid">
                 <thead class="sticky top-[57px] z-20 bg-ink-card shadow-sm">
                   <tr>
                     <th data-sortable="true" data-col="#" class="text-right w-[40px] text-[10px] font-bold tracking-[0.12em] uppercase text-ink-muted px-2 py-2 border-b border-ink-rule-strong cursor-pointer hover:text-ink-text select-none sticky top-[57px] bg-ink-card z-20" tabindex="0">#</th>

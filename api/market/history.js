@@ -1,8 +1,10 @@
 'use strict';
 
 const { queryStockHistoryAsync } = require('../../src/query/stock-query-service');
+const { applySecurityHeaders } = require('../../src/server/security-utils');
 
 module.exports = async function marketHistoryApi(req, res) {
+  applySecurityHeaders(res);
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, error: 'Method not allowed.' });
