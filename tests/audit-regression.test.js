@@ -705,7 +705,7 @@ async function run() {
   // 13. Production refresh authorization fails closed when REFRESH_API_SECRET is missing
   {
     const failClosedAuth = authorizeRefreshRequest(
-      { headers: { origin: 'https://machii-bazzar.vercel.app' } },
+      { headers: { origin: 'https://machiibazzar.vercel.app' } },
       { allowCustomOrigin: true, requireSecret: true, refreshSecret: '' }
     );
     assert.strictEqual(failClosedAuth.ok, false);

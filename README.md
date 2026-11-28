@@ -1,42 +1,37 @@
 # Machii Bazzar
 
-> **End-of-Day (EOD) Indian Equities Intelligence & Screener (NSE + BSE)**  
-> Full NSE & BSE Mainboard and SME equity coverage deduplicated by canonical 12-character ISIN, backed by automated Supabase Storage snapshots and zero-framework static HTML/CSS/JS frontend UI.
+An Indian stock market screener covering NSE and BSE equities.
 
----
+- **Live Website:** https://machiibazzar.vercel.app/
 
-## Key Capabilities
+## Features
 
-- **ISIN-Unified Screener ([index.html](index.html))**: Infinite-scroll virtualized table served via `GET /api/stocks` (50 rows/batch), instant multi-key search (ticker, company name, ISIN, BSE scrip code, aliases), sector pills, watchlist (`localStorage`), comparison tray, CSV export, and Market Pulse cards.
-- **Stock Profile Pages ([stock.html](stock.html))**: Fetches single-stock data via `GET /api/stocks?isin=...` (with lazy fallback to `./js/stocks-data.js` in offline `file://` mode), showing EOD OHLC, 52-week range indicator, fundamentals (when verified), and up to 90-session historical closes.
-- **Automated Daily EOD Pipeline ([.github/workflows/refresh-stock-data.yml](.github/workflows/refresh-stock-data.yml))**: Runs Mon–Fri post-close (`16:45–20:00 IST`) + Sun Muhurat checks, downloads official NSE & BSE BhavCopy archives, validates integrity, and atomically publishes to Supabase Storage (`machii-bazzar-datasets`) with 90-trading-session retention and **zero Git commits**.
+- Stock ranking
+- Search
+- Sector filters
+- Market capitalization
+- Watchlist
+- Stock comparison
+- Historical prices
+- Automated EOD data refresh
 
----
+## Tech Stack
 
-## API Endpoints
+HTML, CSS, Vanilla JavaScript, Node.js, Supabase Storage, GitHub Actions and Vercel.
 
-- `GET /api/health` — Readiness, dataset trading date, freshness status, and storage status.
-- `GET /api/stocks` — Paginated (`limit <= 50`), searchable, sortable, filterable query endpoint and exact `?isin=` lookup.
-- `GET /api/market/status` — IST calendar session evaluation and active dataset metadata.
-- `GET /api/market/dataset` — Lightweight dataset statistics and freshness metadata.
-- `GET /api/market/history` — Versioned 90-session history metadata and per-ISIN closing price series.
-- `POST /api/market/refresh` — Triggers local sync in `server.js`; returns storage status (`200` if fresh / `503` if stale) in read-only serverless mode.
+## Data Sources
 
----
+NSE and BSE official exchange data, along with applicable supplementary financial data sources.
 
-## Local Development
+## Local Setup
 
 ```bash
 npm ci
-npm start                  # Starts hardened local server on http://localhost:8080
-npm run lint               # Runs ESLint
-npm test                   # Runs tests/run-all.js + dataset, QA, audit & pipeline suites
+npm start        # Starts local server at http://localhost:8080
+npm run lint     # Runs ESLint
+npm test         # Runs unit, dataset and QA tests
 ```
 
----
+## Disclaimer
 
-## Documentation
-
-- [Architecture & Data Pipeline](docs/ARCHITECTURE.md)
-- [Supabase Storage, GitHub Actions & Vercel Setup](docs/EXTERNAL_STORAGE_SETUP.md)
-- [Market Cap Coverage Report](docs/reports/MARKET_CAP_COVERAGE_REPORT.md)
+Built for educational purposes. Data is end-of-day, not real-time, and does not constitute investment advice.
