@@ -733,6 +733,67 @@ async function run() {
       else process.env.REFRESH_API_SECRET = prevRefreshSecret;
     }
   }
+
+  // 14. Frontend UI/UX Layout, Sector Dropdown Coverage, Human-Readable Labels & CSP Safety
+  {
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const stockHtml = fs.readFileSync(path.join(ROOT, 'stock.html'), 'utf8');
+    const pageCss = fs.readFileSync(path.join(ROOT, 'css', 'page-layout.css'), 'utf8');
+    const stockCss = fs.readFileSync(path.join(ROOT, 'css', 'stock-details.css'), 'utf8');
+    const stockDetailsJs = fs.readFileSync(path.join(ROOT, 'js', 'stock-details.js'), 'utf8');
+
+    // Group A (screening) & Group B (sector selector) structure
+    assert.ok(indexHtml.includes('class="filter-group filter-group-screening"'), 'index.html must separate Group A screening filters');
+    assert.ok(indexHtml.includes('id="sector-picker"'), 'index.html must include Group B sector dropdown picker');
+    assert.ok(indexHtml.includes('id="sector-dropdown-menu"'), 'index.html must include sector listbox menu');
+    assert.ok(pageCss.includes('.sector-dropdown-menu'), 'page-layout.css must style sector dropdown menu');
+
+    // Every unique dataset sector must appear in the sector selector menu
+    const dataset = queryService.loadDataset();
+    const datasetSectors = [...new Set(dataset.stocks.map(s => s.sector).filter(Boolean))];
+    assert.strictEqual(datasetSectors.length, 18, `Expected 18 unique dataset sectors, got ${datasetSectors.length}`);
+    for (const sector of datasetSectors) {
+      const encoded = sector.replace(/&/g, '&amp;');
+      assert.ok(
+        indexHtml.includes(`data-sector="${sector}"`) || indexHtml.includes(`data-sector="${encoded}"`),
+        `index.html sector dropdown is missing dataset sector: ${sector}`
+      );
+    }
+
+    // Stock detail independent 2-column desktop + mobile stack order + no misleading 50% range bar
+    assert.ok(stockHtml.includes('class="stock-detail-col-left"'), 'stock.html must include independent left column');
+    assert.ok(stockHtml.includes('class="stock-detail-col-right"'), 'stock.html must include independent right column');
+    assert.ok(stockHtml.includes('id="company-description-block"'), 'stock.html must render full-width company description block');
+    assert.ok(stockHtml.includes('id="stock-history-toggle"'), 'stock.html must render expandable price history toggle');
+    assert.ok(!stockHtml.includes('width: 50%'), 'stock.html must not hardcode misleading 50% fill width');
+    assert.ok(!stockHtml.includes('left: 50%'), 'stock.html must not hardcode misleading 50% pin offset');
+    assert.ok(!/<svg\b/i.test(stockHtml), 'stock.html must remain SVG-free');
+    assert.ok(!/<svg\b/i.test(stockDetailsJs), 'js/stock-details.js must remain SVG-free');
+
+    // CSS rules for desktop 2-col, mobile stacking order, sticky history & hairline 8-cell grid
+    assert.ok(stockCss.includes('@media (max-width: 899px)'), 'stock-details.css must define <900px responsive stack');
+    assert.ok(stockCss.includes('.stock-history-table-wrap.is-expanded'), 'stock-details.css must bound expanded history height');
+    assert.ok(stockCss.includes('position: sticky'), 'stock-details.css must keep expanded history header sticky');
+    assert.ok(stockCss.includes('.exchange-cards-row.is-dual'), 'stock-details.css must support balanced dual exchange grid');
+    assert.ok(stockCss.includes('@media (max-width: 520px)'), 'stock-details.css must retain small-screen breakpoint');
+
+    // JS source mapping, 10-row default & dual/single exchange balance classes
+    for (const rawKey of [
+      'NSE_OFFICIAL_MCAP',
+      'BSE_SECURITY_MASTER',
+      'CALCULATED_OUTSTANDING_SHARES',
+      'INDIA_API_ISIN',
+      'INDIA_API_TICKER',
+      'SCREENER_DATASET',
+      'BENCHMARK_VERIFIED',
+      'PREVIOUS_SESSION_VERIFIED'
+    ]) {
+      assert.ok(stockDetailsJs.includes(rawKey), `js/stock-details.js must explicitly map internal key ${rawKey} to readable text`);
+    }
+    assert.ok(stockDetailsJs.includes("cleanKey.includes('_') ? 'Verified Financial Reference'"), 'js/stock-details.js must sanitize unmapped underscore source keys');
+    assert.ok(stockDetailsJs.includes('DEFAULT_HISTORY_ROWS = 10'), 'js/stock-details.js must default recent price history to 10 rows');
+    assert.ok(stockDetailsJs.includes("' is-dual' : ' is-single'"), 'js/stock-details.js must apply balanced dual/single exchange classes');
+  }
 }
 
 module.exports = {
