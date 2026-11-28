@@ -666,45 +666,144 @@
       });
     }
 
-    // Filter pills & mobile sector collapse toggle
-    const mobileSectorToggle = document.getElementById('mobile-sector-toggle');
-    const sectorFilterGroup = document.getElementById('sector-filter-group');
-    if (mobileSectorToggle && sectorFilterGroup) {
-      mobileSectorToggle.addEventListener('click', () => {
-        const isHidden = sectorFilterGroup.classList.toggle('hidden');
-        mobileSectorToggle.setAttribute('aria-expanded', String(!isHidden));
-        mobileSectorToggle.innerHTML = isHidden ? 'Sectors <span aria-hidden="true">▾</span>' : 'Sectors <span aria-hidden="true">▴</span>';
+    // Group A (Screening pills) + Group B (Accessible sector dropdown)
+    const sectorDropdownBtn = document.getElementById('sector-dropdown-btn');
+    const sectorSelectedLabel = document.getElementById('sector-selected-label');
+    const sectorClearBtn = document.getElementById('sector-clear-btn');
+    const sectorDropdownMenu = document.getElementById('sector-dropdown-menu');
+    const sectorOptionButtons = Array.from(document.querySelectorAll('.sector-option-btn'));
+
+    function closeSectorMenu(returnFocus = false) {
+      if (!sectorDropdownMenu || sectorDropdownMenu.hidden) return;
+      sectorDropdownMenu.hidden = true;
+      if (sectorDropdownBtn) {
+        sectorDropdownBtn.setAttribute('aria-expanded', 'false');
+        if (returnFocus) sectorDropdownBtn.focus();
+      }
+    }
+
+    function openSectorMenu() {
+      if (!sectorDropdownMenu) return;
+      sectorDropdownMenu.hidden = false;
+      if (sectorDropdownBtn) sectorDropdownBtn.setAttribute('aria-expanded', 'true');
+      const selected = sectorOptionButtons.find(opt => opt.getAttribute('aria-selected') === 'true') || sectorOptionButtons[0];
+      if (selected) selected.focus();
+    }
+
+    function setScreeningButtonState(activeBtn) {
+      const inactiveCls = 'filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text';
+      const activeCls = 'filter-pill-btn is-active inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft';
+      filterButtons.forEach(b => {
+        const isTarget = b === activeBtn;
+        b.className = isTarget ? activeCls : inactiveCls;
+        b.setAttribute('aria-pressed', isTarget ? 'true' : 'false');
+      });
+    }
+
+    function updateSectorUi(sectorValue, displayText) {
+      const hasSector = Boolean(sectorValue);
+      if (sectorSelectedLabel) {
+        sectorSelectedLabel.textContent = hasSector ? (displayText || sectorValue) : 'All sectors';
+      }
+      if (sectorDropdownBtn) {
+        sectorDropdownBtn.classList.toggle('is-active', hasSector);
+      }
+      if (sectorClearBtn) {
+        sectorClearBtn.classList.toggle('hidden', !hasSector);
+      }
+      sectorOptionButtons.forEach(opt => {
+        const isSel = (opt.getAttribute('data-sector') || '') === (sectorValue || '');
+        opt.classList.toggle('is-selected', isSel);
+        opt.setAttribute('aria-selected', isSel ? 'true' : 'false');
       });
     }
 
     filterButtons.forEach(btn => {
       btn.addEventListener('click', () => {
-        // Visual reset — all pills to inactive state
-        filterButtons.forEach(b => {
-          const base = 'filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text';
-          b.className = b.classList.contains('sector-pill') ? base + ' sector-pill' : base;
-          b.setAttribute('aria-pressed', 'false');
-        });
-        // Activate clicked pill
-        const activeBase = 'inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft';
-        btn.className = btn.classList.contains('sector-pill')
-          ? 'filter-pill-btn sector-pill ' + activeBase
-          : 'filter-pill-btn ' + activeBase;
-        btn.setAttribute('aria-pressed', 'true');
-
-        if (btn.classList.contains('sector-pill')) {
-          // Sector filter: set sector param, reset standard filter to ALL
-          activeSector = btn.getAttribute('data-sector') || '';
-          activeFilter = 'ALL';
-        } else {
-          // Standard filter: clear sector
-          activeSector = '';
-          const rawText = btn.innerText.trim();
-          activeFilter = rawText.includes('WATCHLIST') ? 'WATCHLIST' : rawText;
-        }
+        closeSectorMenu(false);
+        setScreeningButtonState(btn);
+        updateSectorUi('', 'All sectors');
+        activeSector = '';
+        const filterAttr = btn.getAttribute('data-filter');
+        const rawText = (filterAttr || btn.innerText || 'ALL').trim().toUpperCase();
+        activeFilter = rawText.includes('WATCHLIST') ? 'WATCHLIST' : rawText;
         applyFilters();
       });
     });
+
+    if (sectorDropdownBtn && sectorDropdownMenu) {
+      sectorDropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (sectorDropdownMenu.hidden) openSectorMenu();
+        else closeSectorMenu(false);
+      });
+
+      sectorDropdownBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openSectorMenu();
+        }
+      });
+
+      sectorDropdownMenu.addEventListener('keydown', (e) => {
+        const idx = sectorOptionButtons.indexOf(document.activeElement);
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeSectorMenu(true);
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = sectorOptionButtons[(idx + 1) % sectorOptionButtons.length];
+          if (next) next.focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prev = sectorOptionButtons[(idx - 1 + sectorOptionButtons.length) % sectorOptionButtons.length];
+          if (prev) prev.focus();
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          sectorOptionButtons[0]?.focus();
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          sectorOptionButtons[sectorOptionButtons.length - 1]?.focus();
+        }
+      });
+
+      sectorOptionButtons.forEach(opt => {
+        opt.addEventListener('click', () => {
+          const selectedSector = opt.getAttribute('data-sector') || '';
+          const shortLabel = opt.querySelector('span')?.textContent?.trim() || selectedSector;
+          activeSector = selectedSector;
+          activeFilter = 'ALL';
+          if (selectedSector) {
+            setScreeningButtonState(null);
+            updateSectorUi(selectedSector, shortLabel);
+          } else {
+            const allBtn = Array.from(filterButtons).find(b => b.getAttribute('data-filter') === 'ALL') || filterButtons[0];
+            setScreeningButtonState(allBtn || null);
+            updateSectorUi('', 'All sectors');
+          }
+          closeSectorMenu(true);
+          applyFilters();
+        });
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!sectorDropdownMenu.hidden && !e.target.closest('#sector-picker')) {
+          closeSectorMenu(false);
+        }
+      });
+    }
+
+    if (sectorClearBtn) {
+      sectorClearBtn.addEventListener('click', () => {
+        closeSectorMenu(false);
+        activeSector = '';
+        activeFilter = 'ALL';
+        const allBtn = Array.from(filterButtons).find(b => b.getAttribute('data-filter') === 'ALL') || filterButtons[0];
+        setScreeningButtonState(allBtn || null);
+        updateSectorUi('', 'All sectors');
+        applyFilters();
+      });
+    }
 
     // Density toggle
     if (densityToggleBtn) {

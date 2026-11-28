@@ -24,28 +24,124 @@
 
 .stock-detail-sections {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr);
+  grid-template-columns: minmax(0, 1.32fr) minmax(0, 0.88fr);
   gap: 1rem;
   margin-top: 1rem;
   align-items: start;
 }
 
-.stock-detail-sections > section {
+.stock-detail-col-left,
+.stock-detail-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.stock-detail-col-left > section,
+.stock-detail-col-right > section {
   min-width: 0;
   margin-top: 0;
 }
 
-/* Responsive Grid for Company Information */
+.stock-watchlist-btn {
+  min-height: 34px;
+  padding-inline: 12px;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+
+/* Responsive OHLC Grid: 2x2 on narrow widths, 4x1 on wide screens */
+.ohlc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.ohlc-cell {
+  min-width: 0;
+}
+
+.ohlc-val {
+  font-size: clamp(12px, 1.4vw, 13.5px);
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+@media (min-width: 640px) and (max-width: 899px), (min-width: 1120px) {
+  .ohlc-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Recent Price History Card & Sticky Scrollable Panel */
+.stock-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.stock-history-table-wrap {
+  position: relative;
+}
+
+.stock-history-table-wrap.is-expanded {
+  max-height: 380px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid var(--ink-rule, #3a3730);
+  padding: 0 0.5rem;
+}
+
+.stock-history-thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ink-card, #1d1b18);
+}
+
+.stock-history-toggle-btn {
+  width: 100%;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid var(--ink-rule, #3a3730);
+  background: var(--ink-well, #1f1d19);
+  color: var(--ink-sienna, #c84b31);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+  touch-action: manipulation;
+}
+
+.stock-history-toggle-btn:hover {
+  background: var(--ink-sienna-muted, rgba(200, 75, 49, 0.14));
+  border-color: var(--ink-sienna, #c84b31);
+}
+
+.stock-history-toggle-btn:focus-visible {
+  outline: 2px solid var(--ink-sienna, #c84b31);
+  outline-offset: 2px;
+}
+
+/* Uniform hairline-bordered grid for Company Information (8 balanced fields) */
 .stock-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--ink-rule);
-}
-
-@media (min-width: 900px) and (max-width: 1399px) {
-  .stock-detail-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+  gap: 1px;
+  background-color: var(--ink-rule, #3a3730);
+  border: 1px solid var(--ink-rule, #3a3730);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 @media (min-width: 1400px) {
@@ -56,17 +152,8 @@
 
 .stock-detail-field {
   min-width: 0;
-  padding: 0.85rem 0.5rem;
-  border-bottom: 1px solid var(--ink-rule);
-}
-
-.stock-detail-field:nth-child(odd) {
-  padding-right: 1rem;
-}
-
-.stock-detail-field:nth-child(even) {
-  padding-left: 1rem;
-  border-left: 1px solid var(--ink-rule);
+  padding: 0.85rem 0.95rem;
+  background-color: var(--ink-card, #1d1b18);
 }
 
 .stock-detail-label {
@@ -74,20 +161,75 @@
   color: var(--ink-muted);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 
 .stock-detail-value {
   display: block;
-  margin-top: 0.28rem;
+  margin-top: 0.3rem;
   overflow-wrap: anywhere;
   word-break: break-word;
   color: var(--ink-ink);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.4;
+}
+
+.stock-detail-value.is-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.company-description-block {
+  margin-top: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--ink-rule, #3a3730);
+  background: var(--ink-well, #1f1d19);
+}
+
+.company-description-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.company-description-text {
+  margin: 0.45rem 0 0;
+  max-width: 72ch;
+  color: var(--ink-text, #e8e3da);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+
+.company-description-text.is-unavailable {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+/* Exchange Listings balanced stack */
+.exchange-listings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.exchange-cards-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.625rem;
+}
+
+.exchange-cards-row.is-dual {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .stock-listing-row {
@@ -97,6 +239,10 @@
   padding: 0.75rem 0;
   border-top: 1px solid var(--ink-rule);
   font-size: 11.5px;
+}
+
+.stock-listing-row:first-child {
+  border-top: 0;
 }
 
 .stock-listing-label {
@@ -114,30 +260,37 @@
 }
 
 #stock-name {
-  font-size: clamp(20px, 5.5vw, 32px);
+  font-size: clamp(20px, 5vw, 32px);
   line-height: 1.2;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
 #stock-price {
-  font-size: clamp(24px, 6.5vw, 28px);
+  font-size: clamp(23px, 6vw, 28px);
   overflow-wrap: anywhere;
-}
-
-.stock-detail-value,
-.stock-listing-value {
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 /* -------------------------------------------------------------------------
    Mobile & Tablet Responsiveness (< 900px)
+   Required order: Overview -> Trading+Valuations -> History -> Company -> Exchange
    ------------------------------------------------------------------------- */
 @media (max-width: 899px) {
   .stock-detail-sections {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
+
+  .stock-detail-col-left,
+  .stock-detail-col-right {
+    display: contents;
+  }
+
+  .stock-card-trading { order: 1; }
+  .stock-card-history { order: 2; }
+  .stock-card-company { order: 3; }
+  .stock-card-exchanges { order: 4; }
 }
 
 @media (max-width: 767px) {
@@ -146,19 +299,14 @@
   }
 
   #stock-price {
-    font-size: clamp(22px, 7vw, 26px);
+    font-size: clamp(22px, 6.5vw, 26px);
   }
 }
 
-/* Single column stack for small mobile screens (< 520px) */
+/* Single column stack for small mobile screens (<= 520px) */
 @media (max-width: 520px) {
-  .stock-detail-grid {
+  .stock-detail-grid,
+  .exchange-cards-row.is-dual {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .stock-detail-field:nth-child(odd),
-  .stock-detail-field:nth-child(even) {
-    padding-inline: 0.25rem;
-    border-left: 0;
   }
 }

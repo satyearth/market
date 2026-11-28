@@ -146,31 +146,50 @@
           </div>
         </div>
 
-        <!-- Filter Buttons Bar -->
-        <div id="market-filters" class="py-2.5 sm:py-3">
-          <div class="filter-buttons-scroll-container flex flex-wrap gap-1.5">
-            <button aria-pressed="true" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft">ALL</button>
-            <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TOP GAINERS</button>
-            <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TOP LOSERS</button>
-            <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">NEAR 52W HIGH</button>
-            <button aria-pressed="false" id="filter-watchlist-btn" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-amber-400"><span class="text-amber-400">★</span> WATCHLIST</button>
-            <button aria-pressed="false" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">HIGH VOLUME</button>
-            <button id="mobile-sector-toggle" type="button" aria-expanded="false" aria-controls="sector-filter-group" class="sm:hidden inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-ink-rule bg-ink-well px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-muted hover:text-ink-text">Sectors <span aria-hidden="true">▾</span></button>
-            <div id="sector-filter-group" class="hidden">
-              <!-- Sector filter separator -->
-              <span class="hidden sm:inline-block h-4 w-px bg-ink-rule mx-0.5 self-center shrink-0" aria-hidden="true"></span>
-              <button aria-pressed="false" data-sector="Financial Services" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">FINANCIALS</button>
-              <button aria-pressed="false" data-sector="Information Technology" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">IT</button>
-              <button aria-pressed="false" data-sector="Healthcare" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">HEALTHCARE</button>
-              <button aria-pressed="false" data-sector="Automobile and Auto Components" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">AUTO</button>
-              <button aria-pressed="false" data-sector="Fast Moving Consumer Goods" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">FMCG</button>
-              <button aria-pressed="false" data-sector="Capital Goods" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">CAPITAL GOODS</button>
-              <button aria-pressed="false" data-sector="Power" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">POWER</button>
-              <button aria-pressed="false" data-sector="Metals &amp; Mining" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">METALS</button>
-              <button aria-pressed="false" data-sector="Chemicals" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">CHEMICALS</button>
-              <button aria-pressed="false" data-sector="Realty" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">REALTY</button>
-              <button aria-pressed="false" data-sector="Telecommunication" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">TELECOM</button>
-              <button aria-pressed="false" data-sector="Oil Gas &amp; Consumable Fuels" class="filter-pill-btn sector-pill inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">OIL &amp; GAS</button>
+        <!-- Filter Toolbar: Group A (Screening) + Group B (Sector Selector) -->
+        <div id="market-filters" class="filter-dashboard-bar py-2.5 sm:py-3">
+          <div class="filter-toolbar-inner">
+            <div class="filter-group filter-group-screening" role="group" aria-label="Screening filters">
+              <button type="button" aria-pressed="true" data-filter="ALL" class="filter-pill-btn is-active inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-sienna bg-ink-sienna-muted text-ink-sienna shadow-soft">All stocks</button>
+              <button type="button" aria-pressed="false" data-filter="TOP GAINERS" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">Top gainers</button>
+              <button type="button" aria-pressed="false" data-filter="TOP LOSERS" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">Top losers</button>
+              <button type="button" aria-pressed="false" data-filter="NEAR 52W HIGH" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">Near 52W high</button>
+              <button type="button" aria-pressed="false" id="filter-watchlist-btn" data-filter="WATCHLIST" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-amber-400"><span class="text-amber-400" aria-hidden="true">★</span> Watchlist</button>
+              <button type="button" aria-pressed="false" data-filter="HIGH VOLUME" class="filter-pill-btn inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-[11px] py-[5px] font-ui text-[10px] font-semibold uppercase tracking-[0.06em] transition-all duration-150 border-ink-rule bg-ink-well text-ink-muted hover:-translate-y-px hover:text-ink-text">High volume</button>
+            </div>
+
+            <span class="filter-group-divider" aria-hidden="true"></span>
+
+            <div class="filter-group filter-group-sector" role="group" aria-label="Sector filter">
+              <div id="sector-picker" class="sector-picker">
+                <button id="sector-dropdown-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="sector-dropdown-menu" class="sector-dropdown-trigger">
+                  <span class="sector-trigger-label">Sector:</span>
+                  <span id="sector-selected-label" class="sector-trigger-value">All sectors</span>
+                  <span class="sector-trigger-caret" aria-hidden="true">▾</span>
+                </button>
+                <button id="sector-clear-btn" type="button" class="sector-clear-btn hidden" aria-label="Clear sector filter" title="Clear sector filter">×</button>
+                <div id="sector-dropdown-menu" class="sector-dropdown-menu" role="listbox" aria-label="Select sector" hidden>
+                  <button type="button" role="option" aria-selected="true" data-sector="" class="sector-option-btn is-selected"><span>All sectors</span><span class="sector-option-tag">Reset</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Financial Services" class="sector-option-btn"><span>Financials</span><span class="sector-option-tag">Financial Services</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Information Technology" class="sector-option-btn"><span>IT</span><span class="sector-option-tag">Information Technology</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Healthcare" class="sector-option-btn"><span>Healthcare</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Automobile and Auto Components" class="sector-option-btn"><span>Auto</span><span class="sector-option-tag">Auto &amp; Components</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Fast Moving Consumer Goods" class="sector-option-btn"><span>FMCG</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Capital Goods" class="sector-option-btn"><span>Capital Goods</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Power" class="sector-option-btn"><span>Power</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Metals &amp; Mining" class="sector-option-btn"><span>Metals &amp; Mining</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Chemicals" class="sector-option-btn"><span>Chemicals</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Realty" class="sector-option-btn"><span>Realty</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Telecommunication" class="sector-option-btn"><span>Telecom</span><span class="sector-option-tag">Telecommunication</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Oil Gas &amp; Consumable Fuels" class="sector-option-btn"><span>Oil &amp; Gas</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Services" class="sector-option-btn"><span>Services</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Consumer Durables" class="sector-option-btn"><span>Consumer Durables</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Consumer Services" class="sector-option-btn"><span>Consumer Services</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Construction" class="sector-option-btn"><span>Construction</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Construction Materials" class="sector-option-btn"><span>Construction Materials</span></button>
+                  <button type="button" role="option" aria-selected="false" data-sector="Unclassified" class="sector-option-btn"><span>Unclassified</span></button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
