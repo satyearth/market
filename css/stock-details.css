@@ -86,6 +86,12 @@
 
 .stock-history-table-wrap {
   position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.stock-history-table {
+  width: 100%;
 }
 
 .stock-history-table-wrap.is-expanded {
@@ -216,16 +222,27 @@
 }
 
 /* Exchange Listings balanced stack */
+#exchange-listings,
 .exchange-listings-stack {
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
 }
 
 .exchange-cards-row {
+  width: 100%;
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0.625rem;
+}
+
+.exchange-cards-row > div,
+.exchange-id-card {
+  width: 100%;
+  min-width: 0;
 }
 
 .exchange-cards-row.is-dual {
@@ -276,9 +293,24 @@
    Required order: Overview -> Trading+Valuations -> History -> Company -> Exchange
    ------------------------------------------------------------------------- */
 @media (max-width: 899px) {
+  #stock-detail {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .stock-overview-card,
+  .stock-detail-col-left > section,
+  .stock-detail-col-right > section {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
   .stock-detail-sections {
     display: flex;
     flex-direction: column;
+    align-items: stretch;
+    width: 100%;
     gap: 1rem;
   }
 
@@ -303,10 +335,27 @@
   }
 }
 
-/* Single column stack for small mobile screens (<= 520px) */
+/* Compact hybrid grid & single-column dual-exchange stack on small mobile (<= 520px) */
 @media (max-width: 520px) {
-  .stock-detail-grid,
+  .stock-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stock-detail-field {
+    padding: 0.72rem 0.85rem;
+  }
+
+  .stock-detail-field.is-wide {
+    grid-column: 1 / -1;
+  }
+
   .exchange-cards-row.is-dual {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 339px) {
+  .stock-detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

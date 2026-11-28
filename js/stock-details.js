@@ -78,8 +78,10 @@
       : mapped;
   }
 
-  function field(label, value, isNumeric = false) {
-    return `<div class="stock-detail-field"><dt class="stock-detail-label">${escapeHtml(label)}</dt><dd class="stock-detail-value${isNumeric ? ' is-numeric' : ''}">${escapeHtml(valueOrNA(value))}</dd></div>`;
+  function field(label, value, isNumeric = false, isWide = false) {
+    const classes = ['stock-detail-field'];
+    if (isWide) classes.push('is-wide');
+    return `<div class="${classes.join(' ')}"><dt class="stock-detail-label">${escapeHtml(label)}</dt><dd class="stock-detail-value${isNumeric ? ' is-numeric' : ''}">${escapeHtml(valueOrNA(value))}</dd></div>`;
   }
 
   function listingRow(label, value) {
@@ -139,14 +141,14 @@
       : formatFinancialSource(stock.market_cap_source, stock.market_cap_as_of_date);
 
     document.getElementById('company-info-grid').innerHTML = [
-      field('Market capitalization', capDisplay, true),
-      field('Sector', sectorVal),
-      field('Industry', stock.industry),
+      field('Market capitalization', capDisplay, true, true),
+      field('Sector', sectorVal, false, true),
+      field('Industry', stock.industry, false, true),
       field('52-week high', stock.week52_high == null ? null : formatPrice(stock.week52_high), true),
       field('52-week low', stock.week52_low == null ? null : formatPrice(stock.week52_low), true),
       field('Segment', stock.segment),
       field('Series / group', stock.series, true),
-      field('Financial data source', sourceDisplay)
+      field('Financial data source', sourceDisplay, false, true)
     ].join('');
 
     const descTextEl = document.getElementById('company-description-text');
