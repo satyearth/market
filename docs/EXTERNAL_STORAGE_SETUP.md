@@ -45,6 +45,8 @@ In your GitHub repository → **Settings → Secrets and variables → Actions**
 | Secret | `SUPABASE_URL` | `https://<project-ref>.supabase.co` | Yes |
 | Secret | `SUPABASE_SERVICE_ROLE_KEY` | Supabase `service_role` key (server-side write + lock) | Yes |
 | Variable | `SUPABASE_STORAGE_BUCKET` | `machii-bazzar-datasets` (default if omitted) | Optional |
+| Variable | `REFRESH_WAIT_MINUTES` | Max minutes to poll for delayed BhavCopy (`15` default) | Optional |
+| Variable | `REFRESH_POLL_SECONDS` | Retry poll interval in seconds (`30` default) | Optional |
 
 > **Security:** Never commit `SUPABASE_SERVICE_ROLE_KEY` or `.env` files to source control.
 
@@ -59,6 +61,7 @@ In your Vercel project → **Settings → Environment Variables** (Production & 
 | `SUPABASE_URL` | `https://<project-ref>.supabase.co` | Yes |
 | `SUPABASE_STORAGE_BUCKET` | `machii-bazzar-datasets` (default if omitted) | Optional |
 | `SUPABASE_ANON_KEY` *(or `SUPABASE_SERVICE_ROLE_KEY`)* | Needed if the bucket is **Private**; omit only if bucket is **Public** | Recommended |
+| `REFRESH_API_SECRET` | High-entropy secret (>= 32 chars) authorizing `POST /api/market/refresh` in production (fails closed with HTTP `503` if omitted) | Production |
 
 Once set, redeploy Vercel **once** so the updated serverless functions pick up these environment variables. All subsequent daily stock updates appear automatically within seconds of GitHub Actions publishing `latest.json`.
 

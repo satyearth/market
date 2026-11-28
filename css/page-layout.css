@@ -654,12 +654,13 @@ img {
     white-space: nowrap;
   }
 
-  .stocks-table tbody td:nth-child(2) .company-logo-box,
-  .stocks-table tbody td:nth-child(2) .company-logo-img,
+  .stocks-table tbody td:nth-child(2) .stock-logo-wrap,
+  .stocks-table tbody td:nth-child(2) .company-logo-image,
   .stocks-table tbody td:nth-child(2) .company-logo-fallback {
     width: 28px !important;
     height: 28px !important;
     min-width: 28px !important;
+    min-height: 28px !important;
     flex-shrink: 0;
   }
 

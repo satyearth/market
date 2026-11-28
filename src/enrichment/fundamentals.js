@@ -216,7 +216,6 @@ function mapCatalogToCanonicalSector(rawSector, rawIndustry) {
 
 function enrichFundamentalsForStock({
   isin,
-  symbol,
   nseSymbol,
   bseScripCode,
   series,

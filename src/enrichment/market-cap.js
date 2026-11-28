@@ -379,7 +379,6 @@ function resolveStockMarketCap(stock, sources, prevStock = null) {
   const isin = String(stock.isin || '').toUpperCase();
   const sym = String(stock.symbol || '').toUpperCase();
   const nseSym = String(stock.nse_symbol || '').toUpperCase();
-  const bseCode = String(stock.bse_scrip_code || '').toUpperCase();
   const series = String(stock.series || '').trim().toUpperCase();
   const isNseListed = Array.isArray(stock.exchanges)
     ? stock.exchanges.includes('NSE')

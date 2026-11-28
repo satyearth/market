@@ -14,9 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { DOWNLOADS_DIR } = require('../config/constants');
-const { parseCSVContent } = require('../processing/csv-parser');
 const {
-  getLatestExpectedTradingDate,
   getPreviousTradingDay,
   getTradingDaysInRange,
   isTradingDay

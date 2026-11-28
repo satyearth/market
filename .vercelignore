@@ -7,9 +7,11 @@ docs
 tests
 scripts
 test-results
+playwright-report
 server.js
 eslint.config.js
 js/stocks-data.backup.js
+*.md
 *.log
 *.zip
 .env

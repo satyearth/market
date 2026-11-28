@@ -72,9 +72,7 @@
     const image = event && event.target;
     if (!image || !image.matches || !image.matches('img[data-logo-isin]')) return;
     const fallback = image.nextElementSibling;
-    if (fallback && fallback.classList && !fallback.classList.contains('company-logo-fallback')) {
-      fallback.remove();
-    } else if (fallback) {
+    if (fallback) {
       fallback.remove();
     }
   }

@@ -2,6 +2,10 @@
 Thumbs.db
 node_modules/
 test-results/
+playwright-report/
+blob-report/
+.cache/
+*.tmp
 .vscode/*
 !.vscode/settings.json
 .backup/
