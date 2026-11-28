@@ -35,19 +35,40 @@ let cachedHistoricalRemote = null; // { versionId, sha256, checkedAt, history, m
 let cachedCatalogSectorMap = null;
 
 const ALIASES = {
-  zomato: 'ETERNAL',
-  blinkit: 'ETERNAL',
-  policybazaar: 'POLICYBZR',
-  paisabazaar: 'POLICYBZR',
-  maggi: 'NESTLEIND',
-  jlr: 'TATAMOTORS',
-  jaguar: 'TATAMOTORS'
+  zomato: ['ETERNAL'],
+  blinkit: ['ETERNAL'],
+  policybazaar: ['POLICYBZR'],
+  paisabazaar: ['POLICYBZR'],
+  maggi: ['NESTLEIND'],
+  jlr: ['TMPV'],
+  jaguar: ['TMPV'],
+  tatamotors: ['TMPV', 'TMCV'],
+  'tata motors': ['TMPV', 'TMCV']
 };
 
 const SORTABLE = new Set([
   'rank', 'symbol', 'current_price', 'change_percent', 'market_cap_cr',
   'return_1w', 'return_1m', 'return_3m', 'volume_ratio', 'volume'
 ]);
+
+const VALID_FILTERS = new Set([
+  'ALL', 'WATCHLIST', 'TOP GAINERS', 'TOP LOSERS', 'NEAR 52W HIGH', 'HIGH VOLUME'
+]);
+const VALID_EXCHANGES = new Set(['NSE', 'BSE']);
+const VALID_DIRECTIONS = new Set(['asc', 'desc']);
+const MAX_WATCHLIST_ISINS = 200;
+const MAX_SEARCH_LENGTH = 200;
+const MAX_SECTOR_LENGTH = 100;
+const ISIN_RE = /^[A-Z0-9]{12}$/;
+
+function hasControlChar(value) {
+  const str = String(value);
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+}
 
 function getLocalCatalogSectorMap() {
   if (cachedCatalogSectorMap !== null) return cachedCatalogSectorMap;
@@ -87,6 +108,9 @@ function normalizeDataset(stats, rawStocks) {
     if (!isin || seen.has(isin)) continue;
     seen.add(isin);
     const stock = { ...raw, isin };
+    if (typeof stock.logo_url === 'string' && stock.logo_url.startsWith('/stock-logos/')) {
+      stock.logo_url = null;
+    }
     if (SECTOR_OVERRIDES[isin]) {
       stock.sector = SECTOR_OVERRIDES[isin].sector;
       stock.industry = SECTOR_OVERRIDES[isin].industry;
@@ -102,16 +126,65 @@ function normalizeDataset(stats, rawStocks) {
   return { stats, stocks };
 }
 
+function parseStocksDataSource(source) {
+  const statsMatch = source.match(/const MARKET_STATS = (\{[\s\S]*?\});\s*(?:window\.MARKET_STATS|const STOCKS_DATA)/);
+  const stocksMatch = source.match(/const STOCKS_DATA = (\[[\s\S]*\]);\s*$/);
+  if (!statsMatch || !stocksMatch) throw new Error('Stock dataset format is invalid');
+  return {
+    stats: JSON.parse(statsMatch[1]),
+    stocks: JSON.parse(stocksMatch[1])
+  };
+}
+
+function readMarketStatsHead(dataPath = DATA_PATH, initialBytes = 65536, maxHeadBytes = 524288) {
+  let fd = null;
+  try {
+    const stat = fs.statSync(dataPath);
+    const totalSize = stat.size;
+    if (totalSize === 0) return null;
+
+    fd = fs.openSync(dataPath, 'r');
+    let chunkSize = Math.min(totalSize, initialBytes);
+    let offset = 0;
+    const chunks = [];
+
+    while (offset < maxHeadBytes && offset < totalSize) {
+      const toRead = Math.min(chunkSize, totalSize - offset, maxHeadBytes - offset);
+      if (toRead <= 0) break;
+      const buf = Buffer.allocUnsafe(toRead);
+      const bytesRead = fs.readSync(fd, buf, 0, toRead, offset);
+      if (bytesRead <= 0) break;
+      chunks.push(bytesRead === toRead ? buf : buf.subarray(0, bytesRead));
+      offset += bytesRead;
+
+      const head = Buffer.concat(chunks).toString('utf8');
+      const match = head.match(/const MARKET_STATS = (\{[\s\S]*?\});\s*(?:window\.MARKET_STATS|const STOCKS_DATA)/);
+      if (match) {
+        return JSON.parse(match[1]);
+      }
+      chunkSize = Math.min(chunkSize * 2, maxHeadBytes);
+    }
+
+    const fullContent = fs.readFileSync(dataPath, 'utf8');
+    const fullMatch = fullContent.match(/const MARKET_STATS = (\{[\s\S]*?\});\s*(?:window\.MARKET_STATS|const STOCKS_DATA)/);
+    return fullMatch ? JSON.parse(fullMatch[1]) : null;
+  } catch (_) {
+    return null;
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+  }
+}
+
 function loadDataset(dataPath = DATA_PATH) {
   const stat = fs.statSync(dataPath);
   if (dataPath === DATA_PATH && cachedLocal && cachedLocal.mtimeMs === stat.mtimeMs && cachedLocal.size === stat.size) {
     return cachedLocal.data;
   }
   const source = fs.readFileSync(dataPath, 'utf8');
-  const statsMatch = source.match(/const MARKET_STATS = (\{[\s\S]*?\});\s*(?:window\.MARKET_STATS|const STOCKS_DATA)/);
-  const stocksMatch = source.match(/const STOCKS_DATA = (\[[\s\S]*\]);\s*$/);
-  if (!statsMatch || !stocksMatch) throw new Error('Stock dataset format is invalid');
-  const data = normalizeDataset(JSON.parse(statsMatch[1]), JSON.parse(stocksMatch[1]));
+  const parsed = parseStocksDataSource(source);
+  const data = normalizeDataset(parsed.stats, parsed.stocks);
   if (dataPath === DATA_PATH) {
     cachedLocal = { mtimeMs: stat.mtimeMs, size: stat.size, data };
   }
@@ -119,14 +192,8 @@ function loadDataset(dataPath = DATA_PATH) {
 }
 
 function readLocalStatsSafe(dataPath = DATA_PATH) {
-  try {
-    if (!fs.existsSync(dataPath)) return null;
-    const content = fs.readFileSync(dataPath, 'utf8');
-    const match = content.match(/const MARKET_STATS = (\{[\s\S]*?\});\s*(?:window\.MARKET_STATS|const STOCKS_DATA)/);
-    return match ? JSON.parse(match[1]) : null;
-  } catch (_) {
-    return null;
-  }
+  if (!dataPath || !fs.existsSync(dataPath)) return null;
+  return readMarketStatsHead(dataPath);
 }
 
 async function loadDatasetAsync(options = {}) {
@@ -458,49 +525,292 @@ async function loadHistoricalDatasetAsync(metaOrManifest = null, options = {}) {
   return { ok: false, history: null, meta, storageSource: 'local_fallback' };
 }
 
-function searchMatches(stock, query) {
-  if (!query) return true;
-  const q = query.toLowerCase().trim();
+function parseBooleanFlag(rawValue, fieldName) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return { ok: true, value: false };
+  if (typeof rawValue === 'boolean') return { ok: true, value: rawValue };
+  const s = String(rawValue).trim().toLowerCase();
+  if (s === 'true' || s === '1') return { ok: true, value: true };
+  if (s === 'false' || s === '0') return { ok: true, value: false };
+  return { ok: false, statusCode: 400, error: `Invalid boolean parameter "${fieldName}".` };
+}
+
+function validateAndNormalizeStockQuery(params = {}) {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    return { ok: false, statusCode: 400, error: 'Query parameters must be an object.' };
+  }
+
+  const keys = Object.keys(params);
+  if (keys.length > 20) {
+    return { ok: false, statusCode: 400, error: 'Too many query parameters supplied.' };
+  }
+
+  for (const key of keys) {
+    const val = params[key];
+    if (Array.isArray(val) || (val !== undefined && val !== null && typeof val === 'object')) {
+      return { ok: false, statusCode: 400, error: `Malformed query parameter "${key}".` };
+    }
+    if (val !== undefined && val !== null && hasControlChar(val)) {
+      return { ok: false, statusCode: 400, error: `Invalid control characters in parameter "${key}".` };
+    }
+  }
+
+  let limit = 50;
+  if (params.limit !== undefined && params.limit !== null && String(params.limit).trim() !== '') {
+    const rawLimit = String(params.limit).trim();
+    if (!/^\d+$/.test(rawLimit)) {
+      return { ok: false, statusCode: 400, error: 'Parameter "limit" must be a positive integer.' };
+    }
+    const parsedLimit = Number(rawLimit);
+    if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 1000) {
+      return { ok: false, statusCode: 400, error: 'Parameter "limit" must be between 1 and 1000.' };
+    }
+    limit = Math.min(50, parsedLimit);
+  }
+
+  let offset = 0;
+  if (params.offset !== undefined && params.offset !== null && String(params.offset).trim() !== '') {
+    const rawOffset = String(params.offset).trim();
+    if (!/^\d+$/.test(rawOffset)) {
+      return { ok: false, statusCode: 400, error: 'Parameter "offset" must be a non-negative integer.' };
+    }
+    const parsedOffset = Number(rawOffset);
+    if (!Number.isSafeInteger(parsedOffset) || parsedOffset < 0 || parsedOffset > 100000) {
+      return { ok: false, statusCode: 400, error: 'Parameter "offset" is out of bounds.' };
+    }
+    offset = parsedOffset;
+  }
+
+  let exactIsin = '';
+  if (params.isin !== undefined && params.isin !== null && String(params.isin).trim() !== '') {
+    exactIsin = String(params.isin).trim().toUpperCase();
+    if (!ISIN_RE.test(exactIsin)) {
+      return { ok: false, statusCode: 400, error: 'Parameter "isin" must be a valid 12-character ISIN.' };
+    }
+  }
+
+  let watchlistIsinSet = null;
+  if (params.isins !== undefined && params.isins !== null && String(params.isins).trim() !== '') {
+    const rawIsinsStr = String(params.isins);
+    if (rawIsinsStr.length > 3500) {
+      return { ok: false, statusCode: 400, error: 'Parameter "isins" exceeds maximum allowed size.' };
+    }
+    const rawTokens = rawIsinsStr.split(',');
+    if (rawTokens.length > MAX_WATCHLIST_ISINS) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: `A maximum of ${MAX_WATCHLIST_ISINS} ISINs is permitted in "isins".`
+      };
+    }
+    const normalizedSet = new Set();
+    for (const token of rawTokens) {
+      const clean = token.trim().toUpperCase();
+      if (!ISIN_RE.test(clean)) {
+        return { ok: false, statusCode: 400, error: 'Parameter "isins" contains an invalid ISIN value.' };
+      }
+      normalizedSet.add(clean);
+    }
+    if (normalizedSet.size > MAX_WATCHLIST_ISINS) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: `A maximum of ${MAX_WATCHLIST_ISINS} ISINs is permitted in "isins".`
+      };
+    }
+    watchlistIsinSet = normalizedSet;
+  }
+
+  let search = '';
+  if (params.search !== undefined && params.search !== null && String(params.search) !== '') {
+    const rawSearch = String(params.search);
+    if (rawSearch.length > MAX_SEARCH_LENGTH) {
+      return { ok: false, statusCode: 400, error: `Parameter "search" must not exceed ${MAX_SEARCH_LENGTH} characters.` };
+    }
+    search = rawSearch.trim();
+  }
+
+  const filter = params.filter !== undefined && params.filter !== null && String(params.filter).trim() !== ''
+    ? String(params.filter).trim().toUpperCase()
+    : 'ALL';
+  if (!VALID_FILTERS.has(filter)) {
+    return { ok: false, statusCode: 400, error: `Unsupported filter "${filter}".` };
+  }
+
+  const exchange = params.exchange !== undefined && params.exchange !== null && String(params.exchange).trim() !== ''
+    ? String(params.exchange).trim().toUpperCase()
+    : '';
+  if (exchange && !VALID_EXCHANGES.has(exchange)) {
+    return { ok: false, statusCode: 400, error: `Unsupported exchange "${exchange}".` };
+  }
+
+  const sort = params.sort !== undefined && params.sort !== null && String(params.sort).trim() !== ''
+    ? String(params.sort).trim()
+    : 'market_cap_cr';
+  if (!SORTABLE.has(sort)) {
+    return { ok: false, statusCode: 400, error: `Unsupported sort field "${sort}".` };
+  }
+
+  const directionStr = params.direction !== undefined && params.direction !== null && String(params.direction).trim() !== ''
+    ? String(params.direction).trim().toLowerCase()
+    : 'desc';
+  if (!VALID_DIRECTIONS.has(directionStr)) {
+    return { ok: false, statusCode: 400, error: `Unsupported sort direction "${directionStr}".` };
+  }
+  const direction = directionStr === 'asc' ? 1 : -1;
+
+  let sector = '';
+  if (params.sector !== undefined && params.sector !== null && String(params.sector).trim() !== '') {
+    sector = String(params.sector).trim().toLowerCase();
+    if (sector.length > MAX_SECTOR_LENGTH) {
+      return { ok: false, statusCode: 400, error: `Parameter "sector" must not exceed ${MAX_SECTOR_LENGTH} characters.` };
+    }
+  }
+
+  const sortOverrideRes = parseBooleanFlag(params.sortOverride, 'sortOverride');
+  if (!sortOverrideRes.ok) return sortOverrideRes;
+  const includeHistoryRes = parseBooleanFlag(params.includeHistory, 'includeHistory');
+  if (!includeHistoryRes.ok) return includeHistoryRes;
+  const forceRes = parseBooleanFlag(params.force, 'force');
+  if (!forceRes.ok) return forceRes;
+
+  return {
+    ok: true,
+    query: {
+      limit,
+      offset,
+      exactIsin,
+      watchlistIsinSet,
+      search,
+      filter,
+      exchange,
+      sort,
+      direction,
+      sector,
+      sortOverride: sortOverrideRes.value,
+      includeHistory: Boolean(exactIsin || includeHistoryRes.value),
+      force: forceRes.value
+    }
+  };
+}
+
+let lastQueryKey = null;
+let lastQueryParsed = null;
+
+function parseSearchQuery(query) {
+  if (!query) return null;
+  if (query === lastQueryKey && lastQueryParsed) return lastQueryParsed;
+  const q = String(query).toLowerCase().trim();
   const norm = q.replace(/[^a-z0-9]/g, '');
   const alias = ALIASES[q] || ALIASES[norm];
-  if (alias && (stock.symbol === alias || stock.nse_symbol === alias)) return true;
+  const targets = alias ? (Array.isArray(alias) ? alias : [alias]) : null;
+  lastQueryKey = query;
+  lastQueryParsed = { q, norm, targets };
+  return lastQueryParsed;
+}
+
+function prepareStockSearchIndex(stock) {
+  if (!stock || typeof stock !== 'object') return null;
+  if (stock._searchIndex) return stock._searchIndex;
+  const symLow = String(stock.symbol || '').toLowerCase();
+  const nameLow = String(stock.company_name || '').toLowerCase();
+  const nseLow = String(stock.nse_symbol || '').toLowerCase();
+  const index = {
+    lower: [
+      symLow,
+      nameLow,
+      nseLow,
+      String(stock.bse_scrip_code || '').toLowerCase(),
+      String(stock.isin || '').toLowerCase(),
+      String(stock.sector || '').toLowerCase(),
+      String(stock.industry || '').toLowerCase()
+    ].join('\u0001'),
+    norm: [
+      symLow.replace(/[^a-z0-9]/g, ''),
+      nameLow.replace(/[^a-z0-9]/g, ''),
+      nseLow.replace(/[^a-z0-9]/g, '')
+    ].join('\u0001')
+  };
+  Object.defineProperty(stock, '_searchIndex', {
+    value: index,
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+  return index;
+}
+
+function searchMatches(stock, query) {
+  if (!query) return true;
+  const parsed = parseSearchQuery(query);
+  if (!parsed || !parsed.q) return true;
+  const { q, norm, targets } = parsed;
+  if (targets && targets.some(t => stock.symbol === t || stock.nse_symbol === t)) {
+    return true;
+  }
+  const idx = prepareStockSearchIndex(stock);
+  if (!q.includes('\u0001')) {
+    if (idx.lower.includes(q)) return true;
+    return norm.length >= 2 && idx.norm.includes(norm);
+  }
   return ['symbol', 'company_name', 'nse_symbol', 'bse_scrip_code', 'isin', 'sector', 'industry']
     .some(key => String(stock[key] || '').toLowerCase().includes(q)) || (norm.length >= 2 &&
       ['symbol', 'company_name', 'nse_symbol'].some(key => String(stock[key] || '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(norm)));
 }
 
+function stripHeavyFieldsForList(stock) {
+  if (!stock || typeof stock !== 'object') return stock;
+  if (!Object.prototype.hasOwnProperty.call(stock, 'historical_prices') &&
+      !Object.prototype.hasOwnProperty.call(stock, 'description')) {
+    return stock;
+  }
+  const { historical_prices: _omitHist, description: _omitDesc, ...listRow } = stock;
+  return listRow;
+}
+
 function executeStockQuery(dataset, params = {}) {
+  const validated = validateAndNormalizeStockQuery(params);
+  if (!validated.ok) {
+    return validated;
+  }
+
   const { stocks, stats } = dataset;
-  const limit = Math.min(50, Math.max(1, Number.parseInt(params.limit, 10) || 50));
-  const offset = Math.max(0, Number.parseInt(params.offset, 10) || 0);
-  const exactIsin = params.isin ? String(params.isin).trim().toUpperCase() : '';
-  const search = String(params.search || '').slice(0, 120);
-  const filter = String(params.filter || 'ALL').toUpperCase();
-  const exchange = String(params.exchange || '').toUpperCase();
-  const sort = SORTABLE.has(params.sort) ? params.sort : 'market_cap_cr';
-  const direction = String(params.direction || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+  const {
+    limit,
+    offset,
+    exactIsin,
+    watchlistIsinSet,
+    search,
+    filter,
+    exchange,
+    sort,
+    direction,
+    sector,
+    sortOverride,
+    includeHistory
+  } = validated.query;
 
   const results = stocks.filter(s => {
     if (exactIsin && String(s.isin || '').toUpperCase() !== exactIsin) return false;
     if (filter === 'WATCHLIST') {
-      if (!params.isins) return false;
-      const isinSet = new Set(String(params.isins).split(',').map(i => i.trim().toUpperCase()).filter(Boolean));
-      if (!isinSet.size || !isinSet.has(String(s.isin || '').toUpperCase())) return false;
+      if (!watchlistIsinSet || !watchlistIsinSet.size || !watchlistIsinSet.has(String(s.isin || '').toUpperCase())) {
+        return false;
+      }
     }
     if (!searchMatches(s, search)) return false;
     if (exchange && !(Array.isArray(s.exchanges) && s.exchanges.includes(exchange))) return false;
     if (filter === 'TOP GAINERS' && !(Number(s.change_percent) > 0 || (s.prev_close != null && Number(s.current_price) > Number(s.prev_close)))) return false;
     if (filter === 'TOP LOSERS' && !(Number(s.change_percent) < 0 || (s.prev_close != null && Number(s.current_price) < Number(s.prev_close)))) return false;
-    if (filter === 'NEAR 52W HIGH' && !(s.is_near_high || (s.pct_from_high && Number(s.pct_from_high) >= -8))) return false;
-    if (filter === 'HIGH VOLUME' && !(Number(s.volume_ratio) >= 1.8)) return false;
-    if (params.sector) {
-      const sec = String(params.sector).toLowerCase();
-      if (String(s.sector || '').toLowerCase() !== sec) return false;
+    if (filter === 'NEAR 52W HIGH') {
+      const pct = s.pct_from_high;
+      const hasValidPct = pct !== null && pct !== undefined && pct !== '' && Number.isFinite(Number(pct));
+      if (!(s.is_near_high === true || (hasValidPct && Number(pct) >= -8))) return false;
     }
+    if (filter === 'HIGH VOLUME' && !(Number(s.volume_ratio) >= 1.8)) return false;
+    if (sector && String(s.sector || '').toLowerCase() !== sector) return false;
     return true;
   });
 
-  const useCategoryOrder = (filter === 'TOP GAINERS' || filter === 'TOP LOSERS') && String(params.sortOverride).toLowerCase() !== 'true';
+  const useCategoryOrder = (filter === 'TOP GAINERS' || filter === 'TOP LOSERS') && !sortOverride;
   if (!useCategoryOrder) {
     results.sort((a, b) => {
       const x = a[sort], y = b[sort];
@@ -514,9 +824,12 @@ function executeStockQuery(dataset, params = {}) {
     results.sort((a, b) => (Number(a.change_percent || 0) - Number(b.change_percent || 0) || String(a.isin).localeCompare(String(b.isin))) * (filter === 'TOP GAINERS' ? -1 : 1));
   }
 
+  const pageSlice = results.slice(offset, offset + limit);
+  const outputStocks = includeHistory ? pageSlice : pageSlice.map(stripHeavyFieldsForList);
+
   return {
     ok: true,
-    stocks: results.slice(offset, offset + limit),
+    stocks: outputStocks,
     offset,
     nextOffset: Math.min(offset + limit, results.length),
     limit,
@@ -529,17 +842,19 @@ function executeStockQuery(dataset, params = {}) {
 }
 
 function queryStocks(params = {}) {
+  const validated = validateAndNormalizeStockQuery(params);
+  if (!validated.ok) return validated;
   return executeStockQuery(loadDataset(), params);
 }
 
 async function queryStocksAsync(params = {}, options = {}) {
+  const validated = validateAndNormalizeStockQuery(params);
+  if (!validated.ok) return validated;
+
   const dataset = await loadDatasetAsync(options);
   const result = executeStockQuery(dataset, params);
-  const includeHistory = Boolean(
-    (params.isin && String(params.isin).trim()) ||
-    String(params.includeHistory || '').toLowerCase() === 'true' ||
-    params.includeHistory === '1'
-  );
+  if (!result.ok) return result;
+  const includeHistory = validated.query.includeHistory;
 
   if (
     includeHistory &&
@@ -656,11 +971,18 @@ async function queryStockHistoryAsync(params = {}, options = {}) {
 
 module.exports = {
   SECTOR_OVERRIDES,
+  ALIASES,
+  MAX_WATCHLIST_ISINS,
+  parseStocksDataSource,
+  readLocalStatsSafe,
+  validateAndNormalizeStockQuery,
   loadDataset,
   loadDatasetAsync,
   loadMarketStatsAsync,
   loadHistoricalDatasetAsync,
   executeStockQuery,
+  prepareStockSearchIndex,
+  searchMatches,
   queryStocks,
   queryStocksAsync,
   queryStockHistoryAsync,

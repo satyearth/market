@@ -13,7 +13,8 @@ const suites = [
   require('./validation.test'),
   require('./storage-retention.test'),
   require('./api-and-query.test'),
-  require('./security-and-ci.test')
+  require('./security-and-ci.test'),
+  require('./audit-regression.test')
 ];
 
 (async () => {

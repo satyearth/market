@@ -15,25 +15,26 @@ const {
   SPARKLINE_SESSIONS,
   RETURN_WINDOW_1W_SESSIONS,
   RETURN_WINDOW_1M_SESSIONS,
-  RETURN_WINDOW_3M_SESSIONS
+  RETURN_WINDOW_3M_SESSIONS,
+  NSE_MAINBOARD_SERIES,
+  NSE_SME_SERIES,
+  NSE_EQUITY_SERIES,
+  BSE_MAINBOARD_GROUPS,
+  BSE_SME_GROUPS,
+  BSE_EQUITY_GROUPS,
+  isEligibleIsin
 } = require('../config/constants');
 const { parseCSVContent, cleanCompanyName } = require('./csv-parser');
 const { getNseFilename, getBseFilename } = require('../ingestion/bhavcopy-downloader');
-const { resolveStockMarketCap, rankStocksAndCategorize } = require('../enrichment/market-cap');
+const {
+  classifyEquityInstrumentType,
+  resolveStockMarketCap,
+  rankStocksAndCategorize,
+  getVerifiedScreenerEntry,
+  hasPostRefSplitDiscontinuity
+} = require('../enrichment/market-cap');
 const { enrichFundamentalsForStock } = require('../enrichment/fundamentals');
 const { hydrateHistoryMapFromPayload } = require('../storage/historical-store');
-
-const NSE_MAINBOARD_SERIES = new Set(['EQ', 'BE', 'BZ']);
-const NSE_SME_SERIES = new Set(['SM', 'ST', 'SZ']);
-const NSE_EQUITY_SERIES = new Set([...NSE_MAINBOARD_SERIES, ...NSE_SME_SERIES]);
-
-const BSE_MAINBOARD_GROUPS = new Set(['A', 'B', 'T', 'X', 'XT', 'Z', 'ZP', 'P', 'R', 'SS', 'TS', 'IF', 'IT', 'E']);
-const BSE_SME_GROUPS = new Set(['M', 'MT', 'MS']);
-const BSE_EQUITY_GROUPS = new Set([...BSE_MAINBOARD_GROUPS, ...BSE_SME_GROUPS]);
-
-function isEligibleIsin(isin) {
-  return Boolean(isin && (isin.startsWith('INE') || isin.startsWith('IN9')));
-}
 
 function compileHistoricalMatrix(downloadsDir, historicalDates, previousUniverseByIsin = null, previousHistoryDataset = null) {
   const priceHistoryByIsin = new Map();
@@ -630,6 +631,16 @@ function mergeExchangeUniverse({
       null;
     const prevStock = previousUniverseByIsin.get(isin);
     const bseMasterEntry = marketCapSources.bseSecByIsin.get(isin);
+    const refDate = marketCapSources?.sourceDates?.SCREENER_DATASET || '2026-11-04';
+    const rawRefEntry = histObj?.[refDate];
+    const refClose = rawRefEntry != null && typeof rawRefEntry === 'object'
+      ? rawRefEntry.close
+      : (rawRefEntry ?? null);
+    const hasSplitAfterRef = hasPostRefSplitDiscontinuity(histObj, refDate);
+    const screenerEntry = getVerifiedScreenerEntry(
+      { symbol, nse_symbol: nseSymbol, bse_scrip_code: bseScripCode, screener_ref_close: refClose },
+      marketCapSources
+    );
 
     const fund = enrichFundamentalsForStock({
       isin,
@@ -640,14 +651,31 @@ function mergeExchangeUniverse({
       currentPrice,
       benchmark,
       catalogEntry,
+      screenerEntry,
+      screenerSnapshotDate: refDate,
       prevStock,
       bseMasterEntry,
       nse52Week,
       bse52Week
     });
 
+    const instrumentType = classifyEquityInstrumentType({ isin, symbol });
+
     const capRes = resolveStockMarketCap(
-      { isin, symbol, nse_symbol: nseSymbol, bse_scrip_code: bseScripCode, current_price: currentPrice, close_price: currentPrice },
+      {
+        isin,
+        symbol,
+        nse_symbol: nseSymbol,
+        bse_scrip_code: bseScripCode,
+        exchanges,
+        series,
+        instrument_type: instrumentType,
+        current_price: currentPrice,
+        close_price: currentPrice,
+        trading_date: targetDate,
+        screener_ref_close: refClose,
+        has_split_after_ref: hasSplitAfterRef
+      },
       marketCapSources,
       prevStock
     );
@@ -669,9 +697,11 @@ function mergeExchangeUniverse({
       exchanges,
       segment,
       series,
+      instrument_type: instrumentType,
       listing_status: 'Active',
       sector: fund.sector,
       industry: fund.industry,
+      description: fund.description,
       open_price: openPrice,
       high_price: safeHigh,
       low_price: safeLow,
@@ -696,11 +726,15 @@ function mergeExchangeUniverse({
       pb_ratio: fund.pb_ratio,
       roce: fund.roce,
       debt_to_equity: fund.debt_to_equity,
+      fundamentals_source: fund.fundamentals_source,
+      fundamentals_as_of_date: fund.fundamentals_as_of_date,
       logo_url: fund.logo_url,
       trading_date: targetDate,
       fetched_at: fetchStartTime.toISOString(),
       market_cap_cr: capRes.market_cap_cr,
-      market_cap_source: capRes.market_cap_source || null
+      market_cap_source: capRes.market_cap_source || null,
+      market_cap_as_of_date: capRes.market_cap_as_of_date || null,
+      total_outstanding_shares: capRes.total_outstanding_shares || null
     });
   }
 

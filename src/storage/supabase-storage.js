@@ -213,6 +213,7 @@ function createStorageClient(config = {}) {
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
   const lockTtlMs = config.lockTtlMs ?? DEFAULT_LOCK_TTL_MS;
+  const lockTakeoverSettleMs = config.lockTakeoverSettleMs ?? 25;
 
   const isReadConfigured = () => {
     const cfg = getCfg();
@@ -953,11 +954,23 @@ function createStorageClient(config = {}) {
     if (!isWriteConfigured()) return { acquired: false, notConfigured: true };
 
     const existing = await downloadObject(LOCK_OBJECT_PATH);
+    let existingIsExpired = false;
+    let objectExists = false;
+
     if (existing.ok) {
+      objectExists = true;
       try {
         const lockObj = JSON.parse(existing.text);
         const expiresAtMs = Date.parse(lockObj.expiresAtUtc || '');
-        if (Number.isFinite(expiresAtMs) && expiresAtMs > Date.now() && lockObj.ownerId !== ownerId) {
+        const ownerMatches = Boolean(lockObj.ownerId && lockObj.ownerId === ownerId);
+        if (!Number.isFinite(expiresAtMs)) {
+          return {
+            acquired: false,
+            locked: !ownerMatches,
+            error: ownerMatches ? undefined : 'Remote lock payload is malformed; failing closed'
+          };
+        }
+        if (expiresAtMs > Date.now() && !ownerMatches) {
           return {
             acquired: false,
             locked: true,
@@ -965,7 +978,19 @@ function createStorageClient(config = {}) {
             expiresAtUtc: lockObj.expiresAtUtc
           };
         }
-      } catch (_) {}
+        existingIsExpired = expiresAtMs <= Date.now();
+      } catch (err) {
+        return {
+          acquired: false,
+          error: `Corrupt remote lock state; failing closed (${err.message})`
+        };
+      }
+    } else if (!existing.notFound && existing.statusCode !== 404) {
+      // Fail-closed on transient network/server/auth errors instead of blindly overwriting lock
+      return {
+        acquired: false,
+        error: existing.error || `Unable to verify remote lock state (HTTP ${existing.statusCode || 0})`
+      };
     }
 
     const nowMs = Date.now();
@@ -975,8 +1000,22 @@ function createStorageClient(config = {}) {
       expiresAtUtc: new Date(nowMs + lockTtlMs).toISOString()
     });
 
-    const putRes = await uploadObject(LOCK_OBJECT_PATH, lockPayload, { upsert: true, cacheControl: '0' });
-    if (!putRes.ok) return { acquired: false, error: putRes.error };
+    // Conditional create (upsert: false) prevents race overwrites when lock object does not yet exist
+    const putRes = await uploadObject(LOCK_OBJECT_PATH, lockPayload, {
+      upsert: objectExists && existingIsExpired,
+      cacheControl: '0'
+    });
+    if (!putRes.ok) {
+      return {
+        acquired: false,
+        locked: putRes.statusCode === 409,
+        error: putRes.error
+      };
+    }
+
+    if (objectExists && existingIsExpired && lockTakeoverSettleMs > 0) {
+      await sleep(lockTakeoverSettleMs);
+    }
 
     const verify = await downloadObject(LOCK_OBJECT_PATH);
     if (!verify.ok) return { acquired: false, error: verify.error };
@@ -992,15 +1031,42 @@ function createStorageClient(config = {}) {
     return { acquired: true };
   }
 
+  async function verifyLockOwnership(ownerId) {
+    const res = await downloadObject(LOCK_OBJECT_PATH);
+    if (!res.ok) {
+      return { ok: false, locked: false, error: res.error || 'Lock verification read failed before pointer swap' };
+    }
+    try {
+      const lockObj = JSON.parse(res.text);
+      const expiresAtMs = Date.parse(lockObj.expiresAtUtc || '');
+      if (!lockObj.ownerId || lockObj.ownerId !== ownerId) {
+        return { ok: false, locked: true, error: `Lock ownership lost before commit (held by ${lockObj.ownerId || 'unknown'})` };
+      }
+      if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+        return { ok: false, locked: false, error: 'Lock expired before commit; aborting pointer swap' };
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, locked: true, error: `Malformed lock payload before commit: ${err.message}` };
+    }
+  }
+
   async function releaseStorageLock(ownerId) {
     const existing = await downloadObject(LOCK_OBJECT_PATH);
-    if (existing.ok) {
-      try {
-        const lockObj = JSON.parse(existing.text);
-        if (lockObj.ownerId && lockObj.ownerId !== ownerId) {
-          return { ok: false, skipped: true };
-        }
-      } catch (_) {}
+    if (existing.notFound || existing.statusCode === 404) {
+      return { ok: true, alreadyReleased: true };
+    }
+    if (!existing.ok) {
+      // Fail-closed: never delete a lock whose ownership we could not verify
+      return { ok: false, error: existing.error || 'Unable to verify lock ownership prior to release' };
+    }
+    try {
+      const lockObj = JSON.parse(existing.text);
+      if (!lockObj.ownerId || lockObj.ownerId !== ownerId) {
+        return { ok: false, skipped: true };
+      }
+    } catch (err) {
+      return { ok: false, skipped: true, error: `Corrupt lock payload: ${err.message}` };
     }
     return deleteObject(LOCK_OBJECT_PATH);
   }
@@ -1282,6 +1348,17 @@ function createStorageClient(config = {}) {
       const publishedSessionsComplete = previousManifest
         ? Boolean(previousManifest.publishedSessionsComplete)
         : true;
+
+      // Pre-commit lock fence verification before atomic latest.json pointer swap
+      const fenceCheck = await verifyLockOwnership(ownerId);
+      if (!fenceCheck.ok) {
+        return {
+          ok: false,
+          phase: 'verify_lock_fence',
+          locked: Boolean(fenceCheck.locked),
+          error: fenceCheck.error
+        };
+      }
 
       // Phase 3: Atomic pointer swap
       const manifestObj = {

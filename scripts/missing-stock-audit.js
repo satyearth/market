@@ -10,6 +10,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const {
+  NSE_EQUITY_SERIES,
+  BSE_EQUITY_GROUPS,
+  isEligibleIsin
+} = require('../src/config/constants');
 const { getRecentTradingSessions } = require('../src/calendar/exchange-calendar');
 const { parseCsv, readExistingDataset } = require('./sync-stock-universe');
 const { getNseFilename, getBseFilename } = require('./download-bhavcopy');
@@ -66,8 +71,8 @@ async function runMissingStockAudit() {
     'policybazaar': 'POLICYBZR',
     'paisabazaar': 'POLICYBZR',
     'maggi': 'NESTLEIND',
-    'jlr': 'TATAMOTORS',
-    'jaguar': 'TATAMOTORS'
+    'jlr': 'TMPV',
+    'jaguar': 'TMPV'
   };
 
   function searchDataset(query) {
@@ -92,8 +97,6 @@ async function runMissingStockAudit() {
   }
 
   console.log('\n[2/5] Reconciling against official NSE & BSE BhavCopy Security Masters...');
-  const NSE_EQUITY_SERIES = new Set(['EQ', 'BE', 'BZ', 'BL', 'SM', 'ST']);
-  const BSE_EQUITY_GROUPS = new Set(['A', 'B', 'T', 'X', 'XT', 'Z', 'P', 'M', 'MT', 'MS']);
 
   const nseEligibleIsins = new Set();
   const bseEligibleIsins = new Set();
@@ -107,7 +110,7 @@ async function runMissingStockAudit() {
     nRaw.forEach(r => {
       const isin = r.ISIN ? r.ISIN.trim() : '';
       const series = r.SctySrs ? r.SctySrs.trim() : '';
-      if (NSE_EQUITY_SERIES.has(series) && (isin.startsWith('INE') || isin.startsWith('IN9'))) {
+      if (NSE_EQUITY_SERIES.has(series) && isEligibleIsin(isin)) {
         nseEligibleIsins.add(isin);
       }
     });
@@ -115,7 +118,7 @@ async function runMissingStockAudit() {
     bRaw.forEach(r => {
       const isin = r.ISIN ? r.ISIN.trim() : '';
       const group = r.SctySrs ? r.SctySrs.trim() : '';
-      if (BSE_EQUITY_GROUPS.has(group) && (isin.startsWith('INE') || isin.startsWith('IN9'))) {
+      if (BSE_EQUITY_GROUPS.has(group) && isEligibleIsin(isin)) {
         bseEligibleIsins.add(isin);
       }
     });

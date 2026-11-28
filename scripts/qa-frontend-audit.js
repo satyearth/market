@@ -70,36 +70,12 @@ console.log('[Section 1: Stock Universe & Search]');
 
 assert(STOCKS_DATA.length === MARKET_STATS.stockCount && STOCKS_DATA.length >= 5000, 'Total stock universe matches MARKET_STATS (>5,000)', `Length: ${STOCKS_DATA.length}`);
 
-// 1. Search by Symbol
-const BRAND_ENTITY_MAP = {
-  'zomato': 'ETERNAL',
-  'blinkit': 'ETERNAL',
-  'policybazaar': 'POLICYBZR',
-  'paisabazaar': 'POLICYBZR',
-  'maggi': 'NESTLEIND',
-  'jlr': 'TATAMOTORS',
-  'jaguar': 'TATAMOTORS'
-};
+// 1. Search by Symbol (reuse canonical backend search matcher + precomputed index)
+const { searchMatches, prepareStockSearchIndex } = require('../src/query/stock-query-service');
+STOCKS_DATA.forEach(prepareStockSearchIndex);
 
 function searchStocks(query) {
-  const q = query.toLowerCase().trim();
-  const qNorm = q.replace(/[^a-z0-9]/g, '');
-  const aliasSym = BRAND_ENTITY_MAP[q] || BRAND_ENTITY_MAP[qNorm];
-  return STOCKS_DATA.filter(s =>
-    (aliasSym && (s.symbol === aliasSym || s.nse_symbol === aliasSym)) ||
-    (s.symbol && s.symbol.toLowerCase().includes(q)) ||
-    (s.company_name && s.company_name.toLowerCase().includes(q)) ||
-    (s.nse_symbol && s.nse_symbol.toLowerCase().includes(q)) ||
-    (s.bse_scrip_code && s.bse_scrip_code.toLowerCase().includes(q)) ||
-    (s.isin && s.isin.toLowerCase().includes(q)) ||
-    (s.sector && s.sector.toLowerCase().includes(q)) ||
-    (s.industry && s.industry.toLowerCase().includes(q)) ||
-    (qNorm.length >= 2 && (
-      (s.symbol && s.symbol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm)) ||
-      (s.company_name && s.company_name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm)) ||
-      (s.nse_symbol && s.nse_symbol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(qNorm))
-    ))
-  );
+  return STOCKS_DATA.filter(s => searchMatches(s, query));
 }
 
 const resSym = searchStocks('RELIANCE');
@@ -177,7 +153,7 @@ assert(losers.length === MARKET_STATS.declines, 'TOP LOSERS count matches Market
 assert(losers[0].change_percent <= losers[1].change_percent, 'TOP LOSERS is sorted in ascending order (biggest drops first)', `Worst: ${losers[0].change_percent}%`);
 
 // 4. NEAR 52W HIGH Filter
-const nearHigh = STOCKS_DATA.filter(s => s.is_near_high || (s.pct_from_high && Number(s.pct_from_high) >= -8));
+const nearHigh = STOCKS_DATA.filter(s => s.is_near_high === true || (s.pct_from_high != null && s.pct_from_high !== '' && Number.isFinite(Number(s.pct_from_high)) && Number(s.pct_from_high) >= -8));
 assert(nearHigh.length === MARKET_STATS.near52WeekHighCount, 'NEAR 52W HIGH filter matches Market Pulse count', `${nearHigh.length} === ${MARKET_STATS.near52WeekHighCount}`);
 assert(nearHigh.length > 0, 'NEAR 52W HIGH does NOT hide valid stocks', `Found ${nearHigh.length} verified stocks`);
 
@@ -299,8 +275,8 @@ assert(companyLogoContent.includes('decoding="async"'), 'company logo component 
 assert(companyLogoContent.includes('handleFailure') && companyLogoContent.includes('rememberFailure'), 'company logo component falls back and caches runtime failures');
 assert(companyLogoContent.includes('LEGAL_SUFFIXES') && companyLogoContent.includes('initials(name)'), 'fallback initials derive from the company name');
 const logoTypes = Object.values(companyLogoManifest).reduce((counts, entry) => { counts[entry[0]] = (counts[entry[0]] || 0) + 1; return counts; }, {});
-assert(Object.keys(companyLogoManifest).length >= 5389, 'local logo manifest contains audited ISIN records');
-assert(logoTypes[1] === 5096 && logoTypes[2] === 239 && logoTypes[0] === 54, 'manifest preserves 5,096 logos, 239 monograms and 54 missing cases');
+assert(Object.keys(companyLogoManifest).length >= 5552, 'local logo manifest contains audited ISIN records');
+assert(logoTypes[1] === 5196 && logoTypes[2] === 242 && logoTypes[0] === 114, 'manifest preserves 5,196 official logos, 242 monograms and 114 verified fallback entries');
 assert(indexContent.includes('js/company-logo-manifest.js') && detailContent.includes('js/company-logo-manifest.js'), 'listing and details pages share the same local logo cache');
 assert(!indexContent.includes('4,965'), 'index.html contains zero outdated 4,965 stock count references');
 assert(appContent.includes("gridTable.setAttribute('aria-rowcount'"), 'app.js updates aria-rowcount dynamically from marketStats');

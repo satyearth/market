@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { DOWNLOADS_DIR } = require('../config/constants');
+const { parseCSVContent } = require('../processing/csv-parser');
 const {
   getLatestExpectedTradingDate,
   getPreviousTradingDay,
@@ -50,6 +51,11 @@ function toDdMmYyyy(dateStr) {
   return `${dd}${mm}${yyyy}`;
 }
 
+function toDdMmYy(dateStr) {
+  const [yyyy, mm, dd] = String(dateStr || '').split('-');
+  return `${dd}${mm}${String(yyyy || '').slice(-2)}`;
+}
+
 function getNseFilename(dateStr) {
   return `BhavCopy_NSE_CM_0_0_0_${toCompactDate(dateStr)}_F_0000.csv`;
 }
@@ -66,22 +72,36 @@ function get52WeekFilename(dateStr) {
   return `CM_52_wk_High_low_${toDdMmYyyy(dateStr)}.csv`;
 }
 
+function getNsePrFilename(dateStr) {
+  return `PR${toDdMmYy(dateStr)}.zip`;
+}
+
+function getNseMcapFilename(dateStr) {
+  return `mcap${toDdMmYyyy(dateStr)}.csv`;
+}
+
+function getNseCorpActionsFilename(dateStr) {
+  return `bc${toDdMmYyyy(dateStr)}.csv`;
+}
+
 function buildExchangeUrls(dateStr) {
   const compact = toCompactDate(dateStr);
   const ddmmyyyy = toDdMmYyyy(dateStr);
+  const ddmmyy = toDdMmYy(dateStr);
   return {
     nseZip: `https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_${compact}_F_0000.csv.zip`,
     nseCsv: `https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_${compact}_F_0000.csv`,
     bseCsv: `https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_${compact}_F_0000.CSV`,
     nseIndices: `https://nsearchives.nseindia.com/content/indices/ind_close_all_${ddmmyyyy}.csv`,
-    nse52Week: `https://nsearchives.nseindia.com/content/CM_52_wk_High_low_${ddmmyyyy}.csv`
+    nse52Week: `https://nsearchives.nseindia.com/content/CM_52_wk_High_low_${ddmmyyyy}.csv`,
+    nsePrZip: `https://nsearchives.nseindia.com/archives/equities/bhavcopy/pr/PR${ddmmyy}.zip`
   };
 }
 
 /**
- * Extracts the first CSV entry from a PKZIP Buffer using pure Node zlib.
+ * Extracts a matching entry (or the first entry) from a PKZIP Buffer using pure Node zlib.
  */
-function extractCsvFromZipBuffer(zipBuf) {
+function extractEntryFromZipBuffer(zipBuf, filenameMatcher = null) {
   if (!Buffer.isBuffer(zipBuf) || zipBuf.length < 30) {
     throw new Error('ZIP buffer is empty or truncated');
   }
@@ -97,11 +117,45 @@ function extractCsvFromZipBuffer(zipBuf) {
   const eocdOffset = zipBuf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   if (eocdOffset >= 0 && eocdOffset + 22 <= zipBuf.length) {
     const cdOffset = zipBuf.readUInt32LE(eocdOffset + 16);
+    const totalEntries = zipBuf.readUInt16LE(eocdOffset + 10);
+    if (filenameMatcher) {
+      let pos = cdOffset;
+      for (let i = 0; i < totalEntries && pos + 46 <= eocdOffset; i++) {
+        if (zipBuf.readUInt32LE(pos) !== 0x02014b50) break;
+        const eMethod = zipBuf.readUInt16LE(pos + 10);
+        const eCompSize = zipBuf.readUInt32LE(pos + 20);
+        const fnLen = zipBuf.readUInt16LE(pos + 28);
+        const exLen = zipBuf.readUInt16LE(pos + 30);
+        const commentLen = zipBuf.readUInt16LE(pos + 32);
+        const lOffset = zipBuf.readUInt32LE(pos + 42);
+        const entryName = zipBuf.toString('utf8', pos + 46, pos + 46 + fnLen);
+        pos += 46 + fnLen + exLen + commentLen;
+        if (!filenameMatcher(entryName)) continue;
+        if (lOffset + 30 > zipBuf.length || zipBuf.readUInt32LE(lOffset) !== 0x04034b50) {
+          throw new Error(`Invalid local header for ZIP entry ${entryName}`);
+        }
+        const lFnLen = zipBuf.readUInt16LE(lOffset + 26);
+        const lExLen = zipBuf.readUInt16LE(lOffset + 28);
+        const dStart = lOffset + 30 + lFnLen + lExLen;
+        if (eCompSize === 0) return '';
+        if (dStart + eCompSize > zipBuf.length) {
+          throw new Error(`Truncated payload for ZIP entry ${entryName}`);
+        }
+        const payload = zipBuf.subarray(dStart, dStart + eCompSize);
+        if (eMethod === 8) return zlib.inflateRawSync(payload).toString('utf8');
+        if (eMethod === 0) return payload.toString('utf8');
+        throw new Error(`Unsupported ZIP compression method: ${eMethod}`);
+      }
+      throw new Error('Requested entry not found inside PKZIP archive');
+    }
+
     if (cdOffset + 46 <= zipBuf.length && zipBuf.readUInt32LE(cdOffset) === 0x02014b50) {
       method = zipBuf.readUInt16LE(cdOffset + 10);
       compressedSize = zipBuf.readUInt32LE(cdOffset + 20);
       localHeaderOffset = zipBuf.readUInt32LE(cdOffset + 42);
     }
+  } else if (filenameMatcher) {
+    throw new Error('Missing ZIP central directory for entry lookup');
   }
 
   if (localHeaderOffset + 30 > zipBuf.length || zipBuf.readUInt32LE(localHeaderOffset) !== 0x04034b50) {
@@ -137,6 +191,10 @@ function extractCsvFromZipBuffer(zipBuf) {
   }
 
   return outBuf.toString('utf8');
+}
+
+function extractCsvFromZipBuffer(zipBuf) {
+  return extractEntryFromZipBuffer(zipBuf, null);
 }
 
 function looksLikeHtml(text) {
@@ -273,6 +331,44 @@ function validate52WeekCsvContent(content, expectedDate) {
     const expectedTag = `${String(d).padStart(2, '0')}-${months[m - 1]}-${y}`;
     if (!content.slice(0, 500).includes(expectedTag)) {
       return { ok: false, error: `52W High/Low effective date mismatch (expected ${expectedTag})` };
+    }
+  }
+  return { ok: true };
+}
+
+function validateNseMcapCsvContent(content, expectedDate) {
+  if (typeof content !== 'string' || content.trim().length < 50) {
+    return { ok: false, error: 'NSE Market Cap CSV is empty or too short' };
+  }
+  if (looksLikeHtml(content)) {
+    return { ok: false, error: 'NSE Market Cap response is HTML' };
+  }
+  const normalized = content.replace(/^\uFEFF/, '').trim();
+  const lines = normalized.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length < 2) {
+    return { ok: false, error: 'NSE Market Cap CSV missing data rows' };
+  }
+  const hasRequiredCols = normalized.includes('Symbol')
+    && normalized.includes('Issue Size')
+    && normalized.includes('Market Cap');
+  if (!hasRequiredCols) {
+    return { ok: false, error: 'NSE Market Cap CSV missing required columns (Symbol, Issue Size, Market Cap)' };
+  }
+  if (expectedDate) {
+    const [y, m, d] = expectedDate.split('-').map(Number);
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const ddMmmYyyySpace = `${String(d).padStart(2, '0')} ${months[m - 1]} ${y}`;
+    const ddMmmYyyyDash = `${String(d).padStart(2, '0')}-${months[m - 1]}-${y}`;
+    const ddMmYyyySlash = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+    const firstDataCols = lines[1].split(',');
+    const tradeDateCell = (firstDataCols[0] || '').trim().toUpperCase();
+    const headerUpper = lines[0].toUpperCase();
+    const matchesDataRow = tradeDateCell.includes(ddMmmYyyySpace)
+      || tradeDateCell.includes(ddMmmYyyyDash)
+      || tradeDateCell.includes(ddMmYyyySlash)
+      || tradeDateCell.includes(expectedDate);
+    if (headerUpper.startsWith('TRADE DATE') && !matchesDataRow) {
+      return { ok: false, error: `NSE Market Cap CSV trade date mismatch (expected ${ddMmmYyyySpace}, got "${tradeDateCell}")` };
     }
   }
   return { ok: true };
@@ -614,7 +710,7 @@ function createDownloader(config = {}) {
 
   async function downloadSupplementaryData(dateStr, opts = {}) {
     const urls = urlBuilder(dateStr);
-    const outcomes = { indices: null, week52: null };
+    const outcomes = { indices: null, week52: null, mcap: null, corpActions: null };
 
     if (urls.nseIndices) {
       const idxPath = path.join(downloadsDir, getIndicesFilename(dateStr));
@@ -644,6 +740,40 @@ function createDownloader(config = {}) {
             atomicWriteFile(w52Path, text);
             outcomes.week52 = { ok: true, filePath: w52Path, source: 'https-nse-52week' };
           }
+        }
+      }
+    }
+
+    if (urls.nsePrZip) {
+      const mcapName = getNseMcapFilename(dateStr);
+      const mcapPath = path.join(downloadsDir, mcapName);
+      const bcName = getNseCorpActionsFilename(dateStr);
+      const bcPath = path.join(downloadsDir, bcName);
+      if (!opts.force && fs.existsSync(mcapPath) && validateNseMcapCsvContent(fs.readFileSync(mcapPath, 'utf8'), dateStr).ok) {
+        outcomes.mcap = { ok: true, filePath: mcapPath, source: 'cached' };
+      } else {
+        const res = await fetchWithRetry(`NSE-PR-${dateStr}`, urls.nsePrZip, { Referer: 'https://www.nseindia.com/' });
+        if (res.ok && !looksLikeHtml(res.buffer.toString('utf8', 0, 500))) {
+          try {
+            const mcapCsv = extractEntryFromZipBuffer(
+              res.buffer,
+              name => name.toLowerCase() === mcapName.toLowerCase()
+            );
+            if (validateNseMcapCsvContent(mcapCsv, dateStr).ok) {
+              atomicWriteFile(mcapPath, mcapCsv);
+              outcomes.mcap = { ok: true, filePath: mcapPath, source: 'https-nse-pr-mcap' };
+            }
+          } catch (_) {}
+          try {
+            const bcCsv = extractEntryFromZipBuffer(
+              res.buffer,
+              name => name.toLowerCase() === bcName.toLowerCase()
+            );
+            if (bcCsv && !looksLikeHtml(bcCsv) && bcCsv.toUpperCase().includes('SYMBOL')) {
+              atomicWriteFile(bcPath, bcCsv);
+              outcomes.corpActions = { ok: true, filePath: bcPath, source: 'https-nse-pr-bc' };
+            }
+          } catch (_) {}
         }
       }
     }
@@ -863,11 +993,13 @@ module.exports = {
   DEFAULT_DOWNLOADS_DIR,
   REQUIRED_BHAVCOPY_COLS,
   createDownloader,
+  extractEntryFromZipBuffer,
   extractCsvFromZipBuffer,
   validateBhavcopyCsvContent,
   validateBhavcopyFile,
   validateIndicesCsvContent,
   validate52WeekCsvContent,
+  validateNseMcapCsvContent,
   atomicWriteFile,
   cleanupTempFiles,
   buildExchangeUrls,
@@ -875,6 +1007,9 @@ module.exports = {
   getBseFilename,
   getIndicesFilename,
   get52WeekFilename,
+  getNsePrFilename,
+  getNseMcapFilename,
+  getNseCorpActionsFilename,
   looksLikeHtml,
   ...defaultDownloader
 };

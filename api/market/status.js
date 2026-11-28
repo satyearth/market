@@ -2,8 +2,10 @@
 
 const { loadMarketStatsAsync } = require('../../src/query/stock-query-service');
 const { checkSessionFreshness, getLatestExpectedTradingDate } = require('../../src/calendar/exchange-calendar');
+const { applySecurityHeaders } = require('../../src/server/security-utils');
 
 module.exports = async function marketStatusApi(req, res) {
+  applySecurityHeaders(res);
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, error: 'Method not allowed.' });
@@ -40,6 +42,8 @@ module.exports = async function marketStatusApi(req, res) {
       latestProcessedDate: stats?.pipelineDates?.latestProcessedDate || currentTradingDate,
       latestPublishedDate: currentTradingDate,
       reason: freshness.reason,
+      calendarVerified: freshness.calendarVerified,
+      calendarWarning: freshness.calendarWarning,
       marketCalendar,
       changeLogSummary: stats?.changeLogSummary || null
     };

@@ -33,7 +33,6 @@
   const showingText = document.getElementById('showing-status');
   const infiniteStatus = document.getElementById('infinite-status');
   const infiniteSentinel = document.getElementById('infinite-sentinel');
-  const retryButton = document.getElementById('infinite-retry');
   const filterButtons = document.querySelectorAll('.filter-pill-btn');
   const densityToggleBtn = document.getElementById('density-toggle-btn');
 
@@ -224,15 +223,27 @@
     }
 
     // Card 4: Near 52W High (Guarded with session verification and accurate coverage labeling)
+    const nearLabel = document.getElementById('card-near52-label');
     const nearPct = document.getElementById('card-near52-pct');
     const nearSub = document.getElementById('card-near52-sub');
     if (nearPct) {
       if (marketStats.near52WeekHighCount != null) {
         nearPct.innerText = String(marketStats.near52WeekHighCount);
+        const sourceText = String(marketStats.near52WeekHighSource || '');
+        const universeText = String(marketStats.near52WeekHighSurveyedUniverse || '');
+        const isNseScope = /\bNSE\b/i.test(sourceText) || /\bNSE\b/i.test(universeText);
+        const isBseScope = /\bBSE\b/i.test(sourceText) || /\bBSE\b/i.test(universeText);
+        const scopeShort = isNseScope && isBseScope
+          ? 'NSE/BSE'
+          : (isNseScope ? 'NSE 52W' : (isBseScope ? 'BSE A/B' : 'Verified'));
+        const detailTitle = universeText
+          ? `${universeText}${marketStats.near52WeekHighCoverage ? ` — ${marketStats.near52WeekHighCoverage}.` : ''}`
+          : `${marketStats.near52WeekHighCount} equities within 8% of verified 52W high.`;
+        if (nearLabel) nearLabel.title = detailTitle;
         if (nearSub) {
           const tradingDate = marketStats.tradingDate || 'date unavailable';
-          nearSub.textContent = `BSE A/B · ${marketStats.near52WeekHighTradingDate || tradingDate}`;
-          nearSub.title = `Surveyed BSE Groups A & B; ${marketStats.near52WeekHighCount} within 8% of 52W high. NSE-only and other BSE groups not included.`;
+          nearSub.textContent = `${scopeShort} · ${marketStats.near52WeekHighTradingDate || tradingDate}`;
+          nearSub.title = detailTitle;
         }
       } else {
         nearPct.innerText = '—';
@@ -249,7 +260,7 @@
       const t100 = segs.top100 != null ? segs.top100 : (marketStats.capSegments ? marketStats.capSegments.large || 0 : 0);
       const r101_250 = segs.rank101_250 != null ? segs.rank101_250 : (marketStats.capSegments ? marketStats.capSegments.mid || 0 : 0);
       const rem = segs.remainingVerified != null ? segs.remainingVerified : (marketStats.capSegments ? marketStats.capSegments.small || 0 : 0);
-      const unranked = segs.unranked != null ? segs.unranked : 3758;
+      const unranked = segs.unranked != null ? segs.unranked : (marketStats.capSegments ? marketStats.capSegments.micro || 0 : 0);
       const sme = segs.smePlatform != null ? segs.smePlatform : (marketStats.capSegments ? marketStats.capSegments.sme || 0 : 0);
       const maxVal = Math.max(t100, r101_250, rem, unranked, sme, 1);
 
@@ -603,10 +614,22 @@
         const escapeCsv = (val) => {
           if (val == null) return '';
           const str = String(val);
-          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
             return `"${str.replace(/"/g, '""')}"`;
           }
           return str;
+        };
+
+        const computeChangeInr = (s) => {
+          if (s.change != null && Number.isFinite(Number(s.change))) return Number(s.change);
+          if (s.current_price != null && s.prev_close != null) {
+            const curr = Number(s.current_price);
+            const prev = Number(s.prev_close);
+            if (Number.isFinite(curr) && Number.isFinite(prev)) {
+              return Number((curr - prev).toFixed(2));
+            }
+          }
+          return '';
         };
 
         const rows = loadedStocks.map(s => [
@@ -618,7 +641,7 @@
           escapeCsv(s.segment || 'MAINBOARD'),
           escapeCsv((!s.sector || String(s.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : s.sector),
           escapeCsv(s.current_price != null ? s.current_price : ''),
-          escapeCsv(s.change != null ? s.change : ''),
+          escapeCsv(computeChangeInr(s)),
           escapeCsv(s.change_percent != null ? s.change_percent : ''),
           escapeCsv(s.market_cap_cr != null ? s.market_cap_cr : ''),
           escapeCsv(s.return_1w != null ? s.return_1w : ''),
@@ -975,7 +998,7 @@
             const details = `EOD ${refreshData.tradingDate || data.tradingDate}${refreshData.istDisplayTime ? ` · Refreshed ${refreshData.istDisplayTime}` : ''}`;
             updateSyncIndicator('latest', msg, details);
             saveStatusCache('latest', msg, details);
-          } else if (refreshData.status === 'in_progress') {
+          } else if (refreshData.status === 'in_progress' || refreshData.status === 'accepted') {
             pollSyncCompletion();
           } else {
             const isDelayed = Boolean(refreshData.isDelayed ?? data.isDelayed);

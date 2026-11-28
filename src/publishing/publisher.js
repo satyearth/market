@@ -361,6 +361,7 @@ async function syncUniverse(options = {}) {
 
   const marketCapSources = options.marketCapSources || await loadMarketCapSources({
     downloadsDir,
+    targetDate: TARGET_TRADING_DATE,
     forceRefresh: Boolean(options.refreshCatalog),
     storageClient: skipStorage ? null : storageClient
   });
@@ -469,12 +470,14 @@ async function syncUniverse(options = {}) {
     sourceFiles: [
       { exchange: 'NSE', fileName: path.basename(nseTodayFile), tradingDate: nseDateInFile, rows: nseRaw.length, bytes: nseFileStat.size },
       { exchange: 'BSE', fileName: path.basename(bseTodayFile), tradingDate: bseDateInFile, rows: bseRaw.length, bytes: bseFileStat.size },
+      ...(marketCapSources?.nseOfficialMeta?.loaded ? [{ exchange: 'NSE_MCAP', fileName: marketCapSources.nseOfficialMeta.fileName, tradingDate: TARGET_TRADING_DATE, rows: marketCapSources.nseOfficialMeta.rowCount }] : []),
       ...(nse52Week.loaded ? [{ exchange: 'NSE_52W', fileName: nse52Week.fileName, tradingDate: TARGET_TRADING_DATE }] : []),
       ...(archiveVix ? [{ exchange: 'NSE_IND', fileName: getIndicesFilename(TARGET_TRADING_DATE), tradingDate: TARGET_TRADING_DATE }] : [])
     ],
     sources: [
       'NSE CM Unified Bhavcopy',
       'BSE CM Unified Bhavcopy',
+      ...(marketCapSources?.nseOfficialMeta?.loaded ? [`NSE Official Market Cap Archive (${marketCapSources.nseOfficialMeta.fileName})`] : []),
       'India Listed Companies Catalog (api.dharun.dev)',
       'Screener Indian Equities Dataset',
       ...(vixSource ? [vixSource] : []),
@@ -501,11 +504,12 @@ async function syncUniverse(options = {}) {
       dualListedSmeCount: counts.dualListedSmeCount,
       totalUniqueSme: smeCount,
       mainboardCount: mergedStocks.length - smeCount,
-      classificationRule: 'NSE Series SM & ST (NSE Emerge) + BSE Groups M, MT & MS (BSE SME Platform)'
+      classificationRule: 'NSE Series SM, ST & SZ (NSE Emerge) + BSE Groups M, MT & MS (BSE SME Platform)'
     },
     verifiedMarketCapCr: Math.round(totalVerifiedCap),
     marketCapCoverageCount: verifiedCapCount,
     marketCapCoveragePct: coveragePct,
+    commonEquityCoverage: rankingResult.commonEquityCoverage,
     marketCapCoverageNote: `Verified ${verifiedCapCount.toLocaleString('en-IN')} Equities (NSE + BSE) · ${coveragePct}% Universe`,
     isPartialCoverage: verifiedCapCount < mergedStocks.length,
     rankingDisclaimer: `Market capitalisation ranking covers ${verifiedCapCount.toLocaleString('en-IN')} verified equities (NSE + BSE). This is an internal ranking of verified securities, NOT an official SEBI Large/Mid/Small classification.`,
@@ -643,9 +647,17 @@ async function syncUniverse(options = {}) {
       .filter(s => s.market_cap_cr == null)
       .map(s => {
         let reason = 'Unpriced / Inactive listed equity with zero trading volume';
-        if (s.isin && s.isin.startsWith('IN9')) reason = 'Partly-Paid shares (PP series); equity capital represented in ordinary shares';
-        else if (s.symbol && (s.symbol.includes('-RE') || s.symbol.includes('RE1'))) reason = 'Rights Entitlement (RE series); temporary trading rights, not equity shares';
-        else if (s.segment === 'SME') reason = 'SME equity without recent valuation or quotes';
+        if (s.instrument_type === 'RIGHTS_ENTITLEMENT' || (s.symbol && (s.symbol.includes('-RE') || /-RE\d*$/i.test(s.symbol)))) {
+          reason = 'Rights Entitlement (RE series); temporary trading rights, not equity shares';
+        } else if (s.instrument_type === 'PREFERENCE_SHARES' || (s.isin && s.isin.startsWith('IN9') && (s.isin.slice(7, 9) === '03' || /CCPS$/i.test(s.symbol || '')))) {
+          reason = 'Preference / CCPS shares; excluded from ordinary equity market capitalization';
+        } else if (s.instrument_type === 'PARTLY_PAID' || (s.isin && s.isin.startsWith('IN9') && !/DVR/i.test(s.symbol || ''))) {
+          reason = 'Partly-Paid shares (PP series); equity capital represented in ordinary shares';
+        } else if (s.segment === 'SME') {
+          reason = 'SME equity without verified reference capitalization';
+        } else if (s.current_price != null && Number(s.volume || 0) > 0) {
+          reason = 'Actively traded Mainboard equity not yet covered in verified market-cap sources';
+        }
         return { symbol: s.symbol, company_name: s.company_name, isin: s.isin, exchanges: s.exchanges, segment: s.segment, reason };
       });
 
@@ -668,7 +680,8 @@ async function syncUniverse(options = {}) {
       totalVerifiedCapCr: totalVerifiedCap,
       sourcesBreakdown,
       missingList,
-      segments: verifiedSegments
+      segments: verifiedSegments,
+      commonEquityCoverage: rankingResult.commonEquityCoverage
     });
   }
 
