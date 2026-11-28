@@ -429,13 +429,12 @@
       const sectorText = (!s.sector || String(s.sector).toUpperCase() === 'GENERAL') ? 'Unclassified' : s.sector;
       const isStarred = s.isin && watchlist.has(String(s.isin).toUpperCase());
       const isCompared = s.isin && comparisonStocks.has(String(s.isin).toUpperCase());
-      const mobileRankHtml = s.rank != null ? `<span class="mobile-inline-rank text-[10px] font-mono text-ink-muted mr-1 lg:hidden">#${s.rank}</span>` : '';
       return `
         <tr data-row-isin="${escapeHtml(s.isin)}" tabindex="0" aria-label="Open details for ${escapeHtml(s.company_name || s.symbol)}" class="group cursor-pointer border-b border-ink-rule transition-colors hover:bg-ink-well focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna focus-visible:outline-offset-[-1px] pulse-stocks-rise" style="animation-delay: ${idx * 15}ms">
           <td class="text-right font-mono tabular-nums text-[13px] text-ink-muted px-2" style="padding-top:${padY};padding-bottom:${padY}">${s.rank != null ? s.rank : '—'}</td>
           <td class="px-2" style="padding-top:${padY};padding-bottom:${padY}">
             <a class="flex items-center gap-2.5 min-w-0 group/link rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink-sienna" href="./stock.html?isin=${encodeURIComponent(s.isin || '')}" aria-label="View details for ${escapeHtml(s.symbol)}">
-              ${getLogoHtml(s, 'sm')}<div class="min-w-0"><div class="flex items-center gap-1.5 flex-wrap">${mobileRankHtml}<span class="text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>${getExchangeBadgesHtml(s)}</div>
+              ${getLogoHtml(s, 'sm')}<div class="min-w-0"><div class="stock-symbol-row flex items-center gap-1.5 flex-wrap"><span class="stock-symbol-text text-[14px] font-semibold text-ink-ink group-hover/link:text-ink-sienna transition-colors">${escapeHtml(s.symbol)}</span>${getExchangeBadgesHtml(s)}</div>
               <div class="stock-company-name text-[11px] text-ink-muted truncate max-w-[190px] md:max-w-[220px]" title="${escapeHtml(s.company_name)}">${escapeHtml(s.company_name)}</div></div>
             </a>
           </td>
